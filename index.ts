@@ -99,8 +99,8 @@ startServer(world => {
         // Left post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
-          relativePosition: { x: -0.85, y: 1.1, z: 0 },
+          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
+          relativePosition: { x: -0.85, y: -0.05, z: 0 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -109,8 +109,8 @@ startServer(world => {
         // Right post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
-          relativePosition: { x: 0.85, y: 1.1, z: 0 },
+          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
+          relativePosition: { x: 0.85, y: -0.05, z: 0 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -129,8 +129,8 @@ startServer(world => {
         // Bottom bar
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1, y: 0.09, z: 0.09 },
-          relativePosition: { x: 0, y: 0, z: 1.0 },
+          halfExtents: { x: 1, y: 0.15, z: 0.09 },
+          relativePosition: { x: 0, y: -0.05, z: 1.0 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -139,8 +139,8 @@ startServer(world => {
         // Netting (back of goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1.50, y: 1.1, z: 0.05 },
-          relativePosition: { x: 0, y: 1.1, z: -0.5 },
+          halfExtents: { x: 1.50, y: 1.15, z: 0.05 },
+          relativePosition: { x: 0, y: -0.05, z: -0.5 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -161,8 +161,8 @@ startServer(world => {
         // Left post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
-          relativePosition: { x: -0.85, y: 1.1, z: 0 },
+          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
+          relativePosition: { x: -0.85, y: -0.05, z: 0 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -171,8 +171,8 @@ startServer(world => {
         // Right post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
-          relativePosition: { x: 0.85, y: 1.1, z: 0 },
+          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
+          relativePosition: { x: 0.85, y: -0.05, z: 0 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -191,8 +191,8 @@ startServer(world => {
         // Bottom bar
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1, y: 0.09, z: 0.09 },
-          relativePosition: { x: 0, y: 0, z: -1.0 },
+          halfExtents: { x: 1, y: 0.15, z: 0.09 },
+          relativePosition: { x: 0, y: -0.05, z: -1.0 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -201,8 +201,8 @@ startServer(world => {
         // Netting (back of goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1.50, y: 1.1, z: 0.05 },
-          relativePosition: { x: 0, y: 1.1, z: -0.5 },
+          halfExtents: { x: 1.50, y: 1.15, z: 0.05 },
+          relativePosition: { x: 0, y: -0.05, z: -0.5 }, // Slightly below floor
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -283,6 +283,7 @@ startServer(world => {
         modelScale: 0.8,
         rigidBodyOptions: {
           type: RigidBodyType.DYNAMIC,
+          ccdEnabled: true, // Enable CCD to prevent tunneling
           linearDamping: 0.05, // Increased linear damping to reduce overall energy
           angularDamping: 0.8, // Increased angular damping to reduce spinning
           enabledRotations: { x: false, y: true, z: false },
@@ -673,6 +674,7 @@ startServer(world => {
       modelScale: 0.8,
       rigidBodyOptions: {
         type: RigidBodyType.DYNAMIC,
+        ccdEnabled: true, // Enable CCD to prevent tunneling
         linearDamping: 0.05,
         angularDamping: 0.8,
         enabledRotations: { x: false, y: true, z: false },
