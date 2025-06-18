@@ -485,6 +485,17 @@ and also configure additional buttons for mobile compatibility.
 
   const passIconGroup = document.getElementById('pass-icon-group');
   const shotIconGroup = document.getElementById('shot-icon-group');
+
+  // --- SceneUI template for RED GOAL label ---
+  hytopia.registerSceneUITemplate('red-goal-label', (id, onState) => {
+    const template = document.getElementById('red-goal-label-template');
+    return template.content.cloneNode(true);
+  });
+  // --- SceneUI template for BLUE GOAL label ---
+  hytopia.registerSceneUITemplate('blue-goal-label', (id, onState) => {
+    const template = document.getElementById('blue-goal-label-template');
+    return template.content.cloneNode(true);
+  });
 </script>
 
 <div id="root">
@@ -603,6 +614,14 @@ and also configure additional buttons for mobile compatibility.
   <div class="body-check-indicator">
     <span class="body-check-text">BODY CHECK!</span>
   </div>
+</template>
+
+<template id="red-goal-label-template">
+  <div class="goal-label goal-label-red">RED GOAL</div>
+</template>
+
+<template id="blue-goal-label-template">
+  <div class="goal-label goal-label-blue">BLUE GOAL</div>
 </template>
 
 <style>
@@ -1206,5 +1225,29 @@ and also configure additional buttons for mobile compatibility.
     filter: none;
     color: #fff !important;
     opacity: 1;
+  }
+
+  .goal-label {
+    background: rgba(0,0,0,0.85);
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: bold;
+    padding: 8px 22px;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    text-shadow: 1px 1px 6px #000;
+    text-align: center;
+    pointer-events: none;
+    margin-bottom: 8px;
+    display: block;
+    letter-spacing: 2px;
+  }
+  .goal-label-red {
+    color: #ff4444;
+    border: 2px solid #ff4444;
+  }
+  .goal-label-blue {
+    color: #44aaff;
+    border: 2px solid #44aaff;
   }
 </style>

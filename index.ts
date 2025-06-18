@@ -95,11 +95,28 @@ startServer(world => {
     rigidBodyOptions: {
       type: RigidBodyType.FIXED,
       colliders: [
-        // Left post
+        // Left post (vertical bar on the left side of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 },
-          relativePosition: { x: -0.85, y: -0.05, z: 0 },
+          halfExtents: { x: 0.02, y: 1.15, z: 1 }, // x: half-width (thickness of post), y: half-height, z: half-depth (thickness front-to-back)
+          // To make the post thinner, reduce x (for width) and/or z (for depth)
+          relativePosition: { x: -1.55, y: -0.05, z: 0 }, // x: left/right offset, y: up/down, z: forward/back
+          // This places the post to the left of the goal center
+          friction: 0.03, // How much the puck slides along the post
+          bounciness: 0.3, // How much the puck bounces off
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Right post (vertical bar on the right side of the goal)
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.02, y: 1.15, z: 1 }, // x: half-width (thickness of post), y: half-height, z: half-depth
+          // Reduce x and/or z for thinner post
+          relativePosition: { x: 1.55, y: -0.05, z: 0 }, // x: right of center
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -109,11 +126,12 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Right post
+        // Crossbar (horizontal bar at the top front of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 },
-          relativePosition: { x: 0.85, y: -0.05, z: 0 },
+          halfExtents: { x: 0.8, y: 0.02, z: 0.09 }, // x: half-width (span of bar), y: half-height (thickness vertically), z: half-depth (thickness front-to-back)
+          // To make the crossbar thinner, reduce y (vertical thickness) and/or z (depth)
+          relativePosition: { x: 0, y: 2.2, z: 0 }, // y: height above ground
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -123,11 +141,12 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Crossbar
+        // Bottom bar (horizontal bar at the bottom front of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.8, y: 0.09, z: 0.09 },
-          relativePosition: { x: 0, y: 2.2, z: 0 },
+          halfExtents: { x: 1.5, y: 0.15, z: -0.09 }, // x: half-width, y: half-height (thickness vertically), z: half-depth (thickness front-to-back)
+          // To make the bottom bar thinner, reduce y (vertical thickness) and/or z (depth)
+          relativePosition: { x: 0, y: -0.05, z: 1.0 }, // z: in front of the net
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -137,25 +156,12 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Bottom bar
+        // Netting (back of goal, acts as a thin wall at the rear)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1, y: 0.15, z: 0.09 },
-          relativePosition: { x: 0, y: -0.05, z: 1.0 },
-          friction: 0.03,
-          bounciness: 0.3,
-          frictionCombineRule: CoefficientCombineRule.Min,
-          bouncinessCombineRule: CoefficientCombineRule.Max,
-          collisionGroups: {
-            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
-            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
-          }
-        },
-        // Netting (back of goal)
-        {
-          shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1.50, y: 1.15, z: 0.05 },
-          relativePosition: { x: 0, y: -0.05, z: -0.5 },
+          halfExtents: { x: 1.50, y: 1.15, z: 0.05 }, // x: half-width, y: half-height, z: half-depth (thickness of netting)
+          // To make the netting thinner, reduce z (depth)
+          relativePosition: { x: 0, y: -0.05, z: 0.9 }, // z: behind the goal center
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -169,19 +175,26 @@ startServer(world => {
     }
   });
   redGoal.spawn(world, { x: 0, y: 2, z: -32 }, { x: 0, y: 1, z: 0, w: 0 });
+  // Attach Scene UI label above the red goal
+  const redGoalLabelUI = new SceneUI({
+    templateId: 'red-goal-label',
+    attachedToEntity: redGoal,
+    offset: { x: 0, y: 3.2, z: 0 },
+  });
+  redGoalLabelUI.load(world);
 
-  // Blue Team Goal (placed at the opposite end of the rink)
+  // Blue Team Goal (placed at the opposite end of the rink, model not rotated)
   const blueGoal = new Entity({
     modelUri: 'models/structures/hockey-goal.gltf',
     modelScale: 0.5,
     rigidBodyOptions: {
       type: RigidBodyType.FIXED,
       colliders: [
-        // Left post
+        // Left post (vertical bar on the left side of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 },
-          relativePosition: { x: -0.85, y: -0.05, z: 0 },
+          halfExtents: { x: 0.02, y: 1.15, z: 1 },
+          relativePosition: { x: -1.55, y: -0.05, z: 0 },
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -191,11 +204,11 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Right post
+        // Right post (vertical bar on the right side of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 },
-          relativePosition: { x: 0.85, y: -0.05, z: 0 },
+          halfExtents: { x: 0.02, y: 1.15, z: 1 },
+          relativePosition: { x: 1.55, y: -0.05, z: 0 },
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -205,10 +218,10 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Crossbar
+        // Crossbar (horizontal bar at the top front of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.8, y: 0.09, z: 0.09 },
+          halfExtents: { x: 0.8, y: 0.02, z: 0.09 },
           relativePosition: { x: 0, y: 2.2, z: 0 },
           friction: 0.03,
           bounciness: 0.3,
@@ -219,11 +232,11 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Bottom bar
+        // Bottom bar (horizontal bar at the bottom front of the goal)
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 1, y: 0.15, z: 0.09 },
-          relativePosition: { x: 0, y: -0.05, z: -1.0 },
+          halfExtents: { x: 1.5, y: 0.15, z: -0.09 },
+          relativePosition: { x: 0, y: -0.05, z: 1.0 },
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -233,11 +246,11 @@ startServer(world => {
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
           }
         },
-        // Netting (back of goal)
+        // Netting (back of goal, acts as a thin wall at the rear)
         {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 1.50, y: 1.15, z: 0.05 },
-          relativePosition: { x: 0, y: -0.05, z: -0.5 },
+          relativePosition: { x: 0, y: -0.05, z: 0.9 },
           friction: 0.03,
           bounciness: 0.3,
           frictionCombineRule: CoefficientCombineRule.Min,
@@ -250,7 +263,14 @@ startServer(world => {
       ]
     }
   });
-  blueGoal.spawn(world, { x: 0, y: 2, z: 32 });
+  blueGoal.spawn(world, { x: 0, y: 2, z: 32 }, { x: 0, y: 0, z: 0, w: 0 }); // No rotation
+  // Attach Scene UI label above the blue goal
+  const blueGoalLabelUI = new SceneUI({
+    templateId: 'blue-goal-label',
+    attachedToEntity: blueGoal,
+    offset: { x: 0, y: 3.2, z: 0 },
+  });
+  blueGoalLabelUI.load(world);
 
   // Initialize the game manager ONCE at server start
   HockeyGameManager.instance.setupGame(world);
@@ -714,7 +734,7 @@ startServer(world => {
       modelScale: 0.6,
       rigidBodyOptions: {
         type: RigidBodyType.DYNAMIC,
-        ccdEnabled: true, // Enable CCD to prevent tunneling
+        ccdEnabled: false, // Enable CCD to prevent tunneling
         linearDamping: 0.05,
         angularDamping: 0.8,
         enabledRotations: { x: false, y: true, z: false },
@@ -723,7 +743,7 @@ startServer(world => {
           {
             shape: ColliderShape.ROUND_CYLINDER,
             radius: 0.6,
-            halfHeight: 0.15, // Increased thickness for better stability
+            halfHeight: 0.5, // Increased thickness for better stability
             borderRadius: 0.1, // Increased border radius for better collision handling
             friction: 0.2,
             bounciness: 0.05,
