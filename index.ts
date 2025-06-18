@@ -275,35 +275,81 @@ startServer(world => {
   // Initialize the game manager ONCE at server start
   HockeyGameManager.instance.setupGame(world);
 
-  // --- Ambient Crowd Chant Sound Effect ---
+  // --- Ambient Crowd Chant and Percussion Beat Sound Effects (Non-overlapping, Randomized, Improved) ---
+  let nextCrowdChantTime = 0;
+  let nextPercussionTime = 0;
+  const MIN_GAP_BETWEEN_SOUNDS = 10000; // 10 seconds
+  const CROWD_CHANT_MIN = 40000; // 40s
+  const CROWD_CHANT_MAX = 80000; // 80s
+  const PERC_MIN = 30000; // 30s
+  const PERC_MAX = 60000; // 60s
+
   function scheduleCrowdChant() {
+    const now = Date.now();
     // Play the crowd chant sound effect globally
     const chant = new Audio({
       uri: 'audio/sfx/hockey/crowd-hey.mp3',
-      volume: 0.5, // Adjust as needed for ambience
+      volume: 0.3,
     });
     chant.play(world);
-    // Schedule the next chant at a random interval between 20 and 40 seconds
-    const nextDelay = 20000 + Math.random() * 20000;
+    // Pick a random interval within allowed range
+    let nextDelay = CROWD_CHANT_MIN + Math.random() * (CROWD_CHANT_MAX - CROWD_CHANT_MIN);
+    let proposedNextTime = now + nextDelay;
+    // If the next percussion is scheduled too close, push this forward
+    if (proposedNextTime > nextPercussionTime - MIN_GAP_BETWEEN_SOUNDS) {
+      proposedNextTime = Math.max(proposedNextTime, nextPercussionTime + MIN_GAP_BETWEEN_SOUNDS);
+      // But also ensure we don't play before our minimum interval
+      if (proposedNextTime - now < CROWD_CHANT_MIN) {
+        proposedNextTime = now + CROWD_CHANT_MIN;
+      }
+      nextDelay = proposedNextTime - now;
+    }
+    nextCrowdChantTime = proposedNextTime;
     setTimeout(scheduleCrowdChant, nextDelay);
   }
-  // Start the first chant after a random delay (to avoid overlap with music)
-  setTimeout(scheduleCrowdChant, 10000 + Math.random() * 10000);
 
-  // --- Ambient Percussion Beat Sound Effect ---
   function schedulePercussionBeat() {
+    const now = Date.now();
     // Play the percussion beat sound effect globally
     const percussion = new Audio({
       uri: 'audio/sfx/hockey/percussion-beat.mp3',
-      volume: 0.7, // Lower volume for ambience
+      volume: 0.3,
     });
     percussion.play(world);
-    // Schedule the next percussion at a random interval between 12 and 28 seconds
-    const nextDelay = 12000 + Math.random() * 16000;
+    // Pick a random interval within allowed range
+    let nextDelay = PERC_MIN + Math.random() * (PERC_MAX - PERC_MIN);
+    let proposedNextTime = now + nextDelay;
+    // If the next crowd chant is scheduled too close, push this forward
+    if (proposedNextTime > nextCrowdChantTime - MIN_GAP_BETWEEN_SOUNDS) {
+      proposedNextTime = Math.max(proposedNextTime, nextCrowdChantTime + MIN_GAP_BETWEEN_SOUNDS);
+      // But also ensure we don't play before our minimum interval
+      if (proposedNextTime - now < PERC_MIN) {
+        proposedNextTime = now + PERC_MIN;
+      }
+      nextDelay = proposedNextTime - now;
+    }
+    nextPercussionTime = proposedNextTime;
     setTimeout(schedulePercussionBeat, nextDelay);
   }
-  // Start the first percussion beat after a random delay (to avoid overlap with other sounds)
-  setTimeout(schedulePercussionBeat, 8000 + Math.random() * 8000);
+
+  // Start the first chant and percussion at random times, ensuring no overlap and minimum intervals
+  (function startAmbientSounds() {
+    const now = Date.now();
+    let firstChantDelay = CROWD_CHANT_MIN + Math.random() * (CROWD_CHANT_MAX - CROWD_CHANT_MIN);
+    let firstPercDelay = PERC_MIN + Math.random() * (PERC_MAX - PERC_MIN);
+    // Ensure no overlap at start
+    if (Math.abs((now + firstChantDelay) - (now + firstPercDelay)) < MIN_GAP_BETWEEN_SOUNDS) {
+      if (firstChantDelay < firstPercDelay) {
+        firstPercDelay = firstChantDelay + MIN_GAP_BETWEEN_SOUNDS;
+      } else {
+        firstChantDelay = firstPercDelay + MIN_GAP_BETWEEN_SOUNDS;
+      }
+    }
+    nextCrowdChantTime = now + firstChantDelay;
+    nextPercussionTime = now + firstPercDelay;
+    setTimeout(scheduleCrowdChant, firstChantDelay);
+    setTimeout(schedulePercussionBeat, firstPercDelay);
+  })();
 
   /**
    * Handle player joining the game. The PlayerEvent.JOINED_WORLD
@@ -769,6 +815,15 @@ startServer(world => {
     });
     world.chatManager.sendBroadcastMessage('Triggered sleep animation for all players!', 'FFFF00');
   });
+
+  // --- Background Music ---
+  // Play looping background music at low volume
+  const backgroundMusic = new Audio({
+    uri: 'audio/music/ready-for-this.mp3', // Path relative to assets/
+    loop: true,
+    volume: 0.1,
+  });
+  backgroundMusic.play(world);
 });
 
 // Custom ice skating controller that extends DefaultPlayerEntityController
