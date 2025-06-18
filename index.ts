@@ -44,6 +44,7 @@ import {
   BlockType,
   BaseEntityControllerEvent,
   SceneUI,
+  ModelRegistry,
 } from 'hytopia';
 
 import type {
@@ -64,8 +65,10 @@ import { HockeyGameManager, HockeyGameState } from './HockeyGameManager';
  * 
  * Documentation: https://github.com/hytopiagg/sdk/blob/main/docs/server.startserver.md
  */
+ModelRegistry.instance.optimize = false;
 
 startServer(world => {
+  world.simulation.enableDebugRendering(true);
   /**
    * Enable debug rendering of the physics simulation.
    * This will overlay lines in-game representing colliders,
@@ -84,6 +87,131 @@ startServer(world => {
    * the assets folder as map.json.
    */
   world.loadMap(worldMap);
+
+  // --- Hockey Goals ---
+  // Red Team Goal (placed at one end of the rink)
+  const redGoal = new Entity({
+    modelUri: 'models/structures/hockey-goal.gltf',
+    modelScale: 0.5,
+    rigidBodyOptions: {
+      type: RigidBodyType.FIXED,
+      colliders: [
+        // Left post
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
+          relativePosition: { x: -0.85, y: 1.1, z: 0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Right post
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
+          relativePosition: { x: 0.85, y: 1.1, z: 0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Crossbar
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.8, y: 0.09, z: 0.09 },
+          relativePosition: { x: 0, y: 2.2, z: 0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Bottom bar
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 1, y: 0.09, z: 0.09 },
+          relativePosition: { x: 0, y: 0, z: 1.0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Netting (back of goal)
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 1.50, y: 1.1, z: 0.05 },
+          relativePosition: { x: 0, y: 1.1, z: -0.5 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        }
+      ]
+    }
+  });
+  redGoal.spawn(world, { x: 0, y: 2, z: -32 }, { x: 0, y: 1, z: 0, w: 0 });
+
+  // Blue Team Goal (placed at the opposite end of the rink)
+  const blueGoal = new Entity({
+    modelUri: 'models/structures/hockey-goal.gltf',
+    modelScale: 0.5,
+    rigidBodyOptions: {
+      type: RigidBodyType.FIXED,
+      colliders: [
+        // Left post
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
+          relativePosition: { x: -0.85, y: 1.1, z: 0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Right post
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.65, y: 1.1, z: 0.65 },
+          relativePosition: { x: 0.85, y: 1.1, z: 0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Crossbar
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 0.8, y: 0.09, z: 0.09 },
+          relativePosition: { x: 0, y: 2.2, z: 0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Bottom bar
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 1, y: 0.09, z: 0.09 },
+          relativePosition: { x: 0, y: 0, z: -1.0 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        },
+        // Netting (back of goal)
+        {
+          shape: ColliderShape.BLOCK,
+          halfExtents: { x: 1.50, y: 1.1, z: 0.05 },
+          relativePosition: { x: 0, y: 1.1, z: -0.5 },
+          collisionGroups: {
+            belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+            collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+          }
+        }
+      ]
+    }
+  });
+  blueGoal.spawn(world, { x: 0, y: 2, z: 32 });
 
   // Initialize the game manager ONCE at server start
   HockeyGameManager.instance.setupGame(world);
