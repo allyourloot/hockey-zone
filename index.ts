@@ -68,7 +68,6 @@ import { HockeyGameManager, HockeyGameState } from './HockeyGameManager';
 ModelRegistry.instance.optimize = false;
 
 startServer(world => {
-  world.simulation.enableDebugRendering(true);
   /**
    * Enable debug rendering of the physics simulation.
    * This will overlay lines in-game representing colliders,
@@ -99,8 +98,12 @@ startServer(world => {
         // Left post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
-          relativePosition: { x: -0.85, y: -0.05, z: 0 }, // Slightly below floor
+          halfExtents: { x: 0.65, y: 1.15, z: 1 },
+          relativePosition: { x: -0.85, y: -0.05, z: 0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -109,8 +112,12 @@ startServer(world => {
         // Right post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
-          relativePosition: { x: 0.85, y: -0.05, z: 0 }, // Slightly below floor
+          halfExtents: { x: 0.65, y: 1.15, z: 1 },
+          relativePosition: { x: 0.85, y: -0.05, z: 0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -121,6 +128,10 @@ startServer(world => {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 0.8, y: 0.09, z: 0.09 },
           relativePosition: { x: 0, y: 2.2, z: 0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -130,7 +141,11 @@ startServer(world => {
         {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 1, y: 0.15, z: 0.09 },
-          relativePosition: { x: 0, y: -0.05, z: 1.0 }, // Slightly below floor
+          relativePosition: { x: 0, y: -0.05, z: 1.0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -140,7 +155,11 @@ startServer(world => {
         {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 1.50, y: 1.15, z: 0.05 },
-          relativePosition: { x: 0, y: -0.05, z: -0.5 }, // Slightly below floor
+          relativePosition: { x: 0, y: -0.05, z: -0.5 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -161,8 +180,12 @@ startServer(world => {
         // Left post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
-          relativePosition: { x: -0.85, y: -0.05, z: 0 }, // Slightly below floor
+          halfExtents: { x: 0.65, y: 1.15, z: 1 },
+          relativePosition: { x: -0.85, y: -0.05, z: 0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -171,8 +194,12 @@ startServer(world => {
         // Right post
         {
           shape: ColliderShape.BLOCK,
-          halfExtents: { x: 0.65, y: 1.15, z: 1 }, // Increased z for more thickness
-          relativePosition: { x: 0.85, y: -0.05, z: 0 }, // Slightly below floor
+          halfExtents: { x: 0.65, y: 1.15, z: 1 },
+          relativePosition: { x: 0.85, y: -0.05, z: 0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -183,6 +210,10 @@ startServer(world => {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 0.8, y: 0.09, z: 0.09 },
           relativePosition: { x: 0, y: 2.2, z: 0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -192,7 +223,11 @@ startServer(world => {
         {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 1, y: 0.15, z: 0.09 },
-          relativePosition: { x: 0, y: -0.05, z: -1.0 }, // Slightly below floor
+          relativePosition: { x: 0, y: -0.05, z: -1.0 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -202,7 +237,11 @@ startServer(world => {
         {
           shape: ColliderShape.BLOCK,
           halfExtents: { x: 1.50, y: 1.15, z: 0.05 },
-          relativePosition: { x: 0, y: -0.05, z: -0.5 }, // Slightly below floor
+          relativePosition: { x: 0, y: -0.05, z: -0.5 },
+          friction: 0.03,
+          bounciness: 0.3,
+          frictionCombineRule: CoefficientCombineRule.Min,
+          bouncinessCombineRule: CoefficientCombineRule.Max,
           collisionGroups: {
             belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
             collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -280,10 +319,10 @@ startServer(world => {
     if (!puckSpawned) {
       puck = new Entity({
         modelUri: 'models/items/cookie.gltf',
-        modelScale: 0.8,
+        modelScale: 0.6,
         rigidBodyOptions: {
           type: RigidBodyType.DYNAMIC,
-          ccdEnabled: true, // Enable CCD to prevent tunneling
+          ccdEnabled: false, // Enable CCD to prevent tunneling
           linearDamping: 0.05, // Increased linear damping to reduce overall energy
           angularDamping: 0.8, // Increased angular damping to reduce spinning
           enabledRotations: { x: false, y: true, z: false },
@@ -291,12 +330,13 @@ startServer(world => {
           colliders: [
             {
               shape: ColliderShape.ROUND_CYLINDER,
-              radius: 0.6,
+              radius: 0.4,
               halfHeight: 0.05, // Increased thickness for better stability
               borderRadius: 0.1, // Increased border radius for better collision handling
-              friction: 0.15, // Doubled friction to help slow down after bounces
-              bounciness: 0.3, // Reduced bounciness for more controlled rebounds
-              bouncinessCombineRule: CoefficientCombineRule.Max, // Changed to Max to allow puck's bounciness to dominate
+              friction: 0.2,
+              bounciness: 0.05,
+              frictionCombineRule: CoefficientCombineRule.Min,
+              bouncinessCombineRule: CoefficientCombineRule.Max,
               collisionGroups: {
                 belongsTo: [CollisionGroup.ENTITY],
                 collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -671,7 +711,7 @@ startServer(world => {
     // Create new puck entity
     puck = new Entity({
       modelUri: 'models/items/cookie.gltf',
-      modelScale: 0.8,
+      modelScale: 0.6,
       rigidBodyOptions: {
         type: RigidBodyType.DYNAMIC,
         ccdEnabled: true, // Enable CCD to prevent tunneling
@@ -685,8 +725,9 @@ startServer(world => {
             radius: 0.6,
             halfHeight: 0.15, // Increased thickness for better stability
             borderRadius: 0.1, // Increased border radius for better collision handling
-            friction: 0.1, // Increased friction for better stability
-            bounciness: 0.3,
+            friction: 0.2,
+            bounciness: 0.05,
+            frictionCombineRule: CoefficientCombineRule.Min,
             bouncinessCombineRule: CoefficientCombineRule.Max,
             collisionGroups: {
               belongsTo: [CollisionGroup.ENTITY],
