@@ -1,0 +1,1210 @@
+<!--
+This is a basic boilerplate example of how to implement simple game UI,
+and also configure additional buttons for mobile compatibility.
+-->
+
+<script>
+  // Handle interact button touch / untouch
+  const mobileInteractButton = document.getElementById('mobile-interact-button');
+  mobileInteractButton.addEventListener('touchstart', e => {
+    e.preventDefault(); // Prevents mobile highlight/select/copy popup behaviors
+    mobileInteractButton.classList.add('active'); // more immediate feedback to add/remove active class
+    hytopia.pressInput('ml', true);
+  });
+
+  mobileInteractButton.addEventListener('touchend', e => {
+    e.preventDefault();
+    mobileInteractButton.classList.remove('active');
+    hytopia.pressInput('ml', false);
+  });
+
+  // Handle jump button touch / untouch
+  const mobileJumpButton = document.getElementById('mobile-jump-button');
+  mobileJumpButton.addEventListener('touchstart', e => {
+    e.preventDefault();
+    mobileJumpButton.classList.add('active');
+    hytopia.pressInput(' ', true);
+  });
+
+  mobileJumpButton.addEventListener('touchend', e => {
+    e.preventDefault();
+    mobileJumpButton.classList.remove('active');
+    hytopia.pressInput(' ', false);
+  });
+
+  // Team/Position selection logic
+  const positionButtons = document.querySelectorAll('.position-btn');
+  const selectedMsg = document.getElementById('selected-position-msg');
+  const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+  let selectedBtn = null;
+  let selectedTeam = null;
+  let selectedPosition = null;
+  const lockInBtn = document.createElement('button');
+  lockInBtn.textContent = 'Lock In';
+  lockInBtn.className = 'lock-in-btn';
+  lockInBtn.disabled = true;
+  lockInBtn.style.marginTop = '18px';
+  teamSelectionOverlay.appendChild(lockInBtn);
+
+  positionButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      // Highlight selected
+      if (selectedBtn) selectedBtn.classList.remove('selected');
+      btn.classList.add('selected');
+      selectedBtn = btn;
+      // Store selection
+      const team = btn.getAttribute('data-team');
+      const position = btn.getAttribute('data-position');
+      selectedTeam = team;
+      selectedPosition = position;
+      selectedMsg.textContent = `Selected: ${team} - ${btn.textContent}`;
+      lockInBtn.disabled = false;
+      // Send selection to server
+      hytopia.sendData({ type: 'team-position-select', team, position });
+    });
+  });
+
+  lockInBtn.addEventListener('click', () => {
+    if (selectedTeam && selectedPosition) {
+      hytopia.sendData({ type: 'lock-in' });
+      lockInBtn.disabled = true;
+      selectedMsg.textContent = 'Locked in! Waiting for other players...';
+    }
+  });
+
+  // Handle server messages for team/position selection
+  hytopia.onData(data => {
+    if (data.type === 'team-positions-update') {
+      // Disable taken positions
+      const teams = data.teams;
+      positionButtons.forEach(btn => {
+        const team = btn.getAttribute('data-team');
+        const position = btn.getAttribute('data-position');
+        // Try to get playerId from hytopia, fallback to last selected
+        let playerId = (window.hytopia && hytopia.playerId) || null;
+        let isMine = false;
+        if (playerId && teams && teams[team] && teams[team][position]) {
+          isMine = teams[team][position] === playerId;
+        } else if (!playerId && selectedTeam === team && selectedPosition === position && teams && teams[team] && teams[team][position]) {
+          // Fallback: if this is the last selected position, assume it's ours
+          isMine = true;
+        }
+        let taken = teams && teams[team] && teams[team][position] && !isMine;
+        btn.disabled = taken;
+        if (taken && !isMine) btn.classList.remove('selected');
+      });
+      // If the selected position was taken by someone else, clear selection and disable lock in
+      if (selectedTeam && selectedPosition && teams[selectedTeam] && teams[selectedTeam][selectedPosition]) {
+        let playerId = (window.hytopia && hytopia.playerId) || null;
+        let isMine = false;
+        if (playerId) {
+          isMine = teams[selectedTeam][selectedPosition] === playerId;
+        } else {
+          isMine = true; // Fallback: assume it's ours if we just selected it
+        }
+        if (!isMine) {
+          if (selectedBtn) selectedBtn.classList.remove('selected');
+          selectedBtn = null;
+          selectedTeam = null;
+          selectedPosition = null;
+          lockInBtn.disabled = true;
+          selectedMsg.textContent = '';
+        } else {
+          lockInBtn.disabled = false;
+        }
+      }
+    }
+    if (data.type === 'team-position-confirmed') {
+      // Hide team selection overlay immediately when position is confirmed
+      teamSelectionOverlay.style.display = 'none';
+      selectedMsg.textContent = '';
+    }
+    if (data.type === 'show-waiting-overlay') {
+      // Hide team selection overlay if it's still visible
+      teamSelectionOverlay.style.display = 'none';
+      // Show waiting overlay as a top notification bar
+      document.getElementById('waiting-overlay').style.display = 'flex';
+      if (data.message) {
+        document.querySelector('.waiting-message').textContent = data.message;
+      }
+      if (typeof data.playersLockedIn === 'number' && typeof data.playersTotal === 'number') {
+        document.querySelector('.waiting-count').textContent = `${data.playersLockedIn}/${data.playersTotal}`;
+      } else {
+        document.querySelector('.waiting-count').textContent = '';
+      }
+    }
+    if (data.type === 'team-position-error') {
+      // Show error message
+      selectedMsg.textContent = data.message || 'Error selecting position.';
+      lockInBtn.disabled = false;
+    }
+    if (data.type === 'game-start') {
+      // Hide waiting overlay and show scoreboard
+      document.getElementById('waiting-overlay').style.display = 'none';
+      const scoreboard = document.getElementById('scoreboard');
+      scoreboard.style.display = 'flex';
+      
+      // Initialize scores if provided
+      if (typeof data.redScore === 'number') {
+        document.querySelector('.team.red .team-score').textContent = data.redScore;
+      }
+      if (typeof data.blueScore === 'number') {
+        document.querySelector('.team.blue .team-score').textContent = data.blueScore;
+      }
+      if (typeof data.period === 'number') {
+        const periodText = data.period === 1 ? '1st' : data.period === 2 ? '2nd' : '3rd';
+        document.querySelector('.period').textContent = `${periodText} Period`;
+      }
+      
+      // Start game timer
+      startGameTimer();
+    }
+    if (data.type === 'score-update') {
+      // Update team scores
+      document.querySelector('.team.red .team-score').textContent = data.redScore;
+      document.querySelector('.team.blue .team-score').textContent = data.blueScore;
+    }
+    if (data.type === 'period-update') {
+      // Update period display
+      const periodText = data.period === 1 ? '1st' : data.period === 2 ? '2nd' : '3rd';
+      document.querySelector('.period').textContent = `${periodText} Period`;
+    }
+    if (data.type === 'puck-control') {
+      hasPuck = !!data.hasPuck;
+      // Always show pass, shot, and spin move icons, but gray them out if no puck
+      const passIconGroup = document.getElementById('pass-icon-group');
+      const shotIconGroup = document.getElementById('shot-icon-group');
+      const spinMoveIndicator = document.getElementById('spin-move-indicator');
+      if (passIconGroup) passIconGroup.classList.toggle('disabled', !hasPuck);
+      if (shotIconGroup) shotIconGroup.classList.toggle('disabled', !hasPuck);
+      if (spinMoveIndicator) spinMoveIndicator.classList.toggle('disabled', !hasPuck);
+    }
+    if (data.type === 'body-check-available') {
+      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+      if (bodyCheckIndicator) {
+        if (data.available) {
+          bodyCheckIndicator.classList.remove('disabled');
+        } else {
+          bodyCheckIndicator.classList.add('disabled');
+        }
+      }
+      const overlay = document.getElementById('body-check-overlay');
+      if (overlay) {
+        if (data.available) {
+          overlay.style.display = 'block';
+        } else {
+          overlay.style.display = 'none';
+        }
+      }
+    }
+    if (data.type === 'set-body-check-visibility') {
+      if (bodyCheckCooldownIndicator) {
+        bodyCheckCooldownIndicator.style.display = data.visible ? 'flex' : 'none';
+      }
+    }
+  });
+
+  let powerMeterVisible = false;
+  let powerLevel = 0;
+  let powerInterval = null;
+  let lastFrameTime = 0;
+  let isShootingMode = false;
+  let hasPuck = false;
+
+  function showPowerMeter(shooting = false) {
+    const powerMeter = document.getElementById('power-meter');
+    powerMeter.style.display = 'block';
+    powerMeterVisible = true;
+    powerLevel = 0;
+    lastFrameTime = performance.now();
+    isShootingMode = shooting;
+    updatePowerMeter(0);
+    
+    // Use requestAnimationFrame for smoother animation
+    function animate(currentTime) {
+      if (!powerMeterVisible) return;
+      
+      const deltaTime = currentTime - lastFrameTime;
+      lastFrameTime = currentTime;
+      
+      // Increase by 200% per second (fills in 0.5 seconds)
+      powerLevel = Math.min(100, powerLevel + (200 * deltaTime / 1000));
+      updatePowerMeter(powerLevel);
+      
+      requestAnimationFrame(animate);
+    }
+    
+    requestAnimationFrame(animate);
+  }
+
+  function hidePowerMeter() {
+    const powerMeter = document.getElementById('power-meter');
+    powerMeter.style.display = 'none';
+    powerMeterVisible = false;
+    if (powerInterval) {
+      clearInterval(powerInterval);
+      powerInterval = null;
+    }
+    
+    // Send the final power level to the server
+    hytopia.sendData({
+      type: isShootingMode ? 'puck-shoot' : 'puck-pass',
+      power: powerLevel
+    });
+  }
+
+  function updatePowerMeter(power) {
+    const fill = document.getElementById('power-meter-fill');
+    const text = document.getElementById('power-meter-text');
+    fill.style.width = `${power}%`;
+    text.textContent = `${Math.round(power)}% ${isShootingMode ? 'SHOT' : 'PASS'}`;
+  }
+
+  // Handle mouse input for power meter
+  document.addEventListener('mousedown', (e) => {
+    if (!hasPuck) return; // Only allow power meter if controlling puck
+    if (e.button === 0) { // Left click for passing
+      showPowerMeter(false);
+    } else if (e.button === 2) { // Right click for shooting
+      showPowerMeter(true);
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if ((e.button === 0 || e.button === 2) && powerMeterVisible) {
+      hidePowerMeter();
+    }
+  });
+
+  // Prevent context menu on right click
+  document.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+  });
+
+  // Hockey stop cooldown handling
+  let cooldownEndTime = 0;
+  let cooldownAnimationFrame = null;
+
+  function updateCooldownDisplay() {
+    const indicator = document.getElementById('hockey-stop-indicator');
+    const cooldownOverlay = indicator.querySelector('.cooldown-overlay');
+    const cooldownText = document.getElementById('cooldown-text');
+    
+    const now = Date.now();
+    const timeRemaining = Math.max(0, cooldownEndTime - now);
+    
+    if (timeRemaining > 0) {
+      // Calculate progress (1 to 0)
+      const progress = timeRemaining / 3000;
+      
+      // Update overlay height from bottom to top
+      cooldownOverlay.style.transform = `scaleY(${progress})`;
+      
+      // Show cooldown time with one decimal
+      const secondsRemaining = (timeRemaining / 1000).toFixed(1);
+      cooldownText.textContent = secondsRemaining;
+      
+      indicator.classList.add('on-cooldown');
+      
+      // Request next frame
+      cooldownAnimationFrame = requestAnimationFrame(updateCooldownDisplay);
+    } else {
+      cooldownOverlay.style.transform = 'scaleY(0)';
+      cooldownText.textContent = '';
+      indicator.classList.remove('on-cooldown');
+      cooldownAnimationFrame = null;
+    }
+  }
+
+  hytopia.onData(data => {
+    if (data.type === 'hockey-stop-cooldown') {
+      if (data.cooldownRemaining > 0) {
+        // Set the end time for the cooldown
+        cooldownEndTime = Date.now() + data.cooldownRemaining;
+        
+        // Cancel any existing animation frame
+        if (cooldownAnimationFrame) {
+          cancelAnimationFrame(cooldownAnimationFrame);
+        }
+        
+        // Start the animation
+        cooldownAnimationFrame = requestAnimationFrame(updateCooldownDisplay);
+      }
+    }
+  });
+
+  // Game timer functionality
+  let timerInterval = null;
+  let timeRemaining = 120; // 2 minutes in seconds
+
+  function startGameTimer() {
+    // Clear any existing timer
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    
+    // Reset time to 2 minutes
+    timeRemaining = 120;
+    updateTimerDisplay();
+    
+    // Start countdown
+    timerInterval = setInterval(() => {
+      timeRemaining--;
+      updateTimerDisplay();
+      
+      if (timeRemaining <= 0) {
+        clearInterval(timerInterval);
+        // Send period end event to server
+        hytopia.sendData({ type: 'period-end' });
+      }
+    }, 1000);
+  }
+
+  function updateTimerDisplay() {
+    const minutes = Math.floor(timeRemaining / 60);
+    const seconds = timeRemaining % 60;
+    const timerDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    document.querySelector('.timer').textContent = timerDisplay;
+  }
+
+  // Spin move cooldown handling
+  let spinCooldownEndTime = 0;
+  let spinCooldownAnimationFrame = null;
+
+  function updateSpinCooldownDisplay() {
+    const indicator = document.getElementById('spin-move-indicator');
+    const cooldownOverlay = indicator.querySelector('.cooldown-overlay');
+    const cooldownText = document.getElementById('spin-cooldown-text');
+    
+    const now = Date.now();
+    const timeRemaining = Math.max(0, spinCooldownEndTime - now);
+    
+    if (timeRemaining > 0) {
+      // Calculate progress (1 to 0)
+      const progress = timeRemaining / 5000; // 5 seconds cooldown
+      
+      // Update overlay height from bottom to top
+      cooldownOverlay.style.transform = `scaleY(${progress})`;
+      
+      // Show cooldown time with one decimal
+      const secondsRemaining = (timeRemaining / 1000).toFixed(1);
+      cooldownText.textContent = secondsRemaining;
+      
+      indicator.classList.add('on-cooldown');
+      
+      // Request next frame
+      spinCooldownAnimationFrame = requestAnimationFrame(updateSpinCooldownDisplay);
+    } else {
+      cooldownOverlay.style.transform = 'scaleY(0)';
+      cooldownText.textContent = '';
+      indicator.classList.remove('on-cooldown');
+      spinCooldownAnimationFrame = null;
+    }
+  }
+
+  hytopia.onData(data => {
+    if (data.type === 'spin-move-cooldown') {
+      if (data.cooldownRemaining > 0) {
+        // Set the end time for the cooldown
+        spinCooldownEndTime = Date.now() + data.cooldownRemaining;
+        
+        // Cancel any existing animation frame
+        if (spinCooldownAnimationFrame) {
+          cancelAnimationFrame(spinCooldownAnimationFrame);
+        }
+        
+        // Start the animation
+        spinCooldownAnimationFrame = requestAnimationFrame(updateSpinCooldownDisplay);
+      }
+    }
+  });
+
+  // --- SceneUI template for BODY CHECK indicator ---
+  hytopia.registerSceneUITemplate('body-check-indicator', (id, onState) => {
+    const template = document.getElementById('body-check-indicator-template');
+    const clone = template.content.cloneNode(true);
+    const textElem = clone.querySelector('.body-check-text');
+    onState(state => {
+      if (state && state.visible) {
+        textElem.style.display = 'block';
+      } else {
+        textElem.style.display = 'none';
+      }
+    });
+    return clone;
+  });
+  // Attach this SceneUI with offset: { x: 0, y: 1.4, z: 0 } for closer-to-head placement
+
+  // Body Check cooldown handling
+  let bodyCheckCooldownEndTime = 0;
+  let bodyCheckCooldownAnimationFrame = null;
+
+  function updateBodyCheckCooldownDisplay() {
+    const indicator = document.getElementById('body-check-cooldown-indicator');
+    const cooldownOverlay = indicator.querySelector('.cooldown-overlay');
+    const cooldownText = document.getElementById('body-check-cooldown-text');
+    
+    const now = Date.now();
+    const timeRemaining = Math.max(0, bodyCheckCooldownEndTime - now);
+    
+    if (timeRemaining > 0) {
+      // Calculate progress (1 to 0)
+      const progress = timeRemaining / 5000; // 5 seconds cooldown
+      cooldownOverlay.style.transform = `scaleY(${progress})`;
+      const secondsRemaining = (timeRemaining / 1000).toFixed(1);
+      cooldownText.textContent = secondsRemaining;
+      indicator.classList.add('on-cooldown');
+      bodyCheckCooldownAnimationFrame = requestAnimationFrame(updateBodyCheckCooldownDisplay);
+    } else {
+      cooldownOverlay.style.transform = 'scaleY(0)';
+      cooldownText.textContent = '';
+      indicator.classList.remove('on-cooldown');
+      bodyCheckCooldownAnimationFrame = null;
+    }
+  }
+
+  hytopia.onData(data => {
+    if (data.type === 'body-check-cooldown') {
+      if (data.cooldownRemaining > 0) {
+        bodyCheckCooldownEndTime = Date.now() + data.cooldownRemaining;
+        if (bodyCheckCooldownAnimationFrame) {
+          cancelAnimationFrame(bodyCheckCooldownAnimationFrame);
+        }
+        bodyCheckCooldownAnimationFrame = requestAnimationFrame(updateBodyCheckCooldownDisplay);
+      }
+    }
+  });
+
+  // Add at the top of the script, after other variable declarations
+  const bodyCheckCooldownIndicator = document.getElementById('body-check-cooldown-indicator');
+
+  // Hide by default
+  if (bodyCheckCooldownIndicator) {
+    bodyCheckCooldownIndicator.style.display = 'none';
+  }
+
+  const passIconGroup = document.getElementById('pass-icon-group');
+  const shotIconGroup = document.getElementById('shot-icon-group');
+</script>
+
+<div id="root">
+  <!-- Power Meter -->
+  <div class="power-meter" id="power-meter" style="display: none;">
+    <div class="power-meter-fill" id="power-meter-fill"></div>
+    <div class="power-meter-text" id="power-meter-text">0%</div>
+  </div>
+
+  <!-- Skill Bar Row Overlay (bottom right) -->
+  <div class="skill-bar-row" id="skill-bar-row">
+    <div class="pass-shot-icon-group" id="pass-icon-group">
+      <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+      <div class="pass-shot-label">LMB</div>
+    </div>
+    <div class="pass-shot-icon-group" id="shot-icon-group">
+      <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
+      <div class="pass-shot-label">RMB</div>
+    </div>
+    <div class="hockey-stop-indicator" id="hockey-stop-indicator">
+      <div class="cooldown-overlay"></div>
+      <img class="hockey-stop-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Hockey Stop" />
+      <div class="skill-input-label">SPACE</div>
+      <div class="cooldown-text" id="cooldown-text"></div>
+    </div>
+    <div class="spin-move-indicator" id="spin-move-indicator">
+      <div class="cooldown-overlay"></div>
+      <img class="spin-move-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/spin-icon.png" alt="Spin Move" />
+      <div class="skill-input-label">R</div>
+      <div class="cooldown-text" id="spin-cooldown-text"></div>
+    </div>
+    <div class="body-check-cooldown-indicator disabled" id="body-check-cooldown-indicator">
+      <div class="cooldown-overlay"></div>
+      <img class="body-check-cooldown-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/body-check-icon.png" alt="Body Check" />
+      <div class="skill-input-label">LMB</div>
+      <div class="cooldown-text" id="body-check-cooldown-text"></div>
+    </div>
+  </div>
+
+  <!-- Mobile Controls -->
+  <div class="mobile-controls">
+    <a id="mobile-interact-button" class="mobile-button">
+      <img src="{{CDN_ASSETS_URL}}/icons/target.png" />
+    </a>
+
+    <a id="mobile-jump-button" class="mobile-button">
+      <img src="{{CDN_ASSETS_URL}}/icons/jump.png" />
+    </a>
+  </div>
+
+  <!-- Team Selection UI -->
+  <div id="team-selection-overlay" class="team-selection-overlay">
+    <div class="team-selection-title">Select Your Team & Position</div>
+    <div class="teams-container">
+      <div class="team-column red-team">
+        <div class="team-name">Red Team</div>
+        <button class="position-btn" data-team="RED" data-position="GOALIE">Goalie</button>
+        <button class="position-btn" data-team="RED" data-position="DEFENDER1">Defender 1</button>
+        <button class="position-btn" data-team="RED" data-position="DEFENDER2">Defender 2</button>
+        <button class="position-btn" data-team="RED" data-position="WINGER1">Winger 1</button>
+        <button class="position-btn" data-team="RED" data-position="WINGER2">Winger 2</button>
+        <button class="position-btn" data-team="RED" data-position="CENTER">Center</button>
+      </div>
+      <div class="team-column blue-team">
+        <div class="team-name">Blue Team</div>
+        <button class="position-btn" data-team="BLUE" data-position="GOALIE">Goalie</button>
+        <button class="position-btn" data-team="BLUE" data-position="DEFENDER1">Defender 1</button>
+        <button class="position-btn" data-team="BLUE" data-position="DEFENDER2">Defender 2</button>
+        <button class="position-btn" data-team="BLUE" data-position="WINGER1">Winger 1</button>
+        <button class="position-btn" data-team="BLUE" data-position="WINGER2">Winger 2</button>
+        <button class="position-btn" data-team="BLUE" data-position="CENTER">Center</button>
+      </div>
+    </div>
+    <div id="selected-position-msg" class="selected-position-msg"></div>
+  </div>
+
+  <!-- Waiting Overlay -->
+  <div id="waiting-overlay" class="waiting-overlay" style="display: none;">
+    <div class="waiting-message">Waiting for other players to join...</div>
+    <div class="waiting-count" style="font-size:1.1rem;font-weight:500;margin-left:12px;"></div>
+    <div class="waiting-spinner"></div>
+  </div>
+
+  <!-- Scoreboard -->
+  <div id="scoreboard" class="scoreboard" style="display: none;">
+    <div class="period">1st Period</div>
+    <div class="team red">
+      <div class="team-name">RED</div>
+      <div class="team-score">0</div>
+    </div>
+    <div class="timer">2:00</div>
+    <div class="team blue">
+      <div class="team-name">BLUE</div>
+      <div class="team-score">0</div>
+    </div>
+  </div>
+
+  <!-- Pass/Shot Icons Overlay -->
+  <div class="pass-shot-overlay" id="pass-shot-overlay" style="display: none;">
+    <div class="pass-shot-row">
+      <div class="pass-shot-icon-group">
+        <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+        <div class="pass-shot-label">LMB</div>
+      </div>
+      <div class="pass-shot-icon-group">
+        <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
+        <div class="pass-shot-label">RMB</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- End of root div -->
+</div>
+
+<template id="body-check-indicator-template">
+  <div class="body-check-indicator">
+    <span class="body-check-text">BODY CHECK!</span>
+  </div>
+</template>
+
+<style>
+  /* By default, we hide the mobile controls */
+  .mobile-controls {
+    display: none;
+  }
+
+  /*
+    We can use the body.mobile class to detect if we're on a mobile device.
+    The HYTOPIA game client will always add this class to the body element when running on a mobile device.
+  */
+  body.mobile .mobile-controls { /* If this css selector matches because we're on mobile, show the mobile controls */
+    display: flex;
+    gap: 14px;
+    position: fixed;
+    bottom: 40px;
+    right: 40px;
+  }
+
+  /* You can configure and style your buttons however you'd like. This is a minimalistic starting point. */
+  .mobile-button {
+    background-color: rgba(0, 0, 0, 0.5);
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    width: 50px;
+    height: 50px;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, background-color;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    color: rgba(255, 255, 255, 0.8);
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+  }
+  
+  .mobile-button img {
+    width: 22px;
+    height: 22px;
+  }
+
+  .mobile-button.active {
+    transform: scale(0.92);
+    background-color: rgba(0, 0, 0, 0.75);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }  
+
+  .team-selection-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .team-selection-title {
+    color: #fff;
+    font-size: 2rem;
+    font-weight: bold;
+    margin-bottom: 32px;
+    text-shadow: 1px 2px 8px #000;
+  }
+  .teams-container {
+    display: flex;
+    gap: 60px;
+  }
+  .team-column {
+    background: rgba(30,30,30,0.95);
+    border-radius: 16px;
+    padding: 24px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+  }
+  .team-name {
+    font-size: 1.3rem;
+    font-weight: bold;
+    margin-bottom: 18px;
+    color: #fff;
+    letter-spacing: 1px;
+  }
+  .red-team .team-name { color: #ff4444; }
+  .blue-team .team-name { color: #44aaff; }
+  .position-btn {
+    margin: 6px 0;
+    padding: 10px 28px;
+    border-radius: 8px;
+    border: none;
+    font-size: 1rem;
+    font-weight: 500;
+    background: #222;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+  .position-btn.selected {
+    background: #44aaff;
+    color: #fff;
+    box-shadow: 0 0 0 3px #44aaff55;
+  }
+  .red-team .position-btn.selected {
+    background: #ff4444;
+    box-shadow: 0 0 0 3px #ff444455;
+  }
+  .position-btn:disabled {
+    background: #555;
+    color: #bbb;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+  .selected-position-msg {
+    margin-top: 24px;
+    color: #fff;
+    font-size: 1.1rem;
+    min-height: 24px;
+    text-align: center;
+  }
+  .lock-in-btn {
+    margin-top: 18px;
+    padding: 12px 36px;
+    border-radius: 8px;
+    border: none;
+    font-size: 1.1rem;
+    font-weight: 600;
+    background: #44aaff;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .lock-in-btn:disabled {
+    background: #555;
+    color: #bbb;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+
+  /* Update waiting overlay to be in top right */
+  .waiting-overlay {
+    position: fixed;
+    top: 24px;
+    right: 24px; /* Changed from left: 50%, transform: translateX(-50%) */
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 12px 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 200;
+    min-width: 200px; /* Reduced from 320px */
+    max-width: 90vw;
+    justify-content: flex-end; /* Changed from center */
+  }
+  .waiting-message {
+    font-size: 1.2rem;
+    font-weight: 600;
+    text-shadow: 1px 2px 8px #000;
+    margin-bottom: 0;
+  }
+  .waiting-spinner {
+    width: 28px;
+    height: 28px;
+    border: 4px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: spin 1s ease-in-out infinite;
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .power-meter {
+    position: fixed;
+    bottom: 100px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .power-meter-fill {
+    width: 0%;
+    height: 100%;
+    background: linear-gradient(to right, #4CAF50, #FFC107, #FF5722);
+    transition: width 0.016s linear;
+  }
+
+  .power-meter-text {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+  }
+
+  /* Update scoreboard styles */
+  .scoreboard {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 12px 32px;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    z-index: 199; /* Below waiting overlay */
+    display: flex;
+    align-items: center;
+    gap: 32px;
+    pointer-events: none; /* Allow clicking through */
+    height: 48px;
+  }
+
+  .scoreboard .period {
+    position: absolute;
+    top: -24px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ddd;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+    background: rgba(30, 30, 30, 0.95);
+    padding: 4px 12px;
+    border-radius: 8px 8px 0 0;
+  }
+
+  .scoreboard .timer {
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: monospace;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.3);
+    padding: 0 32px;
+    border-left: 2px solid rgba(255,255,255,0.2);
+    border-right: 2px solid rgba(255,255,255,0.2);
+    line-height: 48px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  .scoreboard .teams {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .scoreboard .team {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 120px;
+    justify-content: center;
+    height: 100%;
+  }
+
+  .scoreboard .team .team-name {
+    font-size: 1.5rem;
+    font-weight: 600;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+    line-height: 48px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    margin-top: 17px;
+  }
+
+  .scoreboard .team-score {
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: monospace;
+    text-shadow: 0 0 10px rgba(255,255,255,0.2);
+    line-height: 48px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+  }
+
+  .scoreboard .team.red .team-name {
+    color: #ff4444;
+    text-shadow: 0 0 8px rgba(255,68,68,0.3);
+  }
+
+  .scoreboard .team.blue .team-name {
+    color: #44aaff;
+    text-shadow: 0 0 8px rgba(68,170,255,0.3);
+  }
+
+  /* Skill Bar Row Overlay (bottom right) */
+  .skill-bar-row {
+    position: fixed;
+    right: 32px;
+    bottom: 32px;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 18px;
+    z-index: 200;
+  }
+  .pass-shot-icon-group, .hockey-stop-indicator, .spin-move-indicator, .body-check-cooldown-indicator {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    width: 60px;
+    height: 60px;
+    position: relative;
+    overflow: hidden;
+  }
+  .pass-shot-icon-group {
+    margin-bottom: 0 !important;
+    margin-top: 0 !important;
+  }
+  .hockey-stop-icon {
+    font-size: 24px;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+  }
+
+  .cooldown-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(68, 170, 255, 0.2);
+    transform-origin: 50% 100%;
+    transform: scaleY(0);
+    z-index: 1;
+    transition: transform 0.1s linear;
+  }
+
+  .cooldown-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .hockey-stop-indicator.on-cooldown {
+    background: rgba(40, 40, 40, 0.95);
+  }
+
+  .hockey-stop-indicator.on-cooldown .hockey-stop-icon {
+    opacity: 0.5;
+  }
+
+  .hockey-stop-indicator.on-cooldown .cooldown-text {
+    opacity: 1;
+  }
+
+  .hockey-stop-indicator:hover::after {
+    content: 'Hockey Stop';
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* Spin Move Indicator */
+  .spin-move-indicator {
+    /* All positioning handled by .skill-bar-row flexbox */
+  }
+
+  .spin-move-icon {
+    font-size: 24px;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+  }
+
+  .spin-move-indicator.on-cooldown {
+    background: rgba(40, 40, 40, 0.95);
+  }
+
+  .spin-move-indicator.on-cooldown .spin-move-icon {
+    opacity: 0.5;
+  }
+
+  .spin-move-indicator.on-cooldown .cooldown-text {
+    opacity: 1;
+  }
+
+  .spin-move-indicator:hover::after {
+    content: 'Spin Move (R)';
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .body-check-indicator {
+    background: rgba(255,68,68,0.92);
+    color: #fff;
+    padding: 10px 28px;
+    border-radius: 12px;
+    font-size: 1.3rem;
+    font-weight: 800;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    letter-spacing: 1px;
+    text-shadow: 1px 1px 6px #000;
+    text-align: center;
+    pointer-events: none;
+    margin-bottom: 8px;
+    display: block;
+  }
+  .body-check-text {
+    display: block;
+  }
+
+  /* Body Check Cooldown Indicator */
+  .body-check-cooldown-indicator {
+    /* All positioning handled by .skill-bar-row flexbox */
+  }
+  .body-check-cooldown-icon {
+    font-size: 24px;
+    z-index: 2;
+    color: #ff4444;
+    transition: opacity 0.2s ease;
+  }
+  .body-check-cooldown-indicator.on-cooldown {
+    background: rgba(60, 20, 20, 0.95);
+  }
+  .body-check-cooldown-indicator.on-cooldown .body-check-cooldown-icon {
+    opacity: 0.5;
+  }
+  .body-check-cooldown-indicator.on-cooldown .cooldown-text {
+    opacity: 1;
+  }
+  .body-check-cooldown-indicator:hover::after {
+    content: 'Body Check (LMB, Defenders)';
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* Skill UI overlay icons */
+  .skill-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    user-select: none;
+    display: block;
+    margin: 0 auto 2px auto;
+  }
+
+  /* Skill input label styling */
+  .skill-input-label {
+    display: block;
+    margin-top: 0;
+    font-size: 0.6rem;
+    color: #fff;
+    padding: 1px 7px 0 7px;
+    text-align: center;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 600;
+    letter-spacing: 1px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    user-select: none;
+    pointer-events: none;
+    line-height: 1.3;
+    width: fit-content;
+    min-width: 28px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .pass-shot-overlay {
+    position: fixed;
+    right: 24px;
+    top: calc(50% - 110px); /* Above hockey stop indicator */
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 100;
+    pointer-events: none;
+  }
+  .pass-shot-row {
+    display: flex;
+    flex-direction: row;
+    gap: 18px;
+  }
+  .pass-shot-icon-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    width: 60px;
+    height: 60px;
+    margin-bottom: 8px;
+    margin-left: 2px;
+    margin-right: 2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .pass-shot-icon {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    margin: 0 auto 2px auto;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    user-select: none;
+    display: block;
+  }
+  .pass-shot-label {
+    display: block;
+    margin-top: 0;
+    font-size: 0.6rem;
+    color: #fff;
+    padding: 1px 7px 0 7px;
+    text-align: center;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 600;
+    letter-spacing: 1px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    user-select: none;
+    pointer-events: none;
+    line-height: 1.3;
+    width: fit-content;
+    min-width: 28px;
+    margin-left: auto;
+    margin-right: auto;
+    background: none;
+    border-radius: 0;
+  }
+
+  .pass-shot-icon-group.disabled .pass-shot-icon,
+  .pass-shot-icon-group.disabled .pass-shot-label,
+  .spin-move-indicator.disabled .spin-move-icon,
+  .spin-move-indicator.disabled .skill-input-label {
+    filter: grayscale(1) brightness(0.6);
+    color: #aaa !important;
+    opacity: 0.7;
+  }
+
+  .body-check-cooldown-indicator.disabled .body-check-cooldown-icon,
+  .body-check-cooldown-indicator.disabled .skill-input-label {
+    filter: grayscale(1) brightness(0.6);
+    color: #aaa !important;
+    opacity: 0.7;
+  }
+  .body-check-cooldown-indicator:not(.disabled) .body-check-cooldown-icon,
+  .body-check-cooldown-indicator:not(.disabled) .skill-input-label {
+    filter: none;
+    color: #fff !important;
+    opacity: 1;
+  }
+</style>

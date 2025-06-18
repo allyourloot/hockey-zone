@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "hytopia-helper": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "topia-mcp@latest",
+        "serve",
+        "--dir",
+        "C:\\Users\\17326\\Desktop\\HYTOPIA Games\\Hockey Zone"
+      ]
+    }
+  }
+}
