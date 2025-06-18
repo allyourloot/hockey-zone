@@ -325,6 +325,38 @@ startServer(world => {
   let puckSpawned = false;
   let puck: Entity | null = null;
 
+  // --- Puck Creation Helper ---
+  function createPuckEntity(): Entity {
+    return new Entity({
+      modelUri: 'models/items/cookie.gltf',
+      modelScale: 0.6,
+      rigidBodyOptions: {
+        type: RigidBodyType.DYNAMIC,
+        ccdEnabled: false, // Enable CCD to prevent tunneling
+        linearDamping: 0.05, // Increased linear damping to reduce overall energy
+        angularDamping: 0.8, // Increased angular damping to reduce spinning
+        enabledRotations: { x: false, y: true, z: false },
+        gravityScale: 1.0,
+        colliders: [
+          {
+            shape: ColliderShape.ROUND_CYLINDER,
+            radius: 0.4,
+            halfHeight: 0.05, // Increased thickness for better stability
+            borderRadius: 0.1, // Increased border radius for better collision handling
+            friction: 0.2,
+            bounciness: 0.05,
+            frictionCombineRule: CoefficientCombineRule.Min,
+            bouncinessCombineRule: CoefficientCombineRule.Max,
+            collisionGroups: {
+              belongsTo: [CollisionGroup.ENTITY],
+              collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+            }
+          }
+        ]
+      }
+    });
+  }
+
   world.on(PlayerEvent.JOINED_WORLD, ({ player }) => {
     // Remove any old entities for this player
     world.entityManager.getPlayerEntitiesByPlayer(player).forEach(entity => entity.despawn());
@@ -337,34 +369,7 @@ startServer(world => {
 
     // Spawn the puck at center ice when the game initializes
     if (!puckSpawned) {
-      puck = new Entity({
-        modelUri: 'models/items/cookie.gltf',
-        modelScale: 0.6,
-        rigidBodyOptions: {
-          type: RigidBodyType.DYNAMIC,
-          ccdEnabled: false, // Enable CCD to prevent tunneling
-          linearDamping: 0.05, // Increased linear damping to reduce overall energy
-          angularDamping: 0.8, // Increased angular damping to reduce spinning
-          enabledRotations: { x: false, y: true, z: false },
-          gravityScale: 1.0,
-          colliders: [
-            {
-              shape: ColliderShape.ROUND_CYLINDER,
-              radius: 0.4,
-              halfHeight: 0.05, // Increased thickness for better stability
-              borderRadius: 0.1, // Increased border radius for better collision handling
-              friction: 0.2,
-              bounciness: 0.05,
-              frictionCombineRule: CoefficientCombineRule.Min,
-              bouncinessCombineRule: CoefficientCombineRule.Max,
-              collisionGroups: {
-                belongsTo: [CollisionGroup.ENTITY],
-                collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
-              }
-            }
-          ]
-        }
-      });
+      puck = createPuckEntity();
       // Spawn the puck at center ice
       puck.spawn(world, { x: 0, y: 1.8, z: 0 });
       puckSpawned = true;
@@ -729,34 +734,7 @@ startServer(world => {
     }
 
     // Create new puck entity
-    puck = new Entity({
-      modelUri: 'models/items/cookie.gltf',
-      modelScale: 0.6,
-      rigidBodyOptions: {
-        type: RigidBodyType.DYNAMIC,
-        ccdEnabled: false, // Enable CCD to prevent tunneling
-        linearDamping: 0.05,
-        angularDamping: 0.8,
-        enabledRotations: { x: false, y: true, z: false },
-        gravityScale: 1.0,
-        colliders: [
-          {
-            shape: ColliderShape.ROUND_CYLINDER,
-            radius: 0.6,
-            halfHeight: 0.5, // Increased thickness for better stability
-            borderRadius: 0.1, // Increased border radius for better collision handling
-            friction: 0.2,
-            bounciness: 0.05,
-            frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
-            collisionGroups: {
-              belongsTo: [CollisionGroup.ENTITY],
-              collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
-            }
-          }
-        ]
-      }
-    });
+    puck = createPuckEntity();
 
     // Spawn at center ice
     puck.spawn(world, { x: 0, y: 1.8, z: 0 });
