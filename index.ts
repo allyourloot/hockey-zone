@@ -1231,6 +1231,18 @@ class IceSkatingController extends DefaultPlayerEntityController {
     deltaTimeMs: number
   ): void {
     if (!entity.isSpawned || !entity.world) return;
+    // --- STUNNED STATE: Prevent movement and play sleep animation ---
+    if (this._stunnedUntil > Date.now()) {
+      if (!this._isPlayingSleep) {
+        entity.stopAllModelAnimations();
+        entity.startModelLoopedAnimations(['sleep']);
+        this._isPlayingSleep = true;
+      }
+      // Prevent movement and all other animation changes while stunned
+      return;
+    } else {
+      this._isPlayingSleep = false;
+    }
     const isPuckController = IceSkatingController._globalPuckController === this;
 
     // Extract input values and handle potential undefined yaw
@@ -2120,18 +2132,6 @@ class IceSkatingController extends DefaultPlayerEntityController {
           const dist = Math.sqrt(dx*dx + dz*dz);
           const myTeamPos = HockeyGameManager.instance.getTeamAndPosition(entity.player.id);
           const theirTeamPos = HockeyGameManager.instance.getTeamAndPosition(otherEntity.player.id);
-          console.log('[BODY CHECK DEBUG] Checking otherEntity:', {
-            otherPlayerId: otherEntity.player?.id,
-            dx, dz, dist,
-            myTeamPos, theirTeamPos,
-            isControllingPuck: otherEntity.controller.isControllingPuck
-          });
-          // DEBUG LOGS FOR TEAM ASSIGNMENT
-          console.log('[BODY CHECK DEBUG] myTeamPos:', myTeamPos, 'theirTeamPos:', theirTeamPos);
-          console.log('[BODY CHECK DEBUG] teams:', JSON.stringify(HockeyGameManager.instance.teams));
-          console.log('[BODY CHECK DEBUG] entity.player.id:', entity.player?.id, 'otherEntity.player.id:', otherEntity.player?.id);
-          // ADD THIS LOG:
-          console.log('[BODY CHECK] Checking collision: attacker', entity.player?.id, 'target', otherEntity.player?.id, 'myTeamPos', myTeamPos, 'theirTeamPos', theirTeamPos, 'dist', dist);
           if (dist < 1.5) {
             // Check if on opposing team
             if (myTeamPos && theirTeamPos && myTeamPos.team !== theirTeamPos.team) {
@@ -2142,15 +2142,12 @@ class IceSkatingController extends DefaultPlayerEntityController {
                 otherEntity.controller.isControllingPuck
               ) {
                 const ctrl = otherEntity.controller as IceSkatingController;
-                console.log('[BODY CHECK] Attempting to detach puck from player', otherEntity.player?.id, 'isControllingPuck:', ctrl.isControllingPuck);
                 ctrl.releasePuck();
-                // Forcibly clear puck control state in case of desync
                 ctrl._isControllingPuck = false;
                 ctrl._controlledPuck = null;
                 if (IceSkatingController._globalPuckController === ctrl) {
                   IceSkatingController._globalPuckController = null;
                 }
-                // Prevent immediate re-attachment after body check
                 ctrl._puckReleaseTime = Date.now();
                 ctrl._puckReattachCooldown = 1200;
                 ctrl._canPickupPuck = false;
@@ -2163,58 +2160,43 @@ class IceSkatingController extends DefaultPlayerEntityController {
               const pushDir = { x: dx / (dist || 1), z: dz / (dist || 1) };
               // Calculate attacker's speed at the moment of collision
               const attackerSpeed = Math.sqrt(entity.linearVelocity.x * entity.linearVelocity.x + entity.linearVelocity.z * entity.linearVelocity.z);
-              const minScale = 0.2, maxScale = 1.5;
+              // Tone down the force and scale with speed
+              const minScale = 0.3, maxScale = 1.0; // Lowered maxScale for gentler knockback
               const speedNorm = Math.min(1, attackerSpeed / (this.runVelocity * this.ICE_MAX_SPEED_MULTIPLIER));
               const forceScale = minScale + (maxScale - minScale) * speedNorm;
-              let knockbackForce = this.BODY_CHECK_DASH_FORCE * 2 * forceScale;
-              knockbackForce = Math.max(1, Math.min(knockbackForce, 14)); // Clamp to [1, 14]
-              console.log('[BODY CHECK] Applying knockback to player', otherEntity.player?.id, 'pushDir:', pushDir, 'force:', knockbackForce, 'attackerSpeed (at collision):', attackerSpeed, 'forceScale:', forceScale);
-              console.log('[BODY CHECK] Target velocity before:', otherEntity.linearVelocity);
-              // Set the target's horizontal velocity for knockback, zero y to prevent upward launch
+              let knockbackForce = this.BODY_CHECK_DASH_FORCE * 1.2 * forceScale; // Lowered multiplier
+              knockbackForce = Math.max(1, Math.min(knockbackForce, 8)); // Clamp to [1, 8] for softer effect
               otherEntity.setLinearVelocity({
                 x: pushDir.x * knockbackForce,
-                y: 0, // Prevent upward launch
+                y: 0.5 * forceScale, // Minimal vertical lift
                 z: pushDir.z * knockbackForce
               });
-              console.log('[BODY CHECK] Target velocity set for knockback:', otherEntity.linearVelocity);
-              // Play 'sleep' animation on the hit player
+              // --- STUNNED STATE & SLEEP ANIMATION ---
               if (otherEntity.controller instanceof IceSkatingController) {
-                // Set stunned state for 2 seconds
                 otherEntity.controller._stunnedUntil = Date.now() + 2000;
                 otherEntity.controller._isPlayingSleep = false; // Force re-trigger
-                console.log('[BODY CHECK] Set stunnedUntil for', otherEntity.player?.id, 'until', otherEntity.controller._stunnedUntil);
               }
-              console.log('[BODY CHECK] About to stop all animations for', otherEntity.player?.id);
               if (typeof otherEntity.stopAllModelAnimations === 'function') {
                 otherEntity.stopAllModelAnimations();
-                console.log('[BODY CHECK] Stopped all animations for', otherEntity.player?.id);
               }
-              console.log('[BODY CHECK] About to start oneshot animation [sleep] for', otherEntity.player?.id);
-              if (typeof otherEntity.startModelOneshotAnimations === 'function') {
-                otherEntity.startModelOneshotAnimations(['sleep']);
-                console.log('[BODY CHECK] Started oneshot animation [sleep] for', otherEntity.player?.id);
+              if (typeof otherEntity.startModelLoopedAnimations === 'function') {
+                otherEntity.startModelLoopedAnimations(['sleep']);
               }
               setTimeout(() => {
-                console.log('[BODY CHECK] Target velocity after:', otherEntity.linearVelocity);
-                // DEBUG: Directly set velocity for one frame to test effect
                 otherEntity.setLinearVelocity({
                   x: pushDir.x * knockbackForce,
-                  y: 6 * forceScale,
+                  y: 0.5 * forceScale, // Minimal vertical lift
                   z: pushDir.z * knockbackForce
                 });
-                console.log('[BODY CHECK] Target velocity forcibly set for debug:', otherEntity.linearVelocity);
               }, 50);
-              // Prevent the body checking player from picking up the puck instantly
               if (this instanceof IceSkatingController) {
                 this._canPickupPuck = false;
                 setTimeout(() => { this._canPickupPuck = true; }, 500);
               }
-              // Play hit sound ONCE per body check
               if (entity.world && !this._bodyCheckSoundPlayed) {
                  new Audio({ uri: 'audio/sfx/hockey/body-check.mp3', volume: 1, attachedToEntity: otherEntity }).play(entity.world, true);
                  this._bodyCheckSoundPlayed = true;
               }
-              // End body check after first hit
               this._isBodyChecking = false;
               break;
             }
