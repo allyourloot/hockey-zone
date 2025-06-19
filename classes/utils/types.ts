@@ -3,16 +3,14 @@
  * Re-exports from hytopia and custom game-specific types
  */
 
-// =========================
-// RE-EXPORT HYTOPIA TYPES
-// =========================
-export type {
+// Import types for use in interfaces
+import type {
   PlayerInput,
   PlayerCameraOrientation,
   Vector3Like,
 } from 'hytopia';
 
-export {
+import {
   startServer,
   Audio,
   DefaultPlayerEntity,
@@ -37,12 +35,81 @@ export {
 } from 'hytopia';
 
 // =========================
+// RE-EXPORT HYTOPIA TYPES
+// =========================
+export type {
+  PlayerInput,
+  PlayerCameraOrientation,
+  Vector3Like,
+};
+
+export {
+  startServer,
+  Audio,
+  DefaultPlayerEntity,
+  PlayerEvent,
+  PlayerUIEvent,
+  PlayerCameraMode,
+  PlayerEntity,
+  Entity,
+  ChatManager,
+  Collider,
+  ColliderShape,
+  RigidBodyType,
+  BaseEntityController,
+  CollisionGroup,
+  CoefficientCombineRule,
+  DefaultPlayerEntityController,
+  EntityEvent,
+  BlockType,
+  BaseEntityControllerEvent,
+  SceneUI,
+  ModelRegistry,
+};
+
+// =========================
 // CUSTOM GAME TYPES
 // =========================
 
-// Hockey-specific types
-export type HockeyTeam = 'red' | 'blue';
-export type HockeyPosition = 'GOALIE' | 'DEFENDER1' | 'DEFENDER2' | 'CENTER' | 'WINGER1' | 'WINGER2';
+// Hockey-specific enums and types
+export enum HockeyTeam {
+  RED = 'RED',
+  BLUE = 'BLUE',
+}
+
+export enum HockeyPosition {
+  GOALIE = 'GOALIE',
+  DEFENDER1 = 'DEFENDER1',
+  DEFENDER2 = 'DEFENDER2',
+  WINGER1 = 'WINGER1',
+  WINGER2 = 'WINGER2',
+  CENTER = 'CENTER',
+}
+
+export enum HockeyGameState {
+  LOBBY = 'LOBBY',
+  TEAM_SELECTION = 'TEAM_SELECTION',
+  WAITING_FOR_PLAYERS = 'WAITING_FOR_PLAYERS',
+  MATCH_START = 'MATCH_START',
+  IN_PERIOD = 'IN_PERIOD',
+  GOAL_SCORED = 'GOAL_SCORED',
+  PERIOD_END = 'PERIOD_END',
+  GAME_OVER = 'GAME_OVER',
+}
+
+export interface TeamAssignment {
+  [HockeyPosition.GOALIE]?: string;
+  [HockeyPosition.DEFENDER1]?: string;
+  [HockeyPosition.DEFENDER2]?: string;
+  [HockeyPosition.WINGER1]?: string;
+  [HockeyPosition.WINGER2]?: string;
+  [HockeyPosition.CENTER]?: string;
+}
+
+export interface Teams {
+  [HockeyTeam.RED]: TeamAssignment;
+  [HockeyTeam.BLUE]: TeamAssignment;
+}
 
 // Controller options interface
 export interface IceSkatingControllerOptions {
@@ -137,7 +204,7 @@ export interface PositionStats {
   passingPower: number;
 }
 
-// Collider configuration
+// Collider configuration (using imported types)
 export interface ColliderConfig {
   shape: ColliderShape;
   halfExtents?: Vector3Like;

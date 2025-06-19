@@ -1,43 +1,13 @@
 import { DefaultPlayerEntity, Entity, Player, World, } from 'hytopia';
-
-export enum HockeyGameState {
-  LOBBY = 'LOBBY',
-  TEAM_SELECTION = 'TEAM_SELECTION',
-  WAITING_FOR_PLAYERS = 'WAITING_FOR_PLAYERS',
-  MATCH_START = 'MATCH_START',
-  IN_PERIOD = 'IN_PERIOD',
-  GOAL_SCORED = 'GOAL_SCORED',
-  PERIOD_END = 'PERIOD_END',
-  GAME_OVER = 'GAME_OVER',
-}
-
-export enum HockeyTeam {
-  RED = 'RED',
-  BLUE = 'BLUE',
-}
-
-export enum HockeyPosition {
-  GOALIE = 'GOALIE',
-  DEFENDER1 = 'DEFENDER1',
-  DEFENDER2 = 'DEFENDER2',
-  WINGER1 = 'WINGER1',
-  WINGER2 = 'WINGER2',
-  CENTER = 'CENTER',
-}
-
-export interface TeamAssignment {
-  [HockeyPosition.GOALIE]?: string;
-  [HockeyPosition.DEFENDER1]?: string;
-  [HockeyPosition.DEFENDER2]?: string;
-  [HockeyPosition.WINGER1]?: string;
-  [HockeyPosition.WINGER2]?: string;
-  [HockeyPosition.CENTER]?: string;
-}
-
-export interface Teams {
-  [HockeyTeam.RED]: TeamAssignment;
-  [HockeyTeam.BLUE]: TeamAssignment;
-}
+import { 
+  HockeyGameState, 
+  HockeyTeam, 
+  HockeyPosition 
+} from '../utils/types';
+import type { 
+  TeamAssignment, 
+  Teams 
+} from '../utils/types';
 
 export class HockeyGameManager {
   private static _instance: HockeyGameManager;

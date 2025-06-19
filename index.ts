@@ -55,11 +55,12 @@ import type {
   Vector3Like,
 } from 'hytopia';
 import worldMap from './assets/maps/hockey-zone.json';
-import { HockeyGameManager, HockeyGameState } from './HockeyGameManager';
+import { HockeyGameManager } from './classes/managers/HockeyGameManager';
 
 // Import our new constants and types
 import * as CONSTANTS from './classes/utils/constants';
 import type {
+  HockeyGameState,
   HockeyTeam,
   HockeyPosition,
   IceSkatingControllerOptions,

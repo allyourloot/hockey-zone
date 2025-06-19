@@ -23,5 +23,9 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
-  }
+  },
+  "exclude": [
+    "index_backup.ts",
+    "node_modules"
+  ]
 }
