@@ -237,7 +237,7 @@ export class WorldInitializer {
    */
   public static createPuckEntity(): Entity {
     return new Entity({
-      modelUri: 'models/items/cookie.gltf',
+      modelUri: 'models/projectiles/puck-hytopia.gltf',
       modelScale: CONSTANTS.PUCK_PHYSICS.MODEL_SCALE,
       rigidBodyOptions: {
         type: RigidBodyType.DYNAMIC,

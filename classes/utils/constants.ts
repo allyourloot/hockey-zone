@@ -248,7 +248,7 @@ export const PUCK_PHYSICS = {
 // SPAWN POSITIONS
 // =========================
 export const SPAWN_POSITIONS = {
-  PUCK_CENTER_ICE: { x: 0, y: 1.8, z: 0 },
+  PUCK_CENTER_ICE: { x: 0, y: 1.8, z: 1 },
   PLAYER_DEFAULT: { x: 0, y: 10, z: 0 },
   RED_GOAL: { x: 0, y: 2, z: -32 },
   BLUE_GOAL: { x: 0, y: 2, z: 32 },
