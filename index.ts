@@ -33,6 +33,7 @@ import { HockeyGameManager } from './classes/managers/HockeyGameManager';
 import { AudioManager } from './classes/managers/AudioManager';
 import { ChatCommandManager } from './classes/managers/ChatCommandManager';
 import { PlayerManager } from './classes/managers/PlayerManager';
+import { PuckTrailManager } from './classes/managers/PuckTrailManager';
 
 // Import controllers
 import { IceSkatingController } from './classes/controllers/IceSkatingController';
@@ -56,4 +57,5 @@ startServer(world => {
   ChatCommandManager.instance.initialize(world, puckRef, createPuckEntity);
   PlayerManager.instance.initialize(world, puckRef, createPuckEntity, IceSkatingController);
   AudioManager.instance.initialize(world);
+  PuckTrailManager.instance.initialize(world);
 }); 

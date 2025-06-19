@@ -238,17 +238,29 @@ export const PUCK_PHYSICS = {
   
   // Collider properties
   RADIUS: 0.4,
-  HALF_HEIGHT: 0.05,
+  HALF_HEIGHT: 0.02, // Very thin to make puck sit directly on ice surface
   BORDER_RADIUS: 0.1,
   FRICTION: 0.2,
   BOUNCINESS: 0.05,
 } as const;
 
 // =========================
+// PUCK TRAIL CONSTANTS
+// =========================
+export const PUCK_TRAIL = {
+  MAX_LENGTH: 4, // Fewer particles for gradient plane trail
+  SPAWN_INTERVAL: 70, // Slightly longer for smooth gradient effect
+  PARTICLE_LIFETIME: 600, // Longer lifetime to show gradient fade
+  MIN_SPEED_FOR_TRAIL: 2.5, // Speed threshold for trail activation
+  PARTICLE_SCALE: 0.8, // Larger scale for gradient plane visibility
+  POSITION_RANDOMNESS: 0.05 // Minimal randomness for clean gradient trail
+} as const;
+
+// =========================
 // SPAWN POSITIONS
 // =========================
 export const SPAWN_POSITIONS = {
-  PUCK_CENTER_ICE: { x: 0, y: 1.8, z: 1 },
+  PUCK_CENTER_ICE: { x: 0, y: 1.1, z: 1 }, // Lowered from 1.8 to 0.2 to sit on ice surface
   PLAYER_DEFAULT: { x: 0, y: 10, z: 0 },
   RED_GOAL: { x: 0, y: 2, z: -32 },
   BLUE_GOAL: { x: 0, y: 2, z: 32 },

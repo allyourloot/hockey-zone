@@ -6,6 +6,7 @@
 import { Entity, ChatManager } from 'hytopia';
 import type { World, PlayerEntity } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
+import { PuckTrailManager } from './PuckTrailManager';
 
 // Import the IceSkatingController type - we'll need to reference it
 // Note: This creates a circular dependency that we'll resolve in later phases
@@ -64,6 +65,8 @@ export class ChatCommandManager {
     this.registerRocketCommand();
     this.registerPuckCommand();
     this.registerSpawnPuckCommand();
+    this.registerRemoveTrailCommand();
+    this.registerTrailColorCommand();
     this.registerTestSleepCommand();
   }
   
@@ -126,6 +129,8 @@ export class ChatCommandManager {
       // First despawn existing puck if any
       if (this.puck && this.puck.isSpawned) {
         this.puck.despawn();
+        // Remove trail effect when despawning
+        PuckTrailManager.instance.removeTrail();
       }
 
       // Create new puck entity
@@ -134,8 +139,12 @@ export class ChatCommandManager {
         
         // Spawn at center ice using constants
         this.puck.spawn(this.world!, CONSTANTS.SPAWN_POSITIONS.PUCK_CENTER_ICE);
-        this.world!.chatManager.sendPlayerMessage(player, 'New puck spawned at center ice!', '00FF00');
-        console.log('New puck spawned at center ice');
+        
+        // Attach trail effect to the new puck
+        PuckTrailManager.instance.attachTrailToPuck(this.puck);
+        
+        this.world!.chatManager.sendPlayerMessage(player, 'New puck spawned with custom gradient trail!', '00FF00');
+        console.log('New puck spawned with custom gradient trail');
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'Error: Cannot create puck entity!', 'FF0000');
         console.error('ChatCommandManager: createPuckEntity function not available');
@@ -143,6 +152,47 @@ export class ChatCommandManager {
     });
   }
   
+  /**
+   * Register the /removetrail command - removes the puck trail effect
+   */
+  private registerRemoveTrailCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/removetrail', (player) => {
+      PuckTrailManager.instance.removeTrail();
+      this.world!.chatManager.sendPlayerMessage(player, 'Puck trail effect removed!', '00FF00');
+      console.log('Puck trail effect removed');
+    });
+  }
+
+  /**
+   * Register the /trailcolor command - switches between different trail particle colors
+   */
+  private registerTrailColorCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/trailcolor', (player, args) => {
+      const color = args[0]?.toLowerCase();
+      if (color === 'gray' || color === 'grey' || color === 'red' || color === 'gold') {
+        // This will require updating the PuckTrailEffect to support color changes
+        // For now, we'll just send a message
+        const displayColor = color === 'grey' ? 'gray' : color;
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Trail color would be changed to ${displayColor}! (Feature coming soon)`, 
+          color === 'red' ? 'FF4444' : color === 'gold' ? 'FFD700' : 'AAAAAA'
+        );
+        console.log(`Trail color change requested: ${displayColor}`);
+      } else {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          'Usage: /trailcolor <gray|red|gold>', 
+          'FFFF00'
+        );
+      }
+    });
+  }
+
   /**
    * Register the /testsleep command - triggers sleep animation for all players
    */
