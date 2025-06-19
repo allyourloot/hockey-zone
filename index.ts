@@ -26,46 +26,8 @@
 // =========================
 // 1. IMPORTS & TYPE DEFINITIONS
 // =========================
-import {
-  startServer,
-  Audio,
-  DefaultPlayerEntity,
-  PlayerEvent,
-  PlayerUIEvent,
-  PlayerCameraMode,
-  PlayerEntity,
-  Entity,
-  ChatManager,
-  Collider,
-  ColliderShape,
-  RigidBodyType,
-  BaseEntityController,
-  CollisionGroup,
-  CoefficientCombineRule,
-  DefaultPlayerEntityController,
-  EntityEvent,
-  BlockType,
-  BaseEntityControllerEvent,
-  SceneUI,
-  ModelRegistry,
-} from 'hytopia';
-import type {
-  PlayerInput,
-  PlayerCameraOrientation,
-  Vector3Like,
-} from 'hytopia';
-import worldMap from './assets/maps/hockey-zone.json';
+import { startServer, ModelRegistry, Entity } from 'hytopia';
 import { HockeyGameManager } from './classes/managers/HockeyGameManager';
-
-// Import our new constants and types
-import * as CONSTANTS from './classes/utils/constants';
-import type {
-  HockeyGameState,
-  HockeyTeam,
-  HockeyPosition,
-  IceSkatingControllerOptions,
-  PuckMovementDirection,
-} from './classes/utils/types';
 
 // Import managers
 import { AudioManager } from './classes/managers/AudioManager';
@@ -80,72 +42,18 @@ import { WorldInitializer } from './classes/systems/WorldInitializer';
 
 
 // =========================
-// 2. MAP & WORLD INITIALIZATION
+// 2. SERVER INITIALIZATION
 // =========================
-ModelRegistry.instance.optimize = false;
+
 startServer(world => {
-  /**
-   * Enable debug rendering of the physics simulation.
-   * This will overlay lines in-game representing colliders,
-   * rigid bodies, and raycasts. This is useful for debugging
-   * physics-related issues in a development environment.
-   * Enabling this can cause performance issues, which will
-   * be noticed as dropped frame rates and higher RTT times.
-   * It is intended for development environments only and
-   * debugging physics.
-   */
-  
-  // Initialize world with map, goals, and entities
-  WorldInitializer.instance.initialize(world);
-
-  // Initialize the game manager ONCE at server start
-  HockeyGameManager.instance.setupGame(world);
-
-  // --- Puck Creation Helper ---
+  // Create shared references for managers
+  const puckRef: { current: Entity | null } = { current: null };
   const createPuckEntity = WorldInitializer.createPuckEntity;
 
-  // =========================
-  // 3. PLAYER MANAGEMENT (Join/Leave, Team/Position, Lock-in)
-  // =========================
-  // Create a reference object for the puck that can be shared with managers
-  const puckRef: { current: Entity | null } = { current: null };
-
-  // =========================
-  // 4. CHAT COMMANDS
-  // =========================
-  // Initialize chat command manager
-  ChatCommandManager.instance.initialize(world, puckRef, createPuckEntity);
-
-  // =========================
-  // 5. PLAYER ENTITY & COLLIDERS
-  // =========================
-  // (Player entity creation and collider setup is handled inside the PlayerEvent.JOINED_WORLD handler above)
-  // ... existing code ...
-
-  // =========================
-  // 6. ICESKATINGCONTROLLER (All Logic, Methods, Helpers)
-  // =========================
-  // IceSkatingController has been extracted to classes/controllers/IceSkatingController.ts
-  // The controller is imported at the top of this file and used by PlayerManager
-
-  // Initialize player manager now that IceSkatingController is defined
-  PlayerManager.instance.initialize(world, puckRef, createPuckEntity, IceSkatingController);
-
-  // =========================
-  // 7. GAME MANAGER INITIALIZATION
-  // =========================
+  // Initialize all game systems in order
+  WorldInitializer.instance.initialize(world);
   HockeyGameManager.instance.setupGame(world);
-
-  // =========================
-  // 8. MISCELLANEOUS/UTILITY
-  // =========================
-  // (Any additional utility functions or code not covered above)
-  // ... existing code ...
-
-  
-  // =========================
-  // 9. AUDIO MANAGEMENT (Ambient, Music, SFX Scheduling)
-  // =========================
-  // Initialize audio manager for ambient sounds and background music
+  ChatCommandManager.instance.initialize(world, puckRef, createPuckEntity);
+  PlayerManager.instance.initialize(world, puckRef, createPuckEntity, IceSkatingController);
   AudioManager.instance.initialize(world);
 }); 
