@@ -1,4 +1,4 @@
-/**
+﻿/**
  * HYTOPIA SDK Boilerplate
  * 
  * This is a simple boilerplate to get started on your project.
@@ -108,6 +108,8 @@ startServer(world => {
   // =========================
   // Create a reference object for the puck that can be shared with managers
   const puckRef: { current: Entity | null } = { current: null };
+  
+  // Initialize player manager (will be done after IceSkatingController is defined)
 
   // =========================
   // 4. CHAT COMMANDS
@@ -125,8 +127,7 @@ startServer(world => {
   // 6. ICESKATINGCONTROLLER (All Logic, Methods, Helpers)
   // =========================
   // IceSkatingController has been extracted to classes/controllers/IceSkatingController.ts
-  // The controller is imported at the top of this file and used by PlayerManager
-
+  // Initialize player manager now that IceSkatingController is defined
   // Initialize player manager now that IceSkatingController is defined
   PlayerManager.instance.initialize(world, puckRef, createPuckEntity, IceSkatingController);
 
@@ -147,4 +148,4 @@ startServer(world => {
   // =========================
   // Initialize audio manager for ambient sounds and background music
   AudioManager.instance.initialize(world);
-}); 
+});
