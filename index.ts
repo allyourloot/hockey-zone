@@ -26,7 +26,7 @@
 // =========================
 // 1. IMPORTS & TYPE DEFINITIONS
 // =========================
-import { startServer, ModelRegistry, Entity } from 'hytopia';
+import { startServer, Entity } from 'hytopia';
 import { HockeyGameManager } from './classes/managers/HockeyGameManager';
 
 // Import managers
