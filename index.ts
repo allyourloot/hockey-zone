@@ -47,6 +47,9 @@ import { GoalDetectionService } from './classes/services/GoalDetectionService';
 // Import managers
 import { PlayerSpawnManager } from './classes/managers/PlayerSpawnManager';
 
+// Import constants
+import * as CONSTANTS from './classes/utils/constants';
+
 
 // =========================
 // 2. SERVER INITIALIZATION
@@ -70,7 +73,7 @@ startServer(world => {
   const gameMusic = new Audio({
     uri: 'audio/music/ready-for-this.mp3',
     loop: true,
-    volume: 0.1,
+    volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
   });
   
   // Music will start when user interacts (browser autoplay policy)

@@ -10,8 +10,8 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@hytopia.com/assets": "^0.3.4",
-    "hytopia": "^0.6.6"
+    "@hytopia.com/assets": "^0.3.10",
+    "hytopia": "^0.6.10"
   },
   "trustedDependencies": [
     "mediasoup",

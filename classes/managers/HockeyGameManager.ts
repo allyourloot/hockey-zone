@@ -9,6 +9,7 @@ import type {
   Teams 
 } from '../utils/types';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
+import { AudioManager } from './AudioManager';
 
 export class HockeyGameManager {
   private static _instance: HockeyGameManager;
@@ -122,6 +123,9 @@ export class HockeyGameManager {
     // DON'T lock movement yet - allow celebration time
     // this._state = HockeyGameState.GOAL_SCORED;
     
+    // Play goal horn sound effect
+    AudioManager.instance.playGoalHorn();
+    
     // Notify all players of the score update
     if (this._world) {
       // Get all player IDs from teams and convert to Player objects
@@ -140,6 +144,11 @@ export class HockeyGameManager {
             type: 'score-update',
             redScore: this._scores[HockeyTeam.RED],
             blueScore: this._scores[HockeyTeam.BLUE]
+          });
+          player.ui.sendData({
+            type: 'goal-scored',
+            team: team,
+            isOwnGoal: isOwnGoal
           });
         } catch (error) {
           console.error('Error sending score update to player:', error);

@@ -178,6 +178,10 @@ and also configure additional buttons for mobile compatibility.
       document.querySelector('.team.red .team-score').textContent = data.redScore;
       document.querySelector('.team.blue .team-score').textContent = data.blueScore;
     }
+    if (data.type === 'goal-scored') {
+      // Show goal overlay
+      showGoalOverlay(data.team, data.isOwnGoal);
+    }
     if (data.type === 'period-update') {
       // Update period display
       const periodText = data.period === 1 ? '1st' : data.period === 2 ? '2nd' : '3rd';
@@ -508,6 +512,30 @@ and also configure additional buttons for mobile compatibility.
     const template = document.getElementById('blue-goal-label-template');
     return template.content.cloneNode(true);
   });
+
+  // Goal overlay functionality
+  function showGoalOverlay(team, isOwnGoal = false) {
+    const overlay = document.getElementById('goal-overlay');
+    const teamText = document.getElementById('goal-team-text');
+    
+    // Set team-specific styling and text
+    teamText.className = 'goal-subtext';
+    if (team === 'RED') {
+      teamText.classList.add('red-team');
+      teamText.textContent = isOwnGoal ? 'RED TEAM SCORES! (OWN GOAL)' : 'RED TEAM SCORES!';
+    } else {
+      teamText.classList.add('blue-team');
+      teamText.textContent = isOwnGoal ? 'BLUE TEAM SCORES! (OWN GOAL)' : 'BLUE TEAM SCORES!';
+    }
+    
+    // Show the overlay
+    overlay.style.display = 'flex';
+    
+    // Hide after 3 seconds
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 3000);
+  }
 </script>
 
 <div id="root">
@@ -563,7 +591,7 @@ and also configure additional buttons for mobile compatibility.
     <div class="team-selection-title">Select Your Team & Position</div>
     <div class="teams-container">
       <div class="team-column red-team">
-        <div class="team-name">Red Team</div>
+        <div class="team-name">Red</div>
         <button class="position-btn" data-team="RED" data-position="GOALIE">Goalie</button>
         <button class="position-btn" data-team="RED" data-position="DEFENDER1">Defender 1</button>
         <button class="position-btn" data-team="RED" data-position="DEFENDER2">Defender 2</button>
@@ -572,7 +600,7 @@ and also configure additional buttons for mobile compatibility.
         <button class="position-btn" data-team="RED" data-position="CENTER">Center</button>
       </div>
       <div class="team-column blue-team">
-        <div class="team-name">Blue Team</div>
+        <div class="team-name">Blue</div>
         <button class="position-btn" data-team="BLUE" data-position="GOALIE">Goalie</button>
         <button class="position-btn" data-team="BLUE" data-position="DEFENDER1">Defender 1</button>
         <button class="position-btn" data-team="BLUE" data-position="DEFENDER2">Defender 2</button>
@@ -593,16 +621,24 @@ and also configure additional buttons for mobile compatibility.
 
   <!-- Scoreboard -->
   <div id="scoreboard" class="scoreboard" style="display: none;">
-    <div class="period">1st Period</div>
     <div class="team red">
       <div class="team-name">RED</div>
       <div class="team-score">0</div>
     </div>
-    <div class="timer">2:00</div>
+    <div class="timer-section">
+      <div class="timer">2:00</div>
+      <div class="period">1st Period</div>
+    </div>
     <div class="team blue">
       <div class="team-name">BLUE</div>
       <div class="team-score">0</div>
     </div>
+  </div>
+
+  <!-- Goal Overlay -->
+  <div id="goal-overlay" class="goal-overlay" style="display: none;">
+    <div class="goal-text">GOAL!</div>
+    <div class="goal-subtext" id="goal-team-text">RED TEAM SCORES!</div>
   </div>
 
   <!-- Pass/Shot Icons Overlay -->
@@ -637,6 +673,20 @@ and also configure additional buttons for mobile compatibility.
 </template>
 
 <style>
+  /* Load custom Draco font */
+  @font-face {
+    font-family: 'Draco';
+    src: url('{{CDN_ASSETS_URL}}/ui/fonts/Draco.otf') format('opentype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+  }
+
+  /* Set Draco as default font for the entire UI */
+  body, * {
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
   /* By default, we hide the mobile controls */
   .mobile-controls {
     display: none;
@@ -715,7 +765,8 @@ and also configure additional buttons for mobile compatibility.
     box-shadow: 0 4px 24px rgba(0,0,0,0.4);
   }
   .team-name {
-    font-size: 1.3rem;
+    font-size: 1.2rem;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
     font-weight: bold;
     margin-bottom: 18px;
     color: #fff;
@@ -866,18 +917,23 @@ and also configure additional buttons for mobile compatibility.
     height: 48px;
   }
 
+  .timer-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 0 32px;
+    border-left: 2px solid rgba(255,255,255,0.2);
+    border-right: 2px solid rgba(255,255,255,0.2);
+    height: 100%;
+  }
+
   .scoreboard .period {
-    position: absolute;
-    top: -24px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 1rem;
-    font-weight: 600;
-    color: #ddd;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #bbb;
     text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
-    background: rgba(30, 30, 30, 0.95);
-    padding: 4px 12px;
-    border-radius: 8px 8px 0 0;
+    margin-top: 2px;
   }
 
   .scoreboard .timer {
@@ -886,13 +942,7 @@ and also configure additional buttons for mobile compatibility.
     font-family: monospace;
     color: #fff;
     text-shadow: 0 0 10px rgba(255,255,255,0.3);
-    padding: 0 32px;
-    border-left: 2px solid rgba(255,255,255,0.2);
-    border-right: 2px solid rgba(255,255,255,0.2);
-    line-height: 48px;
-    height: 100%;
-    display: flex;
-    align-items: center;
+    line-height: 1;
   }
 
   .scoreboard .teams {
@@ -911,8 +961,9 @@ and also configure additional buttons for mobile compatibility.
   }
 
   .scoreboard .team .team-name {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
     font-weight: 600;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
     text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
     line-height: 48px;
     height: 100%;
@@ -1072,8 +1123,9 @@ and also configure additional buttons for mobile compatibility.
     color: #fff;
     padding: 10px 28px;
     border-radius: 12px;
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     font-weight: 800;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
     box-shadow: 0 2px 12px rgba(0,0,0,0.18);
     letter-spacing: 1px;
     text-shadow: 1px 1px 6px #000;
@@ -1084,6 +1136,8 @@ and also configure additional buttons for mobile compatibility.
   }
   .body-check-text {
     display: block;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    font-weight: 800;
   }
 
   /* Body Check Cooldown Indicator */
@@ -1242,8 +1296,9 @@ and also configure additional buttons for mobile compatibility.
   .goal-label {
     background: rgba(0,0,0,0.85);
     color: #fff;
-    font-size: 1.3rem;
+    font-size: 1.2rem;
     font-weight: bold;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
     padding: 8px 22px;
     border-radius: 10px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.18);
@@ -1261,5 +1316,88 @@ and also configure additional buttons for mobile compatibility.
   .goal-label-blue {
     color: #44aaff;
     border: 2px solid #44aaff;
+  }
+
+  /* Goal Overlay */
+  .goal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: goalOverlayFadeIn 0.3s ease-out;
+  }
+
+  .goal-text {
+    font-size: 8rem;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.8), 0 0 60px rgba(255, 255, 255, 0.4);
+    margin-bottom: 20px;
+    animation: goalTextPulse 0.6s ease-in-out;
+    letter-spacing: 8px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+  }
+
+  .goal-subtext {
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+    letter-spacing: 3px;
+    animation: goalSubtextSlide 0.8s ease-out 0.2s both;
+  }
+
+  .goal-subtext.red-team {
+    color: #ff4444;
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.8), 0 0 40px rgba(255, 68, 68, 0.4);
+  }
+
+  .goal-subtext.blue-team {
+    color: #44aaff;
+    text-shadow: 0 0 20px rgba(68, 170, 255, 0.8), 0 0 40px rgba(68, 170, 255, 0.4);
+  }
+
+  @keyframes goalOverlayFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(5px);
+    }
+  }
+
+  @keyframes goalTextPulse {
+    0% {
+      transform: scale(0.5);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes goalSubtextSlide {
+    from {
+      transform: translateY(50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
   }
 </style>

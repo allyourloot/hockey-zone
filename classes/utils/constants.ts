@@ -129,11 +129,17 @@ export const AUDIO = {
   PERCUSSION_MAX: 60000, // 60s
   
   // Background music
-  BACKGROUND_MUSIC_VOLUME: 0.1,
+  BACKGROUND_MUSIC_VOLUME: 0.05,
+  
+  // Stomp beat timing
+  STOMP_BEAT_MIN: 25000, // 25s
+  STOMP_BEAT_MAX: 50000, // 50s
   
   // Sound effect volumes
   CROWD_CHANT_VOLUME: 0.3,
-  PERCUSSION_VOLUME: 0.3,
+  PERCUSSION_VOLUME: 0.4,
+  STOMP_BEAT_VOLUME: 0.4,
+  GOAL_HORN_VOLUME: 0.6,
 } as const;
 
 // =========================
@@ -200,6 +206,10 @@ export const AUDIO_PATHS = {
   // Ambient sounds
   CROWD_HEY: 'audio/sfx/hockey/crowd-hey.mp3',
   PERCUSSION_BEAT: 'audio/sfx/hockey/percussion-beat.mp3',
+  STOMP_BEAT: 'audio/sfx/hockey/stomp-beat.wav',
+  
+  // Goal effects
+  GOAL_HORN: 'audio/sfx/hockey/goal-horn.mp3',
   
   // Background music
   READY_FOR_THIS: 'audio/music/ready-for-this.mp3',
