@@ -188,14 +188,47 @@ export class HockeyGameManager {
   }
 
   /**
+   * Helper method to broadcast data to all players
+   */
+  private broadcastToAllPlayers(data: any): void {
+    if (!this._world) return;
+    
+    // Get all player IDs from teams and convert to Player objects
+    const allPlayerIds = [
+      ...Object.values(this._teams[HockeyTeam.RED]), 
+      ...Object.values(this._teams[HockeyTeam.BLUE])
+    ].filter(Boolean) as string[];
+    
+    const allPlayers = allPlayerIds
+      .map(playerId => this._playerIdToPlayer.get(playerId))
+      .filter(Boolean) as Player[];
+    
+    allPlayers.forEach((player) => {
+      try {
+        player.ui.sendData(data);
+      } catch (error) {
+        console.error('Error sending data to player:', error);
+      }
+    });
+  }
+
+  /**
    * Start countdown before resuming play after a goal
    */
   private startResumeCountdown(): void {
     if (!this._world) return;
     
     let countdown = 3;
+    
     const countdownInterval = setInterval(() => {
       if (countdown > 0) {
+        // Send countdown update to UI
+        this.broadcastToAllPlayers({
+          type: 'countdown-update',
+          countdown: countdown
+        });
+        
+        // Keep chat message as backup
         this._world!.chatManager.sendBroadcastMessage(
           `Resuming play in ${countdown}...`,
           'FFFF00'
@@ -204,12 +237,24 @@ export class HockeyGameManager {
       } else {
         clearInterval(countdownInterval);
         
+        // Send "GO!" to UI
+        this.broadcastToAllPlayers({
+          type: 'countdown-go'
+        });
+        
         this._state = HockeyGameState.IN_PERIOD;
         this._world!.chatManager.sendBroadcastMessage(
           'Play resumed!',
           '00FF00'
         );
         console.log('[HockeyGameManager] Play resumed after goal reset');
+        
+        // Hide countdown overlay after a brief delay
+        setTimeout(() => {
+          this.broadcastToAllPlayers({
+            type: 'countdown-end'
+          });
+        }, 1000);
       }
     }, 1000);
   }

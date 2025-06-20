@@ -182,6 +182,18 @@ and also configure additional buttons for mobile compatibility.
       // Show goal overlay
       showGoalOverlay(data.team, data.isOwnGoal);
     }
+    if (data.type === 'countdown-update') {
+      // Show countdown overlay
+      showCountdownOverlay(data.countdown);
+    }
+    if (data.type === 'countdown-go') {
+      // Show "GO!" text
+      showCountdownGo();
+    }
+    if (data.type === 'countdown-end') {
+      // Hide countdown overlay
+      hideCountdownOverlay();
+    }
     if (data.type === 'period-update') {
       // Update period display
       const periodText = data.period === 1 ? '1st' : data.period === 2 ? '2nd' : '3rd';
@@ -536,6 +548,49 @@ and also configure additional buttons for mobile compatibility.
       overlay.style.display = 'none';
     }, 3000);
   }
+
+  // Countdown overlay functionality
+  function showCountdownOverlay(countdown) {
+    const overlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+    
+    countdownText.textContent = countdown;
+    overlay.style.display = 'flex';
+    
+    // Add animation class for number change
+    countdownText.classList.remove('countdown-animate');
+    void countdownText.offsetWidth; // Force reflow
+    countdownText.classList.add('countdown-animate');
+  }
+
+  function showCountdownGo() {
+    const overlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+    const subtextElement = overlay.querySelector('.countdown-subtext');
+    
+    countdownText.textContent = 'GO!';
+    countdownText.classList.add('countdown-go');
+    subtextElement.style.display = 'none';
+    
+    // Remove dark background for GO! so players can start moving
+    overlay.classList.add('countdown-go-transparent');
+    
+    // Add animation class for "GO!" effect
+    countdownText.classList.remove('countdown-animate');
+    void countdownText.offsetWidth; // Force reflow
+    countdownText.classList.add('countdown-animate');
+  }
+
+  function hideCountdownOverlay() {
+    const overlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+    const subtextElement = overlay.querySelector('.countdown-subtext');
+    
+    overlay.style.display = 'none';
+    overlay.classList.remove('countdown-go-transparent');
+    countdownText.classList.remove('countdown-go', 'countdown-animate');
+    subtextElement.style.display = 'block';
+  }
 </script>
 
 <div id="root">
@@ -639,6 +694,12 @@ and also configure additional buttons for mobile compatibility.
   <div id="goal-overlay" class="goal-overlay" style="display: none;">
     <div class="goal-text">GOAL!</div>
     <div class="goal-subtext" id="goal-team-text">RED TEAM SCORES!</div>
+  </div>
+
+  <!-- Countdown Overlay -->
+  <div id="countdown-overlay" class="countdown-overlay" style="display: none;">
+    <div class="countdown-text" id="countdown-text">3</div>
+    <div class="countdown-subtext">Resuming Play</div>
   </div>
 
   <!-- Pass/Shot Icons Overlay -->
@@ -1393,6 +1454,97 @@ and also configure additional buttons for mobile compatibility.
   @keyframes goalSubtextSlide {
     from {
       transform: translateY(50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Countdown Overlay */
+  .countdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100; /* Higher than goal overlay */
+    animation: countdownOverlayFadeIn 0.3s ease-out;
+  }
+
+  .countdown-overlay.countdown-go-transparent {
+    background: transparent;
+    backdrop-filter: none;
+  }
+
+  .countdown-text {
+    font-size: 15rem;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 40px rgba(255, 255, 255, 0.9), 0 0 80px rgba(255, 255, 255, 0.5);
+    margin-bottom: 20px;
+    letter-spacing: 8px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    line-height: 1;
+    text-align: center;
+  }
+
+  .countdown-text.countdown-go {
+    color: #00ff00;
+    font-size: 12rem;
+  }
+
+  .countdown-animate {
+    animation: countdownPulse 0.8s ease-out;
+  }
+
+  .countdown-subtext {
+    font-size: 2rem;
+    font-weight: 600;
+    color: #ccc;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+    letter-spacing: 2px;
+    text-align: center;
+    margin-top: 20px;
+    animation: countdownSubtextFade 0.8s ease-out 0.2s both;
+  }
+
+  @keyframes countdownOverlayFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(10px);
+    }
+  }
+
+  @keyframes countdownPulse {
+    0% {
+      transform: scale(0.3);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.2);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes countdownSubtextFade {
+    from {
+      transform: translateY(30px);
       opacity: 0;
     }
     to {
