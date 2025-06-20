@@ -8,14 +8,15 @@ import type {
   TeamAssignment, 
   Teams 
 } from '../utils/types';
+import { PlayerSpawnManager } from './PlayerSpawnManager';
 
 export class HockeyGameManager {
   private static _instance: HockeyGameManager;
   private _world: World | undefined;
   private _state: HockeyGameState = HockeyGameState.LOBBY;
   private _teams: Teams = {
-    [HockeyTeam.RED]: {},
-    [HockeyTeam.BLUE]: {},
+    [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
+    [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
   };
   private _scores: Record<HockeyTeam, number> = {
     [HockeyTeam.RED]: 0,
@@ -26,6 +27,8 @@ export class HockeyGameManager {
   private _periodTimer: NodeJS.Timeout | undefined;
   private _lockedInPlayers: Set<string> = new Set();
   private _playerIdToPlayer: Map<string, Player> = new Map();
+  
+  // Removed movement lock system - was interfering with puck controls
 
   private constructor() {}
 
@@ -40,8 +43,8 @@ export class HockeyGameManager {
     this._world = world;
     this._state = HockeyGameState.LOBBY;
     this._teams = {
-      [HockeyTeam.RED]: {},
-      [HockeyTeam.BLUE]: {},
+      [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
+      [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
     };
     this._scores = {
       [HockeyTeam.RED]: 0,
@@ -80,18 +83,32 @@ export class HockeyGameManager {
     if (this._state === HockeyGameState.IN_PERIOD) return;
     this._state = HockeyGameState.IN_PERIOD;
     
+    // Movement lock system removed - no longer needed
+    
     // Update period and notify all players
     if (this._world) {
-      // Get all players from teams
-      const allPlayers = [...Object.values(this._teams[HockeyTeam.RED]), ...Object.values(this._teams[HockeyTeam.BLUE])].filter(Boolean) as Player[];
+      // Get all player IDs from teams and convert to Player objects
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
       allPlayers.forEach((player) => {
-        player.ui.sendData({
-          type: 'game-start'
-        });
-        player.ui.sendData({
-          type: 'period-update',
-          period: this._period
-        });
+        try {
+          player.ui.sendData({
+            type: 'game-start'
+          });
+          player.ui.sendData({
+            type: 'period-update',
+            period: this._period
+          });
+        } catch (error) {
+          console.error('Error sending period start to player:', error);
+        }
       });
     }
     
@@ -99,34 +116,93 @@ export class HockeyGameManager {
     this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
   }
 
-  public goalScored(team: HockeyTeam) {
+  public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false) {
     if (this._state === HockeyGameState.GOAL_SCORED) return;
     this._scores[team]++;
-    this._state = HockeyGameState.GOAL_SCORED;
+    // DON'T lock movement yet - allow celebration time
+    // this._state = HockeyGameState.GOAL_SCORED;
     
     // Notify all players of the score update
     if (this._world) {
-      // Get all players from teams
-      const allPlayers = [...Object.values(this._teams[HockeyTeam.RED]), ...Object.values(this._teams[HockeyTeam.BLUE])].filter(Boolean) as Player[];
+      // Get all player IDs from teams and convert to Player objects
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
       allPlayers.forEach((player) => {
-        player.ui.sendData({
-          type: 'score-update',
-          redScore: this._scores[HockeyTeam.RED],
-          blueScore: this._scores[HockeyTeam.BLUE]
-        });
+        try {
+          player.ui.sendData({
+            type: 'score-update',
+            redScore: this._scores[HockeyTeam.RED],
+            blueScore: this._scores[HockeyTeam.BLUE]
+          });
+        } catch (error) {
+          console.error('Error sending score update to player:', error);
+        }
       });
+      
       // Announce the goal
+      const goalMessage = isOwnGoal 
+        ? `OWN GOAL! ${team} team scores! Score is now RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`
+        : `GOAL! ${team} team scores! Score is now RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`;
+      
       this._world.chatManager.sendBroadcastMessage(
-        `GOAL! ${team} team scores! Score is now RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`,
+        goalMessage,
         team === HockeyTeam.RED ? 'FF4444' : '44AAFF'
       );
     }
     
-    // TODO: Reset puck/players, short countdown, then resume period
+    // Reset players and puck after goal celebration (no immediate movement lock)
     setTimeout(() => {
-      this._state = HockeyGameState.IN_PERIOD;
-      // Reset positions and continue play
-    }, 5000); // 5s celebration
+      console.log('[HockeyGameManager] Starting goal reset sequence...');
+      
+      // Lock movement IMMEDIATELY when reset starts
+      this._state = HockeyGameState.GOAL_SCORED;
+      console.log('[HockeyGameManager] Entered GOAL_SCORED state - players locked during reset and countdown');
+      
+      // Perform complete reset using PlayerSpawnManager
+      PlayerSpawnManager.instance.performCompleteReset(
+        this._teams,
+        this._playerIdToPlayer,
+        puckEntity
+      );
+      
+      // Start countdown immediately after reset
+      this.startResumeCountdown();
+      
+    }, 3000); // 3s celebration before reset
+  }
+
+  /**
+   * Start countdown before resuming play after a goal
+   */
+  private startResumeCountdown(): void {
+    if (!this._world) return;
+    
+    let countdown = 3;
+    const countdownInterval = setInterval(() => {
+      if (countdown > 0) {
+        this._world!.chatManager.sendBroadcastMessage(
+          `Resuming play in ${countdown}...`,
+          'FFFF00'
+        );
+        countdown--;
+      } else {
+        clearInterval(countdownInterval);
+        
+        this._state = HockeyGameState.IN_PERIOD;
+        this._world!.chatManager.sendBroadcastMessage(
+          'Play resumed!',
+          '00FF00'
+        );
+        console.log('[HockeyGameManager] Play resumed after goal reset');
+      }
+    }, 1000);
   }
 
   public endPeriod() {
@@ -137,14 +213,27 @@ export class HockeyGameManager {
       
       // Notify all players of the period change
       if (this._world) {
-        // Get all players from teams
-        const allPlayers = [...Object.values(this._teams[HockeyTeam.RED]), ...Object.values(this._teams[HockeyTeam.BLUE])].filter(Boolean) as Player[];
+        // Get all player IDs from teams and convert to Player objects
+        const allPlayerIds = [
+          ...Object.values(this._teams[HockeyTeam.RED]), 
+          ...Object.values(this._teams[HockeyTeam.BLUE])
+        ].filter(Boolean) as string[];
+        
+        const allPlayers = allPlayerIds
+          .map(playerId => this._playerIdToPlayer.get(playerId))
+          .filter(Boolean) as Player[];
+        
         allPlayers.forEach((player) => {
-          player.ui.sendData({
-            type: 'period-update',
-            period: this._period
-          });
+          try {
+            player.ui.sendData({
+              type: 'period-update',
+              period: this._period
+            });
+          } catch (error) {
+            console.error('Error sending period update to player:', error);
+          }
         });
+        
         // Announce period end
         this._world.chatManager.sendBroadcastMessage(
           `End of period ${this._period - 1}! Score: RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`
@@ -318,4 +407,9 @@ export class HockeyGameManager {
   public get state(): HockeyGameState {
     return this._state;
   }
+
+  // --- Movement Lock System Removed ---
+  // The movement lock system was interfering with puck controls
+  // Players will be able to move during goal reset countdowns
+  // This is acceptable for Phase 1 implementation
 } 

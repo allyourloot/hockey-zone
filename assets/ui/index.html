@@ -32,6 +32,17 @@ and also configure additional buttons for mobile compatibility.
     hytopia.pressInput(' ', false);
   });
 
+  // Audio context activation for background music
+  let audioContextActivated = false;
+  function tryActivateAudio() {
+    if (!audioContextActivated) {
+      audioContextActivated = true;
+      // Send a signal to the server to trigger background music
+      hytopia.sendData({ type: 'activate-audio' });
+      console.log('UI: Sent audio activation signal to server');
+    }
+  }
+
   // Team/Position selection logic
   const positionButtons = document.querySelectorAll('.position-btn');
   const selectedMsg = document.getElementById('selected-position-msg');
@@ -48,6 +59,9 @@ and also configure additional buttons for mobile compatibility.
 
   positionButtons.forEach(btn => {
     btn.addEventListener('click', () => {
+      // Try to activate audio on first user interaction
+      tryActivateAudio();
+      
       // Highlight selected
       if (selectedBtn) selectedBtn.classList.remove('selected');
       btn.classList.add('selected');
@@ -184,22 +198,20 @@ and also configure additional buttons for mobile compatibility.
       if (bodyCheckIndicator) {
         if (data.available) {
           bodyCheckIndicator.classList.remove('disabled');
+          bodyCheckIndicator.style.display = 'flex'; // Show the indicator
+          console.log('UI: Body check enabled - indicator should be visible');
         } else {
           bodyCheckIndicator.classList.add('disabled');
-        }
-      }
-      const overlay = document.getElementById('body-check-overlay');
-      if (overlay) {
-        if (data.available) {
-          overlay.style.display = 'block';
-        } else {
-          overlay.style.display = 'none';
+          // Don't hide completely, just disable
+          console.log('UI: Body check disabled');
         }
       }
     }
     if (data.type === 'set-body-check-visibility') {
-      if (bodyCheckCooldownIndicator) {
-        bodyCheckCooldownIndicator.style.display = data.visible ? 'flex' : 'none';
+      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+      if (bodyCheckIndicator) {
+        bodyCheckIndicator.style.display = data.visible ? 'flex' : 'none';
+        console.log('UI: Body check visibility set to:', data.visible);
       }
     }
   });
@@ -260,7 +272,7 @@ and also configure additional buttons for mobile compatibility.
     text.textContent = `${Math.round(power)}% ${isShootingMode ? 'SHOT' : 'PASS'}`;
   }
 
-  // Handle mouse input for power meter
+  // Handle mouse input for power meter (only when controlling puck)
   document.addEventListener('mousedown', (e) => {
     if (!hasPuck) return; // Only allow power meter if controlling puck
     if (e.button === 0) { // Left click for passing
