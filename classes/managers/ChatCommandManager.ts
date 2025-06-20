@@ -7,6 +7,9 @@ import { Entity, ChatManager } from 'hytopia';
 import type { World, PlayerEntity } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
 import { PuckTrailManager } from './PuckTrailManager';
+import { GoalDetectionService } from '../services/GoalDetectionService';
+import { HockeyGameManager } from './HockeyGameManager';
+import { PlayerSpawnManager } from './PlayerSpawnManager';
 
 // Import the IceSkatingController type - we'll need to reference it
 // Note: This creates a circular dependency that we'll resolve in later phases
@@ -68,6 +71,9 @@ export class ChatCommandManager {
     this.registerRemoveTrailCommand();
     this.registerTrailColorCommand();
     this.registerTestSleepCommand();
+    this.registerGoalDetectionCommands();
+    this.registerBodyCheckDebugCommand();
+    this.registerStickCheckDebugCommand();
   }
   
   /**
@@ -234,5 +240,285 @@ export class ChatCommandManager {
    */
   public updatePuckReference(newPuck: Entity | null): void {
     this.puck = newPuck;
+  }
+
+  /**
+   * Register goal detection debug commands
+   */
+  private registerGoalDetectionCommands(): void {
+    if (!this.world) return;
+
+    // /startmatch - Force start a match for testing
+    this.world.chatManager.registerCommand('/startmatch', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      gameManager.startMatch();
+      setTimeout(() => {
+        gameManager.startPeriod();
+      }, 1000);
+      this.world!.chatManager.sendPlayerMessage(player, 'Match started! Goal detection is now active.', '00FF00');
+      console.log('[ChatCommand] Match force started for goal testing');
+    });
+
+    // /goalinfo - Show goal detection debug information
+    this.world.chatManager.registerCommand('/goalinfo', (player) => {
+      const goalService = GoalDetectionService.instance;
+      const debugInfo = goalService.getDebugInfo();
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Goal Detection Status: ${debugInfo.isActive ? 'ACTIVE' : 'INACTIVE'}`, 
+        debugInfo.isActive ? '00FF00' : 'FF0000'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Red Goal Line: Z=${debugInfo.goalZones.RED.goalLineZ}, Width: X=${debugInfo.goalZones.RED.minX} to ${debugInfo.goalZones.RED.maxX}`, 
+        'FF4444'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Blue Goal Line: Z=${debugInfo.goalZones.BLUE.goalLineZ}, Width: X=${debugInfo.goalZones.BLUE.minX} to ${debugInfo.goalZones.BLUE.maxX}`, 
+        '44AAFF'
+      );
+
+      if (this.puck && this.puck.isSpawned) {
+        const pos = this.puck.position;
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Puck Position: X=${pos.x.toFixed(2)}, Y=${pos.y.toFixed(2)}, Z=${pos.z.toFixed(2)}`, 
+          'FFFF00'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Puck not found or not spawned!', 'FF0000');
+      }
+
+      console.log('[ChatCommand] Goal detection debug info:', debugInfo);
+    });
+
+    // /testgoal <team> - Manually trigger a goal for testing
+    this.world.chatManager.registerCommand('/testgoal', (player, args) => {
+      const team = args[0]?.toUpperCase();
+      if (team === 'RED' || team === 'BLUE') {
+        HockeyGameManager.instance.goalScored(team as any);
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Test goal triggered for ${team} team!`, 
+          team === 'RED' ? 'FF4444' : '44AAFF'
+        );
+        console.log(`[ChatCommand] Test goal triggered for ${team} team`);
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <red|blue>', 'FFFF00');
+      }
+    });
+
+    // /resetgoals - Reset goal detection service
+    this.world.chatManager.registerCommand('/resetgoals', (player) => {
+      GoalDetectionService.instance.reset();
+      this.world!.chatManager.sendPlayerMessage(player, 'Goal detection service reset!', '00FF00');
+      console.log('[ChatCommand] Goal detection service reset');
+    });
+
+    // /resetplayers - Reset all players to spawn positions
+    this.world.chatManager.registerCommand('/resetplayers', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      PlayerSpawnManager.instance.performCompleteReset(
+        gameManager.teams,
+        gameManager['_playerIdToPlayer'], // Access private property for testing
+        this.puck
+      );
+      this.world!.chatManager.sendPlayerMessage(player, 'All players reset to spawn positions!', '00FF00');
+      console.log('[ChatCommand] Players reset to spawn positions');
+    });
+
+    // /spawninfo - Show spawn position information
+    this.world.chatManager.registerCommand('/spawninfo', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const teamAndPos = gameManager.getTeamAndPosition(player);
+      
+      if (teamAndPos) {
+        const spawnPos = PlayerSpawnManager.instance.getSpawnPosition(teamAndPos.team, teamAndPos.position);
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Your spawn: ${teamAndPos.team} ${teamAndPos.position} at X=${spawnPos.x}, Y=${spawnPos.y}, Z=${spawnPos.z}`,
+          teamAndPos.team === 'RED' ? 'FF4444' : '44AAFF'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'You are not assigned to a team/position!', 'FF0000');
+      }
+      
+      console.log('[ChatCommand] Spawn info requested for player:', player.id);
+    });
+
+    // /gamestate - Check current game state  
+    this.world.chatManager.registerCommand('/gamestate', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const gameState = gameManager.state;
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Game state: ${gameState}`, 
+        '00FF00'
+      );
+      console.log(`[ChatCommand] Player ${player.id} requested game state: ${gameState}`);
+    });
+
+    // /testmusic - Test background music
+    this.world.chatManager.registerCommand('/testmusic', (player) => {
+      const { AudioManager } = require('./AudioManager');
+      const music = AudioManager.instance.getBackgroundMusic();
+      if (music) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Background music exists - trying to restart...', '00FF00');
+        try {
+          music.play(this.world!);
+          console.log('[ChatCommand] Attempted to restart background music');
+        } catch (error) {
+          console.error('[ChatCommand] Error restarting music:', error);
+        }
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'No background music found!', 'FF0000');
+        console.log('[ChatCommand] No background music instance found');
+      }
+    });
+
+    // /stopmusic - Stop background music
+    this.world.chatManager.registerCommand('/stopmusic', (player) => {
+      const { AudioManager } = require('./AudioManager');
+      try {
+        AudioManager.instance.stop();
+        this.world!.chatManager.sendPlayerMessage(player, 'Background music stopped', '00FF00');
+        console.log('[ChatCommand] Background music stopped');
+      } catch (error) {
+        console.error('[ChatCommand] Error stopping music:', error);
+        this.world!.chatManager.sendPlayerMessage(player, 'Error stopping music', 'FF0000');
+      }
+    });
+
+    // /restartmusic - Restart background music cleanly
+    this.world.chatManager.registerCommand('/restartmusic', (player) => {
+      const { AudioManager } = require('./AudioManager');
+      try {
+        // Stop existing music
+        AudioManager.instance.stop();
+        // Reinitialize
+        AudioManager.instance.initialize(this.world!);
+        this.world!.chatManager.sendPlayerMessage(player, 'Background music restarted cleanly', '00FF00');
+        console.log('[ChatCommand] Background music restarted cleanly');
+      } catch (error) {
+        console.error('[ChatCommand] Error restarting music:', error);
+        this.world!.chatManager.sendPlayerMessage(player, 'Error restarting music', 'FF0000');
+      }
+    });
+
+    // /testlock - Test movement lock system
+    this.world.chatManager.registerCommand('/testlock', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const currentState = gameManager.state;
+      
+      if (currentState === 'GOAL_SCORED') {
+        // Resume play
+        gameManager.startPeriod();
+        this.world!.chatManager.sendPlayerMessage(player, 'Movement unlocked - play resumed', '00FF00');
+        console.log('[ChatCommand] Movement unlocked by', player.id);
+      } else {
+        // Lock movement by setting to GOAL_SCORED state
+        (gameManager as any)._state = 'GOAL_SCORED';
+        this.world!.chatManager.sendPlayerMessage(player, 'Movement locked for testing', 'FF0000');
+        console.log('[ChatCommand] Movement locked by', player.id);
+      }
+    });
+  }
+
+  /**
+   * Register the /bodycheck command - debug body check functionality
+   */
+  private registerBodyCheckDebugCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/bodycheck', (player) => {
+      const teamPos = HockeyGameManager.instance.getTeamAndPosition(player.id);
+      
+      if (!teamPos) {
+        this.world!.chatManager.sendPlayerMessage(player, 'You must be assigned to a team and position first!', 'FF0000');
+        return;
+      }
+      
+      const isDefender = teamPos.position === 'DEFENDER1' || teamPos.position === 'DEFENDER2';
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Team: ${teamPos.team}, Position: ${teamPos.position}, Can Body Check: ${isDefender}`, 
+        isDefender ? '00FF00' : 'FF0000'
+      );
+      
+      if (isDefender) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          'Body check should be available! Look for opponents in range and use Left Click.', 
+          '00FFFF'
+        );
+        
+        // Test UI visibility
+        player.ui.sendData({ type: 'set-body-check-visibility', visible: true });
+        player.ui.sendData({ type: 'body-check-available', available: true });
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          'Body check UI should now be visible and enabled for testing!', 
+          '00FF00'
+        );
+      }
+    });
+  }
+
+  /**
+   * Register the /stickcheck command - debug stick check functionality
+   */
+  private registerStickCheckDebugCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/stickcheck', (player) => {
+      const teamPos = HockeyGameManager.instance.getTeamAndPosition(player.id);
+      
+      if (!teamPos) {
+        this.world!.chatManager.sendPlayerMessage(player, 'You must be assigned to a team and position first!', 'FF0000');
+        return;
+      }
+      
+      // Get player's controller
+      const controller = player.entity?.controller;
+      if (!controller) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No controller found!', 'FF0000');
+        return;
+      }
+      
+      const isControllingPuck = controller._isControllingPuck || false;
+      const isCollidingWithPuck = controller._isCollidingWithPuck || false;
+      const stickCheckCooldown = controller._stickCheckCooldown || 0;
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Stick Check Debug:`, 
+        'FFFF00'
+      );
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `- Controlling Puck: ${isControllingPuck}`, 
+        isControllingPuck ? 'FF0000' : '00FF00'
+      );
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `- Colliding with Puck: ${isCollidingWithPuck}`, 
+        isCollidingWithPuck ? '00FF00' : 'FF0000'
+      );
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `- Cooldown: ${stickCheckCooldown}ms`, 
+        stickCheckCooldown > 0 ? 'FF0000' : '00FF00'
+      );
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Stick check available when: NOT controlling puck AND colliding with puck AND cooldown = 0`, 
+        '00FFFF'
+      );
+    });
   }
 } 

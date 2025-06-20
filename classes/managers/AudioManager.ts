@@ -32,7 +32,8 @@ export class AudioManager {
    */
   public initialize(world: World): void {
     this.world = world;
-    this.startBackgroundMusic();
+    // Don't start background music here - handled separately in index.ts
+    // this.startBackgroundMusic();
     this.startAmbientSounds();
   }
   
