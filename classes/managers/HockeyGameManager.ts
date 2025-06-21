@@ -1,4 +1,4 @@
-import { DefaultPlayerEntity, Entity, Player, World, } from 'hytopia';
+import { DefaultPlayerEntity, Entity, Player, World, Audio } from 'hytopia';
 import { 
   HockeyGameState, 
   HockeyTeam, 
@@ -10,6 +10,7 @@ import type {
 } from '../utils/types';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { AudioManager } from './AudioManager';
+import { PlayerStatsManager } from './PlayerStatsManager';
 
 export class HockeyGameManager {
   private static _instance: HockeyGameManager;
@@ -54,6 +55,10 @@ export class HockeyGameManager {
     this._period = 1;
     this._lockedInPlayers.clear();
     this._playerIdToPlayer.clear();
+    
+    // Reset player stats for new game
+    PlayerStatsManager.instance.resetStats();
+    
     // TODO: Announce lobby open, show team selection UI
   }
 
@@ -77,12 +82,19 @@ export class HockeyGameManager {
       RED: 0,
       BLUE: 0,
     };
+    
+    // Start tracking game time for stats
+    PlayerStatsManager.instance.startGameTime();
+    
     // TODO: Announce match start, countdown, then call startPeriod()
   }
 
   public startPeriod() {
     if (this._state === HockeyGameState.IN_PERIOD) return;
     this._state = HockeyGameState.IN_PERIOD;
+    
+    // Start tracking period time for stats
+    PlayerStatsManager.instance.startPeriodTime();
     
     // Movement lock system removed - no longer needed
     
@@ -117,9 +129,22 @@ export class HockeyGameManager {
     this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
   }
 
-  public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false) {
+  public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false, scorerId?: string, assistId?: string) {
     if (this._state === HockeyGameState.GOAL_SCORED) return;
     this._scores[team]++;
+    
+    // Record goal in stats if we have scorer info
+    if (scorerId) {
+      console.log(`[HockeyGameManager] Recording goal for scorer: ${scorerId}, team: ${team}, period: ${this._period}`);
+      PlayerStatsManager.instance.recordGoal(scorerId, assistId, team, this._period, isOwnGoal);
+      
+      // Debug: Log current stats after goal
+      const scorerStats = PlayerStatsManager.instance.getPlayerStats(scorerId);
+      console.log(`[HockeyGameManager] Scorer stats after goal:`, scorerStats);
+    } else {
+      console.log(`[HockeyGameManager] No scorer ID provided for goal - stats not recorded`);
+    }
+    
     // DON'T lock movement yet - allow celebration time
     // this._state = HockeyGameState.GOAL_SCORED;
     
@@ -138,6 +163,11 @@ export class HockeyGameManager {
         .map(playerId => this._playerIdToPlayer.get(playerId))
         .filter(Boolean) as Player[];
       
+      // Get goal scorer and assist info for enhanced UI
+      const goalInfo = PlayerStatsManager.instance.getLastGoal();
+      const scorerName = goalInfo ? PlayerStatsManager.instance.getPlayerStats(goalInfo.scorerId)?.playerName : 'Unknown';
+      const assistName = goalInfo?.assistId ? PlayerStatsManager.instance.getPlayerStats(goalInfo.assistId)?.playerName : undefined;
+      
       allPlayers.forEach((player) => {
         try {
           player.ui.sendData({
@@ -148,22 +178,36 @@ export class HockeyGameManager {
           player.ui.sendData({
             type: 'goal-scored',
             team: team,
-            isOwnGoal: isOwnGoal
+            isOwnGoal: isOwnGoal,
+            scorerName: scorerName,
+            assistName: assistName
           });
         } catch (error) {
           console.error('Error sending score update to player:', error);
         }
       });
       
-      // Announce the goal
-      const goalMessage = isOwnGoal 
-        ? `OWN GOAL! ${team} team scores! Score is now RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`
-        : `GOAL! ${team} team scores! Score is now RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`;
+      // Enhanced goal announcement with player names
+      let goalMessage = isOwnGoal 
+        ? `OWN GOAL! ${team} team scores!`
+        : `GOAL! ${team} team scores!`;
+      
+      if (scorerName && scorerName !== 'Unknown') {
+        goalMessage += ` Scored by ${scorerName}`;
+        if (assistName) {
+          goalMessage += ` (Assist: ${assistName})`;
+        }
+      }
+      
+      goalMessage += ` Score is now RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`;
       
       this._world.chatManager.sendBroadcastMessage(
         goalMessage,
         team === HockeyTeam.RED ? 'FF4444' : '44AAFF'
       );
+      
+      // Broadcast updated stats after goal
+      this.broadcastStatsUpdate();
     }
     
     // Reset players and puck after goal celebration (no immediate movement lock)
@@ -176,7 +220,7 @@ export class HockeyGameManager {
       
       // Perform complete reset using PlayerSpawnManager
       PlayerSpawnManager.instance.performCompleteReset(
-        this._teams,
+        this.getValidTeamsForReset(),
         this._playerIdToPlayer,
         puckEntity
       );
@@ -185,6 +229,65 @@ export class HockeyGameManager {
       this.startResumeCountdown();
       
     }, 3000); // 3s celebration before reset
+  }
+
+  /**
+   * Play referee whistle sound effect for all players
+   */
+  private playRefereeWhistle(): void {
+    if (!this._world) return;
+    
+    // Get all player IDs from teams and convert to Player objects
+    const allPlayerIds = [
+      ...Object.values(this._teams[HockeyTeam.RED]), 
+      ...Object.values(this._teams[HockeyTeam.BLUE])
+    ].filter(Boolean) as string[];
+    
+    const allPlayers = allPlayerIds
+      .map(playerId => this._playerIdToPlayer.get(playerId))
+      .filter(Boolean) as Player[];
+    
+    // Play whistle sound for each player
+    allPlayers.forEach((player) => {
+      try {
+        const entities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
+        if (entities.length > 0 && entities[0].world) {
+          new Audio({ 
+            uri: 'audio/sfx/hockey/referee-whistle.mp3', 
+            volume: 0.6, 
+            attachedToEntity: entities[0] 
+          }).play(entities[0].world, true);
+        }
+      } catch (error) {
+        console.error('Error playing referee whistle for player:', error);
+      }
+    });
+    
+    console.log('[HockeyGameManager] Referee whistle played for all players');
+  }
+
+  /**
+   * Send stats update to all players
+   */
+  public broadcastStatsUpdate(): void {
+    if (!this._world) return;
+    
+    const statsData = PlayerStatsManager.instance.getStatsSummary();
+    const playerStats = PlayerStatsManager.instance.getAllStats();
+    const goalHistory = PlayerStatsManager.instance.getGoals().map(goal => ({
+      ...goal,
+      scorerName: PlayerStatsManager.instance.getPlayerStats(goal.scorerId)?.playerName || 'Unknown',
+      assistName: goal.assistId ? PlayerStatsManager.instance.getPlayerStats(goal.assistId)?.playerName : undefined
+    }));
+    
+    this.broadcastToAllPlayers({
+      type: 'stats-update',
+      statsData,
+      playerStats,
+      goalHistory
+    });
+    
+    console.log('[HockeyGameManager] Broadcasted stats update to all players');
   }
 
   /**
@@ -213,6 +316,28 @@ export class HockeyGameManager {
   }
 
   /**
+   * Helper method to convert teams to valid format for PlayerSpawnManager
+   */
+  private getValidTeamsForReset(): Record<HockeyTeam, Record<HockeyPosition, string>> {
+    const validTeams: Record<HockeyTeam, Record<HockeyPosition, string>> = {
+      [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
+      [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
+    };
+    
+    // Copy only defined player assignments
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const position of Object.values(HockeyPosition)) {
+        const playerId = this._teams[team][position];
+        if (playerId) {
+          validTeams[team][position] = playerId;
+        }
+      }
+    }
+    
+    return validTeams;
+  }
+
+  /**
    * Start countdown before resuming play after a goal
    */
   private startResumeCountdown(): void {
@@ -225,7 +350,8 @@ export class HockeyGameManager {
         // Send countdown update to UI
         this.broadcastToAllPlayers({
           type: 'countdown-update',
-          countdown: countdown
+          countdown: countdown,
+          subtitle: 'Resuming Play'
         });
         
         // Keep chat message as backup
@@ -241,6 +367,9 @@ export class HockeyGameManager {
         this.broadcastToAllPlayers({
           type: 'countdown-go'
         });
+        
+        // Play referee whistle sound effect
+        this.playRefereeWhistle();
         
         this._state = HockeyGameState.IN_PERIOD;
         this._world!.chatManager.sendBroadcastMessage(
@@ -259,65 +388,428 @@ export class HockeyGameManager {
     }, 1000);
   }
 
+  /**
+   * Start the complete match sequence with proper reset and countdown
+   */
+  public startMatchSequence(): void {
+    if (this._state === HockeyGameState.MATCH_START) return;
+    
+    console.log('[HockeyGameManager] Starting match sequence...');
+    
+    // Set state to MATCH_START to lock movement during reset
+    this._state = HockeyGameState.MATCH_START;
+    
+    // Reset period and scores
+    this._period = 1;
+    this._scores = {
+      [HockeyTeam.RED]: 0,
+      [HockeyTeam.BLUE]: 0,
+    };
+    
+    // Perform complete reset of all players and puck
+    this.performMatchReset();
+    
+    // Start the game countdown immediately after reset
+    this.startGameCountdown();
+  }
+
+  /**
+   * Perform complete reset for match start (similar to goal reset but for match start)
+   */
+  private performMatchReset(): void {
+    if (!this._world) return;
+    
+    console.log('[HockeyGameManager] Performing match reset...');
+    
+    // Reset all players to spawn positions and puck to center ice
+    // We'll use the existing PlayerSpawnManager system
+    const { PlayerSpawnManager } = require('./PlayerSpawnManager');
+    
+    // Perform the reset with valid teams
+    PlayerSpawnManager.instance.performCompleteReset(
+      this.getValidTeamsForReset(),
+      this._playerIdToPlayer,
+      null // Puck will be reset by spawn manager
+    );
+    
+    // Broadcast score reset to all players
+    this.broadcastToAllPlayers({
+      type: 'score-update',
+      redScore: 0,
+      blueScore: 0
+    });
+    
+    // Update period display
+    this.broadcastToAllPlayers({
+      type: 'period-update',
+      period: 1
+    });
+  }
+
+  /**
+   * Start countdown for game start
+   */
+  private startGameCountdown(): void {
+    if (!this._world) return;
+    
+    console.log('[HockeyGameManager] Starting game countdown...');
+    
+    let countdown = 3;
+    
+    const countdownInterval = setInterval(() => {
+      if (countdown > 0) {
+        // Send countdown update to UI with game start subtitle
+        this.broadcastToAllPlayers({
+          type: 'countdown-update',
+          countdown: countdown,
+          subtitle: 'Game Starting'
+        });
+        
+        // Keep chat message as backup
+        this._world!.chatManager.sendBroadcastMessage(
+          `Game starting in ${countdown}...`,
+          'FFFF00'
+        );
+        countdown--;
+      } else {
+        clearInterval(countdownInterval);
+        
+        // Send "GO!" to UI
+        this.broadcastToAllPlayers({
+          type: 'countdown-go'
+        });
+        
+        // Play referee whistle sound effect
+        this.playRefereeWhistle();
+        
+        // Transition to IN_PERIOD state (this unlocks movement)
+        this._state = HockeyGameState.IN_PERIOD;
+        this._world!.chatManager.sendBroadcastMessage(
+          'Game started! GO!',
+          '00FF00'
+        );
+        console.log('[HockeyGameManager] Game started - players unlocked');
+        
+        // Start the period timer
+        this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
+        
+        // Notify all players that the game has started
+        this.broadcastToAllPlayers({
+          type: 'game-start',
+          redScore: 0,
+          blueScore: 0,
+          period: 1
+        });
+        
+        // Hide countdown overlay after a brief delay
+        setTimeout(() => {
+          this.broadcastToAllPlayers({
+            type: 'countdown-end'
+          });
+        }, 1000);
+      }
+    }, 1000);
+  }
+
   public endPeriod() {
     if (this._period < 3) {
       if (this._state === HockeyGameState.PERIOD_END) return;
       this._state = HockeyGameState.PERIOD_END;
-      this._period++;
       
-      // Notify all players of the period change
-      if (this._world) {
-        // Get all player IDs from teams and convert to Player objects
-        const allPlayerIds = [
-          ...Object.values(this._teams[HockeyTeam.RED]), 
-          ...Object.values(this._teams[HockeyTeam.BLUE])
-        ].filter(Boolean) as string[];
-        
-        const allPlayers = allPlayerIds
-          .map(playerId => this._playerIdToPlayer.get(playerId))
-          .filter(Boolean) as Player[];
-        
-        allPlayers.forEach((player) => {
-          try {
-            player.ui.sendData({
-              type: 'period-update',
-              period: this._period
-            });
-          } catch (error) {
-            console.error('Error sending period update to player:', error);
-          }
-        });
-        
-        // Announce period end
-        this._world.chatManager.sendBroadcastMessage(
-          `End of period ${this._period - 1}! Score: RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`
-        );
+      // Clear the period timer to prevent conflicts
+      if (this._periodTimer) {
+        clearTimeout(this._periodTimer);
+        this._periodTimer = undefined;
       }
       
-      setTimeout(() => this.startPeriod(), 10000); // 10s break
+      const previousPeriod = this._period;
+      this._period++;
+      
+      console.log(`[HockeyGameManager] End of period ${previousPeriod}, transitioning to period ${this._period}`);
+      
+      // Start period break sequence
+      this.startPeriodBreak(previousPeriod);
     } else {
       this.endGame();
     }
+  }
+
+  /**
+   * Handle the break between periods
+   */
+  private startPeriodBreak(endedPeriod: number): void {
+    if (!this._world) return;
+    
+    console.log(`[HockeyGameManager] Starting period break after period ${endedPeriod}`);
+    
+    // Show "End of [X] Period" overlay
+    this.broadcastToAllPlayers({
+      type: 'period-end',
+      period: endedPeriod,
+      redScore: this._scores[HockeyTeam.RED],
+      blueScore: this._scores[HockeyTeam.BLUE]
+    });
+    
+    // Announce period end in chat
+    this._world.chatManager.sendBroadcastMessage(
+      `End of ${this.getPeriodName(endedPeriod)}! Score: RED ${this._scores[HockeyTeam.RED]} - BLUE ${this._scores[HockeyTeam.BLUE]}`,
+      'FFFF00'
+    );
+    
+    // Wait 4 seconds, then start next period sequence
+    setTimeout(() => {
+      this.startNextPeriodSequence();
+    }, 4000);
+  }
+
+  /**
+   * Start the sequence for the next period
+   */
+  private startNextPeriodSequence(): void {
+    if (!this._world) return;
+    
+    console.log(`[HockeyGameManager] Starting ${this.getPeriodName(this._period)} sequence`);
+    
+    // Hide period break overlay
+    this.broadcastToAllPlayers({
+      type: 'period-end-hide'
+    });
+    
+    // Set state to PERIOD_END to lock movement during reset (same as goal resets)
+    this._state = HockeyGameState.PERIOD_END;
+    console.log('[HockeyGameManager] Entered PERIOD_END state - players locked during period reset and countdown');
+    
+    // Reset all players and puck to starting positions
+    this.performPeriodReset();
+    
+    // Start period countdown
+    this.startPeriodCountdown();
+  }
+
+  /**
+   * Reset players and puck for new period start
+   */
+  private performPeriodReset(): void {
+    if (!this._world) return;
+    
+    console.log(`[HockeyGameManager] Performing period reset for ${this.getPeriodName(this._period)}`);
+    
+    // Get the current puck entity from ChatCommandManager (same way goal resets work)
+    const { ChatCommandManager } = require('./ChatCommandManager');
+    const puckEntity = ChatCommandManager.instance.getPuck();
+    
+    // Use existing reset system with actual puck entity (same as goal resets)
+    const { PlayerSpawnManager } = require('./PlayerSpawnManager');
+    
+    PlayerSpawnManager.instance.performCompleteReset(
+      this.getValidTeamsForReset(),
+      this._playerIdToPlayer,
+      puckEntity // Pass actual puck entity for proper reset
+    );
+    
+    console.log(`[HockeyGameManager] Period reset completed with puck entity:`, !!puckEntity);
+  }
+
+  /**
+   * Start countdown for new period
+   */
+  private startPeriodCountdown(): void {
+    if (!this._world) return;
+    
+    console.log(`[HockeyGameManager] Starting countdown for ${this.getPeriodName(this._period)}`);
+    
+    let countdown = 3;
+    
+    const countdownInterval = setInterval(() => {
+      if (countdown > 0) {
+        // Send countdown update to UI with period start subtitle
+        this.broadcastToAllPlayers({
+          type: 'countdown-update',
+          countdown: countdown,
+          subtitle: `${this.getPeriodName(this._period)} Starting`
+        });
+        
+        // Keep chat message as backup
+        this._world!.chatManager.sendBroadcastMessage(
+          `${this.getPeriodName(this._period)} starting in ${countdown}...`,
+          'FFFF00'
+        );
+        countdown--;
+      } else {
+        clearInterval(countdownInterval);
+        
+        // Send "GO!" to UI
+        this.broadcastToAllPlayers({
+          type: 'countdown-go'
+        });
+        
+        // Play referee whistle sound effect
+        this.playRefereeWhistle();
+        
+        // Transition to IN_PERIOD state (this unlocks movement)
+        this._state = HockeyGameState.IN_PERIOD;
+        this._world!.chatManager.sendBroadcastMessage(
+          `${this.getPeriodName(this._period)} started! GO!`,
+          '00FF00'
+        );
+        console.log(`[HockeyGameManager] ${this.getPeriodName(this._period)} started - players unlocked`);
+        
+        // Clear any existing period timer before setting new one
+        if (this._periodTimer) {
+          clearTimeout(this._periodTimer);
+        }
+        
+        // Start the period timer
+        this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
+        console.log(`[HockeyGameManager] Period timer set for ${this._periodTimeMs}ms`);
+        
+        // Update period display and restart UI timer
+        this.broadcastToAllPlayers({
+          type: 'period-update',
+          period: this._period
+        });
+        
+        // Tell UI to restart its timer
+        this.broadcastToAllPlayers({
+          type: 'timer-restart'
+        });
+        
+        // Hide countdown overlay after a brief delay
+        setTimeout(() => {
+          this.broadcastToAllPlayers({
+            type: 'countdown-end'
+          });
+        }, 1000);
+      }
+    }, 1000);
+  }
+
+  /**
+   * Helper method to get period names for display
+   */
+  private getPeriodName(period: number): string {
+    switch (period) {
+      case 1: return '1st Period';
+      case 2: return '2nd Period';
+      case 3: return '3rd Period';
+      default: return `Period ${period}`;
+    }
+  }
+
+  public resetToLobby() {
+    console.log('[HockeyGameManager] Resetting to lobby with team selection');
+    
+    // Reset all players to lobby state first
+    if (this._world) {
+      // Import PlayerManager dynamically to avoid circular dependency
+      const { PlayerManager } = require('./PlayerManager');
+      const playerManager = PlayerManager.instance;
+      
+      if (playerManager) {
+        playerManager.resetAllPlayersToLobby();
+      }
+    }
+    
+    // Clear all teams and player assignments
+    this._teams = {
+      [HockeyTeam.RED]: {},
+      [HockeyTeam.BLUE]: {}
+    };
+    this._lockedInPlayers.clear();
+    
+    // Reset scores and period
+    this._scores = {
+      [HockeyTeam.RED]: 0,
+      [HockeyTeam.BLUE]: 0
+    };
+    this._period = 1;
+    
+    // Clear any timers
+    if (this._periodTimer) {
+      clearTimeout(this._periodTimer);
+      this._periodTimer = undefined;
+    }
+    
+    // Reset player stats
+    PlayerStatsManager.instance.resetStats();
+    
+    // Set state to lobby
+    this._state = HockeyGameState.LOBBY;
+    
+    // Set state to waiting for players
+    this.startWaitingForPlayers();
+    
+    // Send timer stop event to UI
+    this.broadcastToAllPlayers({
+      type: 'timer-stop'
+    });
+    
+    console.log('[HockeyGameManager] Lobby reset complete - players should see team selection');
   }
 
   public endGame() {
     if (this._state === HockeyGameState.GAME_OVER) return;
     this._state = HockeyGameState.GAME_OVER;
     
-    // Announce winner
+    console.log('[HockeyGameManager] Game ended - starting game over sequence');
+    
+    // Clear any existing period timer
+    if (this._periodTimer) {
+      clearTimeout(this._periodTimer);
+      this._periodTimer = undefined;
+    }
+    
+    // Stop UI timer immediately when game ends
+    this.broadcastToAllPlayers({
+      type: 'timer-stop'
+    });
+    
+    // Calculate game results
     if (this._world) {
       const redScore = this._scores[HockeyTeam.RED];
       const blueScore = this._scores[HockeyTeam.BLUE];
       const winner = redScore > blueScore ? 'RED' : blueScore > redScore ? 'BLUE' : 'TIED';
       const color = winner === 'RED' ? 'FF4444' : winner === 'BLUE' ? '44AAFF' : 'FFFFFF';
       
+      // Generate box score for enhanced game over display
+      const boxScore = PlayerStatsManager.instance.generateBoxScore();
+
+      // Show game over UI overlay
+      this.broadcastToAllPlayers({
+        type: 'game-over',
+        winner: winner,
+        redScore: redScore,
+        blueScore: blueScore,
+        finalMessage: winner === 'TIED' ? "It's a tie!" : `${winner} team wins!`,
+        boxScore: boxScore
+      });
+      
+      // Announce in chat as backup
       this._world.chatManager.sendBroadcastMessage(
         `Game Over! ${winner === 'TIED' ? "It's a tie!" : `${winner} team wins!`} Final score: RED ${redScore} - BLUE ${blueScore}`,
         color
       );
+      
+      console.log(`[HockeyGameManager] Game over - Winner: ${winner}, Final Score: RED ${redScore} - BLUE ${blueScore}`);
     }
     
-    setTimeout(() => this.setupGame(this._world!), 15000); // 15s to lobby
+    // Return to lobby after 10 seconds (reduced from 15s for better flow)
+    setTimeout(() => {
+      console.log('[HockeyGameManager] Returning to lobby after game over');
+      
+      // Hide game over overlay
+      this.broadcastToAllPlayers({
+        type: 'game-over-hide'
+      });
+      
+      // Ensure timer is stopped before reset
+      this.broadcastToAllPlayers({
+        type: 'timer-stop'
+      });
+      
+      // Reset to lobby with team selection
+      this.resetToLobby();
+    }, 10000);
   }
 
   // --- Player/Team Management ---
@@ -326,6 +818,10 @@ export class HockeyGameManager {
     if (this._teams[team][position]) return false;
     this._teams[team][position] = player.id;
     this._playerIdToPlayer.set(player.id, player);
+    
+    // Initialize player stats
+    PlayerStatsManager.instance.initializePlayer(player, team, position);
+    
     console.log(`[HGM] assignPlayerToTeam: player.id=${player.id}, team=${team}, position=${position}`);
     console.log('[HGM] Teams after assignment:', JSON.stringify(this._teams));
     return true;
@@ -341,6 +837,9 @@ export class HockeyGameManager {
     }
     this._lockedInPlayers.delete(player.id);
     this._playerIdToPlayer.delete(player.id);
+    
+    // Remove player stats
+    PlayerStatsManager.instance.removePlayer(player.id);
   }
 
   public getTeamAndPosition(player: Player | string): { team: HockeyTeam, position: HockeyPosition } | undefined {

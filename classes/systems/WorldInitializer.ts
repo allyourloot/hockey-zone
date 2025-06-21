@@ -236,7 +236,7 @@ export class WorldInitializer {
    * @returns A new puck entity ready for spawning
    */
   public static createPuckEntity(): Entity {
-    return new Entity({
+    const puck = new Entity({
       modelUri: 'models/projectiles/puck-hytopia.gltf',
       modelScale: CONSTANTS.PUCK_PHYSICS.MODEL_SCALE,
       rigidBodyOptions: {
@@ -264,6 +264,16 @@ export class WorldInitializer {
         ]
       }
     });
+    
+    // Initialize custom properties for tracking player interactions
+    try {
+      (puck as any).customProperties = new Map();
+      console.log('[WorldInitializer] Puck created with custom properties support');
+    } catch (error) {
+      console.warn('[WorldInitializer] Could not initialize puck custom properties:', error);
+    }
+    
+    return puck;
   }
   
   /**

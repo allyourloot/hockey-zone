@@ -223,7 +223,9 @@ export class GoalDetectionService {
   private getLastPlayerToTouchPuck(puckEntity: Entity): string | undefined {
     try {
       // Check if puck has custom property for last touched player
-      return puckEntity.customProperties?.get('lastTouchedBy') as string | undefined;
+      const lastTouched = (puckEntity as any).customProperties?.get('lastTouchedBy') as string | undefined;
+      console.log(`[GoalDetectionService] getLastPlayerToTouchPuck: ${lastTouched}`);
+      return lastTouched;
     } catch (error) {
       console.warn('[GoalDetectionService] Could not get puck custom property:', error);
       return undefined;

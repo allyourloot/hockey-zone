@@ -202,6 +202,7 @@ export const AUDIO_PATHS = {
   STICK_CHECK_MISS: 'audio/sfx/hockey/stick-check-miss.mp3',
   BODY_CHECK: 'audio/sfx/hockey/body-check.mp3',
   WHOOSH: 'audio/sfx/hockey/whoosh.mp3',
+  REFEREE_WHISTLE: 'audio/sfx/hockey/referee-whistle.mp3',
   
   // Ambient sounds
   CROWD_HEY: 'audio/sfx/hockey/crowd-hey.mp3',

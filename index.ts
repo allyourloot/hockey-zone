@@ -94,7 +94,26 @@ startServer(world => {
     const goalResult = goalDetectionService.checkForGoal(puckRef.current);
     if (goalResult) {
       console.log(`[Main] Goal detected! ${goalResult.scoringTeam} team scored!${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`);
-      HockeyGameManager.instance.goalScored(goalResult.scoringTeam, puckRef.current, goalResult.isOwnGoal);
+      if (goalResult.lastTouchedBy) {
+        console.log(`[Main] Goal scored by player: ${goalResult.lastTouchedBy}`);
+      } else {
+        console.log(`[Main] WARNING: Goal scored but no lastTouchedBy information!`);
+        // Debug: Check puck custom properties
+        if (puckRef.current) {
+          try {
+            const lastTouched = (puckRef.current as any).customProperties?.get('lastTouchedBy');
+            console.log(`[Main] lastTouchedBy from puck:`, lastTouched);
+          } catch (error) {
+            console.log(`[Main] Could not access puck custom properties:`, error);
+          }
+        }
+      }
+      HockeyGameManager.instance.goalScored(
+        goalResult.scoringTeam, 
+        puckRef.current, 
+        goalResult.isOwnGoal, 
+        goalResult.lastTouchedBy  // Pass the scorer ID
+      );
     }
   }, 50);
 

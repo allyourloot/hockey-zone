@@ -173,18 +173,68 @@ and also configure additional buttons for mobile compatibility.
       // Start game timer
       startGameTimer();
     }
+    if (data.type === 'game-waiting') {
+      // Show waiting state in scoreboard
+      const scoreboard = document.getElementById('scoreboard');
+      scoreboard.style.display = 'flex';
+      
+      // Update scores
+      if (typeof data.redScore === 'number') {
+        document.querySelector('.team.red .team-score').textContent = data.redScore;
+      }
+      if (typeof data.blueScore === 'number') {
+        document.querySelector('.team.blue .team-score').textContent = data.blueScore;
+      }
+      
+      // Show waiting for players text instead of period
+      const periodEl = document.querySelector('.period');
+      periodEl.textContent = `Waiting for players ${data.connectedPlayers}/${data.totalPlayers}`;
+      
+      // Show --:-- for clock
+      const timerEl = document.querySelector('.timer');
+      timerEl.textContent = '--:--';
+      
+      // Stop any running timers
+      if (gameTimer) {
+        clearInterval(gameTimer);
+        gameTimer = null;
+      }
+      
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+    }
+    if (data.type === 'show-team-selection') {
+      // Show team selection overlay
+      console.log('UI: Received show-team-selection event');
+      showTeamSelection();
+    }
     if (data.type === 'score-update') {
       // Update team scores
       document.querySelector('.team.red .team-score').textContent = data.redScore;
       document.querySelector('.team.blue .team-score').textContent = data.blueScore;
     }
     if (data.type === 'goal-scored') {
-      // Show goal overlay
+      // Show goal overlay with enhanced info
       showGoalOverlay(data.team, data.isOwnGoal);
+      
+      // Log enhanced goal message if we have scorer info
+      if (data.scorerName) {
+        const goalMessage = data.isOwnGoal 
+          ? `OWN GOAL by ${data.scorerName}!`
+          : `GOAL by ${data.scorerName}!`;
+        
+        if (data.assistName) {
+          goalMessage += ` (Assist: ${data.assistName})`;
+        }
+        
+        console.log('Enhanced goal info:', goalMessage);
+      }
     }
     if (data.type === 'countdown-update') {
-      // Show countdown overlay
-      showCountdownOverlay(data.countdown);
+      // Show countdown overlay with subtitle support
+      showCountdownOverlay(data.countdown, data.subtitle);
     }
     if (data.type === 'countdown-go') {
       // Show "GO!" text
@@ -194,10 +244,49 @@ and also configure additional buttons for mobile compatibility.
       // Hide countdown overlay
       hideCountdownOverlay();
     }
+    if (data.type === 'period-end') {
+      // Show period break overlay
+      showPeriodBreakOverlay(data.period, data.redScore, data.blueScore);
+    }
+    if (data.type === 'period-end-hide') {
+      // Hide period break overlay
+      hidePeriodBreakOverlay();
+    }
     if (data.type === 'period-update') {
       // Update period display
       const periodText = data.period === 1 ? '1st' : data.period === 2 ? '2nd' : '3rd';
       document.querySelector('.period').textContent = `${periodText} Period`;
+    }
+    if (data.type === 'timer-restart') {
+      // Restart the game timer for new period
+      console.log('UI: Restarting timer for new period');
+      startGameTimer();
+    }
+    if (data.type === 'timer-stop') {
+      // Stop the game timer completely
+      console.log('UI: Stopping timer (reset to lobby)');
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      // Set timer display to --:--
+      document.querySelector('.timer').textContent = '--:--';
+    }
+    if (data.type === 'game-over') {
+      // Show enhanced game over overlay with box score
+      showGameOverOverlay(data.winner, data.redScore, data.blueScore, data.finalMessage, data.boxScore);
+    }
+    if (data.type === 'game-over-hide') {
+      // Hide game over overlay
+      hideGameOverOverlay();
+      
+      // Ensure timer is stopped when game over ends
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      document.querySelector('.timer').textContent = '--:--';
+      console.log('UI: Timer stopped after game over hide');
     }
     if (data.type === 'puck-control') {
       hasPuck = !!data.hasPuck;
@@ -229,6 +318,12 @@ and also configure additional buttons for mobile compatibility.
         bodyCheckIndicator.style.display = data.visible ? 'flex' : 'none';
         console.log('UI: Body check visibility set to:', data.visible);
       }
+    }
+    if (data.type === 'stats-update') {
+      // Update statistics data
+      updateStatsData(data.statsData);
+      updatePlayerStatsTable(data.playerStats);
+      updateGoalHistory(data.goalHistory);
     }
   });
 
@@ -550,11 +645,18 @@ and also configure additional buttons for mobile compatibility.
   }
 
   // Countdown overlay functionality
-  function showCountdownOverlay(countdown) {
+  function showCountdownOverlay(countdown, subtitle = 'Resuming Play') {
     const overlay = document.getElementById('countdown-overlay');
     const countdownText = document.getElementById('countdown-text');
+    const subtextElement = overlay.querySelector('.countdown-subtext');
     
     countdownText.textContent = countdown;
+    
+    // Update subtitle text if provided
+    if (subtextElement) {
+      subtextElement.textContent = subtitle;
+    }
+    
     overlay.style.display = 'flex';
     
     // Add animation class for number change
@@ -591,6 +693,376 @@ and also configure additional buttons for mobile compatibility.
     countdownText.classList.remove('countdown-go', 'countdown-animate');
     subtextElement.style.display = 'block';
   }
+
+  // Period break overlay functionality
+  function showPeriodBreakOverlay(period, redScore, blueScore) {
+    const overlay = document.getElementById('period-break-overlay');
+    const periodText = document.getElementById('period-break-text');
+    const redScoreElement = document.getElementById('break-score-red');
+    const blueScoreElement = document.getElementById('break-score-blue');
+    
+    // Set period text
+    const periodName = period === 1 ? '1st Period' : period === 2 ? '2nd Period' : '3rd Period';
+    periodText.textContent = `End of ${periodName}`;
+    
+    // Set scores
+    redScoreElement.textContent = `RED: ${redScore}`;
+    blueScoreElement.textContent = `BLUE: ${blueScore}`;
+    
+    // Show overlay
+    overlay.style.display = 'flex';
+    
+    console.log(`UI: Showing period break overlay for end of ${periodName}, RED: ${redScore}, BLUE: ${blueScore}`);
+  }
+
+  function hidePeriodBreakOverlay() {
+    const overlay = document.getElementById('period-break-overlay');
+    overlay.style.display = 'none';
+    
+    console.log('UI: Hiding period break overlay');
+  }
+
+  // Enhanced game over overlay functionality with box score
+  function showGameOverOverlay(winner, redScore, blueScore, finalMessage, boxScore) {
+    const overlay = document.getElementById('game-over-overlay');
+    const winnerElement = document.getElementById('game-over-winner');
+    const redScoreElement = document.getElementById('final-score-red');
+    const blueScoreElement = document.getElementById('final-score-blue');
+    
+    // Set winner text and styling
+    winnerElement.textContent = finalMessage;
+    winnerElement.className = 'game-over-winner'; // Reset classes
+    
+    if (winner === 'RED') {
+      winnerElement.classList.add('red-winner');
+    } else if (winner === 'BLUE') {
+      winnerElement.classList.add('blue-winner');
+    } else if (winner === 'TIED') {
+      winnerElement.classList.add('tie-game');
+    }
+    
+    // Set final scores
+    redScoreElement.textContent = `RED: ${redScore}`;
+    blueScoreElement.textContent = `BLUE: ${blueScore}`;
+    
+    // Populate box score data if available
+    if (boxScore) {
+      populateBoxScore(boxScore);
+    }
+    
+    // Start return countdown
+    startReturnCountdown();
+    
+    // Show overlay
+    overlay.style.display = 'flex';
+    
+    console.log(`UI: Showing enhanced game over overlay with box score - Winner: ${winner}, Final Score: RED: ${redScore}, BLUE: ${blueScore}`);
+  }
+
+  function populateBoxScore(boxScore) {
+    // Populate period scores
+    document.getElementById('red-p1').textContent = boxScore.periodScores[0]?.red || 0;
+    document.getElementById('red-p2').textContent = boxScore.periodScores[1]?.red || 0;
+    document.getElementById('red-p3').textContent = boxScore.periodScores[2]?.red || 0;
+    document.getElementById('red-total').textContent = boxScore.totalScore.red;
+    
+    document.getElementById('blue-p1').textContent = boxScore.periodScores[0]?.blue || 0;
+    document.getElementById('blue-p2').textContent = boxScore.periodScores[1]?.blue || 0;
+    document.getElementById('blue-p3').textContent = boxScore.periodScores[2]?.blue || 0;
+    document.getElementById('blue-total').textContent = boxScore.totalScore.blue;
+    
+    // Populate top performers
+    const topPerformers = boxScore.topPerformers;
+    
+    if (topPerformers.topScorer) {
+      document.getElementById('top-scorer-name').textContent = topPerformers.topScorer.name;
+      document.getElementById('top-scorer-stat').textContent = `${topPerformers.topScorer.points} pts (${topPerformers.topScorer.goals}G, ${topPerformers.topScorer.assists}A)`;
+    } else {
+      document.getElementById('top-scorer-name').textContent = '-';
+      document.getElementById('top-scorer-stat').textContent = '0 pts';
+    }
+    
+    if (topPerformers.mostGoals) {
+      document.getElementById('most-goals-name').textContent = topPerformers.mostGoals.name;
+      document.getElementById('most-goals-stat').textContent = `${topPerformers.mostGoals.goals} goals`;
+    } else {
+      document.getElementById('most-goals-name').textContent = '-';
+      document.getElementById('most-goals-stat').textContent = '0 goals';
+    }
+    
+    if (topPerformers.mostSaves) {
+      document.getElementById('most-saves-name').textContent = topPerformers.mostSaves.name;
+      document.getElementById('most-saves-stat').textContent = `${topPerformers.mostSaves.saves} saves`;
+    } else {
+      document.getElementById('most-saves-name').textContent = '-';
+      document.getElementById('most-saves-stat').textContent = '0 saves';
+    }
+    
+    // Populate player statistics table
+    const playerStatsBody = document.getElementById('box-score-player-stats');
+    playerStatsBody.innerHTML = '';
+    
+    boxScore.playerStats.forEach(player => {
+      const row = document.createElement('div');
+      row.className = `box-score-player-row ${player.team.toLowerCase()}-player`;
+      
+      const points = player.goals + player.assists;
+      const plusMinus = player.plusMinus >= 0 ? `+${player.plusMinus}` : `${player.plusMinus}`;
+      
+      row.innerHTML = `
+        <div class="stat-col player-col">${player.playerName}</div>
+        <div class="stat-col">${player.goals}</div>
+        <div class="stat-col">${player.assists}</div>
+        <div class="stat-col">${points}</div>
+        <div class="stat-col">${player.shotsOnGoal}</div>
+        <div class="stat-col">${player.saves}</div>
+        <div class="stat-col">${plusMinus}</div>
+      `;
+      
+      playerStatsBody.appendChild(row);
+    });
+    
+    console.log('UI: Box score populated with period scores, top performers, and player stats');
+  }
+
+  function startReturnCountdown() {
+    const countdownElement = document.getElementById('return-countdown');
+    let timeLeft = 10;
+    
+    const countdownInterval = setInterval(() => {
+      timeLeft--;
+      countdownElement.textContent = timeLeft;
+      
+      if (timeLeft <= 0) {
+        clearInterval(countdownInterval);
+      }
+    }, 1000);
+  }
+
+  function hideGameOverOverlay() {
+    const overlay = document.getElementById('game-over-overlay');
+    overlay.style.display = 'none';
+    
+    console.log('UI: Hiding game over overlay');
+  }
+
+  function showTeamSelection() {
+    // Show team selection overlay
+    const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+    if (teamSelectionOverlay) {
+      teamSelectionOverlay.style.display = 'flex';
+    }
+    
+    // Hide scoreboard
+    const scoreboard = document.getElementById('scoreboard');
+    if (scoreboard) {
+      scoreboard.style.display = 'none';
+    }
+    
+    // Hide any other overlays that might be showing
+    const waitingOverlay = document.getElementById('waiting-overlay');
+    if (waitingOverlay) {
+      waitingOverlay.style.display = 'none';
+    }
+    
+    const gameOverOverlay = document.getElementById('game-over-overlay');
+    if (gameOverOverlay) {
+      gameOverOverlay.style.display = 'none';
+    }
+    
+    const statsScoreboard = document.getElementById('stats-scoreboard');
+    if (statsScoreboard) {
+      statsScoreboard.style.display = 'none';
+    }
+    
+    // Stop any running timers
+    if (gameTimer) {
+      clearInterval(gameTimer);
+      gameTimer = null;
+    }
+    
+    if (timerInterval) {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+    
+    // Reset team selection state
+    if (selectedBtn) {
+      selectedBtn.classList.remove('selected');
+      selectedBtn = null;
+    }
+    selectedTeam = null;
+    selectedPosition = null;
+    
+    // Reset lock in button
+    const lockInBtn = document.querySelector('.lock-in-btn');
+    if (lockInBtn) {
+      lockInBtn.disabled = true;
+    }
+    
+    // Clear selection message
+    const selectedMsg = document.getElementById('selected-position-msg');
+    if (selectedMsg) {
+      selectedMsg.textContent = '';
+    }
+    
+    // Re-enable all position buttons
+    const positionButtons = document.querySelectorAll('.position-btn');
+    positionButtons.forEach(btn => {
+      btn.disabled = false;
+      btn.classList.remove('selected');
+    });
+    
+    console.log('UI: Showing team selection overlay with reset state');
+    console.log('UI: Team selection overlay display:', teamSelectionOverlay ? teamSelectionOverlay.style.display : 'not found');
+    console.log('UI: Scoreboard display:', scoreboard ? scoreboard.style.display : 'not found');
+  }
+
+  // Enhanced Statistics Scoreboard functionality
+  function showStatsScoreboard() {
+    const scoreboard = document.getElementById('stats-scoreboard');
+    scoreboard.style.display = 'block';
+    
+    console.log('UI: Showing statistics scoreboard');
+  }
+
+  function hideStatsScoreboard() {
+    const scoreboard = document.getElementById('stats-scoreboard');
+    scoreboard.style.display = 'none';
+    
+    console.log('UI: Hiding statistics scoreboard');
+  }
+
+  function updateStatsData(statsData) {
+    // Update team statistics
+    document.getElementById('red-goals').textContent = statsData.teamStats.red.goals;
+    document.getElementById('red-shots').textContent = statsData.teamStats.red.shots;
+    document.getElementById('red-saves').textContent = statsData.teamStats.red.saves;
+    
+    document.getElementById('blue-goals').textContent = statsData.teamStats.blue.goals;
+    document.getElementById('blue-shots').textContent = statsData.teamStats.blue.shots;
+    document.getElementById('blue-saves').textContent = statsData.teamStats.blue.saves;
+
+    // Update top performers
+    if (statsData.topScorer) {
+      document.getElementById('top-scorer-name').textContent = statsData.topScorer.name;
+      document.getElementById('top-scorer-points').textContent = `${statsData.topScorer.points} pts`;
+    } else {
+      document.getElementById('top-scorer-name').textContent = '-';
+      document.getElementById('top-scorer-points').textContent = '0 pts';
+    }
+
+    if (statsData.mostGoals) {
+      document.getElementById('most-goals-name').textContent = statsData.mostGoals.name;
+      document.getElementById('most-goals-count').textContent = `${statsData.mostGoals.goals} goals`;
+    } else {
+      document.getElementById('most-goals-name').textContent = '-';
+      document.getElementById('most-goals-count').textContent = '0 goals';
+    }
+
+    if (statsData.mostSaves) {
+      document.getElementById('most-saves-name').textContent = statsData.mostSaves.name;
+      document.getElementById('most-saves-count').textContent = `${statsData.mostSaves.saves} saves`;
+    } else {
+      document.getElementById('most-saves-name').textContent = '-';
+      document.getElementById('most-saves-count').textContent = '0 saves';
+    }
+
+    console.log('UI: Updated stats data', statsData);
+  }
+
+  function updatePlayerStatsTable(playerStats) {
+    const tableBody = document.getElementById('player-stats-body');
+    tableBody.innerHTML = '';
+
+    // Sort players by points (goals + assists)
+    const sortedPlayers = playerStats.sort((a, b) => {
+      const aPoints = a.goals + a.assists;
+      const bPoints = b.goals + b.assists;
+      if (aPoints !== bPoints) return bPoints - aPoints;
+      return b.goals - a.goals; // Tiebreaker: goals
+    });
+
+    sortedPlayers.forEach(player => {
+      const row = document.createElement('div');
+      row.className = `player-stat-row ${player.team.toLowerCase()}-player`;
+      
+      const points = player.goals + player.assists;
+      const plusMinus = player.plusMinus >= 0 ? `+${player.plusMinus}` : `${player.plusMinus}`;
+      
+      row.innerHTML = `
+        <div class="stat-col player-col">${player.playerName}</div>
+        <div class="stat-col">${player.goals}</div>
+        <div class="stat-col">${player.assists}</div>
+        <div class="stat-col">${points}</div>
+        <div class="stat-col">${player.shotsOnGoal}</div>
+        <div class="stat-col">${player.saves}</div>
+        <div class="stat-col">${plusMinus}</div>
+        <div class="stat-col">${player.hits}</div>
+      `;
+      
+      tableBody.appendChild(row);
+    });
+
+    console.log('UI: Updated player stats table with', playerStats.length, 'players');
+  }
+
+  function updateGoalHistory(goals) {
+    const goalsList = document.getElementById('goals-list');
+    goalsList.innerHTML = '';
+
+    if (goals.length === 0) {
+      goalsList.innerHTML = '<div style="color: #ccc; text-align: center; padding: 20px;">No goals scored yet</div>';
+      return;
+    }
+
+    // Show goals in reverse order (most recent first)
+    const reversedGoals = [...goals].reverse();
+    
+    reversedGoals.forEach((goal, index) => {
+      const goalItem = document.createElement('div');
+      goalItem.className = 'goal-item';
+      
+      const periodName = goal.period === 1 ? '1st' : goal.period === 2 ? '2nd' : '3rd';
+      const timeDisplay = `${Math.floor(goal.timeInPeriod / 60)}:${(goal.timeInPeriod % 60).toString().padStart(2, '0')}`;
+      
+      goalItem.innerHTML = `
+        <div class="goal-info">
+          <div class="goal-period">${periodName} ${timeDisplay}</div>
+          <div class="goal-scorer">${goal.scorerName || 'Unknown'}</div>
+          ${goal.assistName ? `<div class="goal-assist">Assist: ${goal.assistName}</div>` : ''}
+        </div>
+        <div class="goal-team ${goal.team.toLowerCase()}">${goal.team}</div>
+      `;
+      
+      goalsList.appendChild(goalItem);
+    });
+
+    console.log('UI: Updated goal history with', goals.length, 'goals');
+  }
+
+  // Event listeners for stats scoreboard
+  document.addEventListener('DOMContentLoaded', () => {
+    // Stats toggle button
+    const statsToggle = document.getElementById('stats-toggle');
+    const statsClose = document.getElementById('stats-close');
+    
+    if (statsToggle) {
+      statsToggle.addEventListener('click', () => {
+        showStatsScoreboard();
+        // Request latest stats from server
+        hytopia.sendData({
+          type: 'request-stats'
+        });
+      });
+    }
+    
+    if (statsClose) {
+      statsClose.addEventListener('click', () => {
+        hideStatsScoreboard();
+      });
+    }
+  });
 </script>
 
 <div id="root">
@@ -700,6 +1172,206 @@ and also configure additional buttons for mobile compatibility.
   <div id="countdown-overlay" class="countdown-overlay" style="display: none;">
     <div class="countdown-text" id="countdown-text">3</div>
     <div class="countdown-subtext">Resuming Play</div>
+  </div>
+
+  <!-- Period Break Overlay -->
+  <div id="period-break-overlay" class="period-break-overlay" style="display: none;">
+    <div class="period-break-text" id="period-break-text">End of 1st Period</div>
+    <div class="period-break-score">
+      <span class="break-score-red" id="break-score-red">RED: 0</span>
+      <span class="break-score-vs">-</span>
+      <span class="break-score-blue" id="break-score-blue">BLUE: 0</span>
+    </div>
+  </div>
+
+  <!-- Enhanced Game Over Overlay with Box Score -->
+  <div id="game-over-overlay" class="game-over-overlay" style="display: none;">
+    <div class="game-over-header">
+      <div class="game-over-text">GAME OVER</div>
+      <div class="game-over-winner" id="game-over-winner">RED TEAM WINS!</div>
+      <div class="game-over-final-score">
+        <span class="final-score-red" id="final-score-red">RED: 0</span>
+        <span class="final-score-vs">-</span>
+        <span class="final-score-blue" id="final-score-blue">BLUE: 0</span>
+      </div>
+    </div>
+
+    <div class="box-score-container">
+      <!-- Period by Period Scoring -->
+      <div class="period-scores-section">
+        <div class="section-title">Period Scoring</div>
+        <div class="period-scores-table">
+          <div class="period-scores-header">
+            <div class="team-header">Team</div>
+            <div class="period-header">1st</div>
+            <div class="period-header">2nd</div>
+            <div class="period-header">3rd</div>
+            <div class="total-header">Total</div>
+          </div>
+          <div class="period-scores-row red-row">
+            <div class="team-name">RED</div>
+            <div class="period-score" id="red-p1">0</div>
+            <div class="period-score" id="red-p2">0</div>
+            <div class="period-score" id="red-p3">0</div>
+            <div class="total-score red-total" id="red-total">0</div>
+          </div>
+          <div class="period-scores-row blue-row">
+            <div class="team-name">BLUE</div>
+            <div class="period-score" id="blue-p1">0</div>
+            <div class="period-score" id="blue-p2">0</div>
+            <div class="period-score" id="blue-p3">0</div>
+            <div class="total-score blue-total" id="blue-total">0</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top 3 Performers -->
+      <div class="top-performers-section">
+        <div class="section-title">Top Performers</div>
+        <div class="performers-grid">
+          <div class="performer-card">
+            <div class="performer-title">🏆 Top Scorer</div>
+            <div class="performer-name" id="top-scorer-name">-</div>
+            <div class="performer-stat" id="top-scorer-stat">0 pts</div>
+          </div>
+          <div class="performer-card">
+            <div class="performer-title">⚽ Most Goals</div>
+            <div class="performer-name" id="most-goals-name">-</div>
+            <div class="performer-stat" id="most-goals-stat">0 goals</div>
+          </div>
+          <div class="performer-card">
+            <div class="performer-title">🥅 Best Goalie</div>
+            <div class="performer-name" id="most-saves-name">-</div>
+            <div class="performer-stat" id="most-saves-stat">0 saves</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Statistics Table -->
+      <div class="player-stats-section">
+        <div class="section-title">Player Statistics</div>
+        <div class="player-stats-table">
+          <div class="player-stats-header">
+            <div class="stat-col player-col">Player</div>
+            <div class="stat-col">G</div>
+            <div class="stat-col">A</div>
+            <div class="stat-col">Pts</div>
+            <div class="stat-col">SOG</div>
+            <div class="stat-col">Saves</div>
+            <div class="stat-col">+/-</div>
+          </div>
+          <div class="player-stats-body" id="box-score-player-stats">
+            <!-- Player stats will be populated by JavaScript -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="game-over-return-message">Returning to lobby in <span id="return-countdown">10</span> seconds...</div>
+  </div>
+
+  <!-- Enhanced Statistics Scoreboard -->
+  <div id="stats-scoreboard" class="stats-scoreboard" style="display: none;">
+    <div class="stats-header">
+      <div class="stats-title">Game Statistics</div>
+      <div class="stats-close" id="stats-close">×</div>
+    </div>
+    
+    <div class="stats-content">
+      <!-- Team Overview -->
+      <div class="stats-section">
+        <div class="stats-section-title">Team Statistics</div>
+        <div class="team-stats-container">
+          <div class="team-stats red-team">
+            <div class="team-name">RED TEAM</div>
+            <div class="team-stat">
+              <span class="stat-label">Goals:</span>
+              <span class="stat-value" id="red-goals">0</span>
+            </div>
+            <div class="team-stat">
+              <span class="stat-label">Shots:</span>
+              <span class="stat-value" id="red-shots">0</span>
+            </div>
+            <div class="team-stat">
+              <span class="stat-label">Saves:</span>
+              <span class="stat-value" id="red-saves">0</span>
+            </div>
+          </div>
+          
+          <div class="team-stats blue-team">
+            <div class="team-name">BLUE TEAM</div>
+            <div class="team-stat">
+              <span class="stat-label">Goals:</span>
+              <span class="stat-value" id="blue-goals">0</span>
+            </div>
+            <div class="team-stat">
+              <span class="stat-label">Shots:</span>
+              <span class="stat-value" id="blue-shots">0</span>
+            </div>
+            <div class="team-stat">
+              <span class="stat-label">Saves:</span>
+              <span class="stat-value" id="blue-saves">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Performers -->
+      <div class="stats-section">
+        <div class="stats-section-title">Top Performers</div>
+        <div class="top-performers">
+          <div class="performer">
+            <div class="performer-title">Top Scorer</div>
+            <div class="performer-name" id="top-scorer-name">-</div>
+            <div class="performer-stat" id="top-scorer-points">0 pts</div>
+          </div>
+          <div class="performer">
+            <div class="performer-title">Most Goals</div>
+            <div class="performer-name" id="most-goals-name">-</div>
+            <div class="performer-stat" id="most-goals-count">0 goals</div>
+          </div>
+          <div class="performer">
+            <div class="performer-title">Most Saves</div>
+            <div class="performer-name" id="most-saves-name">-</div>
+            <div class="performer-stat" id="most-saves-count">0 saves</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Player Statistics Table -->
+      <div class="stats-section">
+        <div class="stats-section-title">Player Statistics</div>
+        <div class="player-stats-table">
+          <div class="stats-table-header">
+            <div class="stat-col player-col">Player</div>
+            <div class="stat-col">G</div>
+            <div class="stat-col">A</div>
+            <div class="stat-col">Pts</div>
+            <div class="stat-col">Shots</div>
+            <div class="stat-col">Saves</div>
+            <div class="stat-col">+/-</div>
+            <div class="stat-col">Hits</div>
+          </div>
+          <div class="stats-table-body" id="player-stats-body">
+            <!-- Player rows will be populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Goal History -->
+      <div class="stats-section">
+        <div class="stats-section-title">Goal History</div>
+        <div class="goals-list" id="goals-list">
+          <!-- Goals will be populated dynamically -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Toggle Button -->
+  <div id="stats-toggle" class="stats-toggle">
+    <div class="stats-icon">📊</div>
+    <div class="stats-label">STATS</div>
   </div>
 
   <!-- Pass/Shot Icons Overlay -->
@@ -1550,6 +2222,926 @@ and also configure additional buttons for mobile compatibility.
     to {
       transform: translateY(0);
       opacity: 1;
+    }
+  }
+
+  /* Period Break Overlay */
+  .period-break-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1050; /* Between goal and countdown overlays */
+    animation: periodBreakFadeIn 0.5s ease-out;
+  }
+
+  .period-break-text {
+    font-size: 6rem;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.8), 0 0 60px rgba(255, 255, 255, 0.4);
+    margin-bottom: 40px;
+    letter-spacing: 4px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    text-align: center;
+    animation: periodBreakTextSlide 0.8s ease-out;
+  }
+
+  .period-break-score {
+    display: flex;
+    align-items: center;
+    gap: 30px;
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    animation: periodBreakScoreSlide 0.8s ease-out 0.2s both;
+  }
+
+  .break-score-red {
+    color: #ff4444;
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.8);
+    letter-spacing: 2px;
+  }
+
+  .break-score-blue {
+    color: #44aaff;
+    text-shadow: 0 0 20px rgba(68, 170, 255, 0.8);
+    letter-spacing: 2px;
+  }
+
+  .break-score-vs {
+    color: #ccc;
+    font-size: 2rem;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  }
+
+  @keyframes periodBreakFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(8px);
+    }
+  }
+
+  @keyframes periodBreakTextSlide {
+    from {
+      transform: translateY(-50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes periodBreakScoreSlide {
+    from {
+      transform: translateY(50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Enhanced Game Over Overlay with Box Score */
+  .game-over-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 1200; /* Highest priority overlay */
+    animation: gameOverFadeIn 0.8s ease-out;
+    overflow-y: auto;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+
+  .game-over-header {
+    text-align: center;
+    margin-bottom: 30px;
+    animation: gameOverHeaderSlide 1s ease-out;
+  }
+
+  .game-over-text {
+    font-size: 4rem;
+    font-weight: 900;
+    color: #fff;
+    text-shadow: 0 0 40px rgba(255, 255, 255, 0.9), 0 0 80px rgba(255, 255, 255, 0.5);
+    margin-bottom: 20px;
+    letter-spacing: 4px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+  }
+
+  .game-over-winner {
+    font-size: 2.5rem;
+    font-weight: 700;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.8);
+    letter-spacing: 2px;
+    margin-bottom: 20px;
+  }
+
+  .game-over-winner.red-winner {
+    color: #ff4444;
+    text-shadow: 0 0 30px rgba(255, 68, 68, 0.9), 0 0 60px rgba(255, 68, 68, 0.5);
+  }
+
+  .game-over-winner.blue-winner {
+    color: #44aaff;
+    text-shadow: 0 0 30px rgba(68, 170, 255, 0.9), 0 0 60px rgba(68, 170, 255, 0.5);
+  }
+
+  .game-over-winner.tie-game {
+    color: #ffd700;
+    text-shadow: 0 0 30px rgba(255, 215, 0, 0.9), 0 0 60px rgba(255, 215, 0, 0.5);
+  }
+
+  .game-over-final-score {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+  }
+
+  .final-score-red {
+    color: #ff4444;
+    text-shadow: 0 0 25px rgba(255, 68, 68, 0.8);
+    letter-spacing: 2px;
+  }
+
+  .final-score-blue {
+    color: #44aaff;
+    text-shadow: 0 0 25px rgba(68, 170, 255, 0.8);
+    letter-spacing: 2px;
+  }
+
+  .final-score-vs {
+    color: #ccc;
+    font-size: 1.8rem;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+  }
+
+  .box-score-container {
+    width: 100%;
+    max-width: 1200px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 30px;
+    animation: boxScoreSlideIn 1s ease-out 0.5s both;
+  }
+
+  .period-scores-section {
+    grid-column: 1 / -1;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 25px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .top-performers-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 25px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .player-stats-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 15px;
+    padding: 25px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .section-title {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    margin-bottom: 20px;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  /* Period Scores Table */
+  .period-scores-table {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .period-scores-header,
+  .period-scores-row {
+    display: grid;
+    grid-template-columns: 1fr repeat(4, 80px);
+    align-items: center;
+    padding: 15px;
+    font-weight: 600;
+  }
+
+  .period-scores-header {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+    font-size: 1.1rem;
+    text-align: center;
+  }
+
+  .period-scores-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 1.3rem;
+    font-weight: 700;
+  }
+
+  .period-scores-row:last-child {
+    border-bottom: none;
+  }
+
+  .red-row {
+    color: #ff4444;
+  }
+
+  .blue-row {
+    color: #44aaff;
+  }
+
+  .team-name {
+    text-align: left;
+    font-size: 1.4rem;
+    letter-spacing: 1px;
+  }
+
+  .period-score,
+  .total-score {
+    text-align: center;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+  }
+
+  .total-score {
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-shadow: 0 0 10px currentColor;
+  }
+
+  /* Top Performers */
+  .performers-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 15px;
+  }
+
+  .performer-card {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .performer-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #ffd700;
+    margin-bottom: 10px;
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
+  .performer-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 5px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+  }
+
+  .performer-stat {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #aaa;
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
+  /* Player Stats Table */
+  .player-stats-table {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .player-stats-header {
+    display: grid;
+    grid-template-columns: 2fr repeat(6, 1fr);
+    background: rgba(255, 255, 255, 0.1);
+    padding: 12px;
+    font-weight: 600;
+    color: #ccc;
+    font-size: 1rem;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .player-stats-header .player-col {
+    text-align: left;
+  }
+
+  #box-score-player-stats {
+    max-height: 250px;
+    overflow-y: auto;
+  }
+
+  .box-score-player-row {
+    display: grid;
+    grid-template-columns: 2fr repeat(6, 1fr);
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 1rem;
+    align-items: center;
+    text-align: center;
+  }
+
+  .box-score-player-row:last-child {
+    border-bottom: none;
+  }
+
+  .box-score-player-row.red-player {
+    color: #ff9999;
+  }
+
+  .box-score-player-row.blue-player {
+    color: #99ccff;
+  }
+
+  .box-score-player-row .player-col {
+    text-align: left;
+    font-weight: 600;
+    color: #fff;
+  }
+
+  .game-over-return-message {
+    margin-top: 30px;
+    font-size: 1.3rem;
+    font-weight: 500;
+    color: #aaa;
+    font-family: 'Inter', Arial, sans-serif;
+    text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+    letter-spacing: 1px;
+    text-align: center;
+    animation: gameOverReturnFade 1s ease-out 1.5s both;
+  }
+
+  #return-countdown {
+    color: #ffd700;
+    font-weight: 700;
+  }
+
+  /* Responsive Design for Mobile */
+  @media (max-width: 768px) {
+    .game-over-overlay {
+      padding: 10px;
+    }
+
+    .game-over-text {
+      font-size: 2.5rem;
+    }
+
+    .game-over-winner {
+      font-size: 1.8rem;
+    }
+
+    .game-over-final-score {
+      font-size: 1.5rem;
+      gap: 20px;
+    }
+
+    .box-score-container {
+      grid-template-columns: 1fr;
+      gap: 20px;
+    }
+
+    .period-scores-header,
+    .period-scores-row {
+      grid-template-columns: 1fr repeat(4, 60px);
+      padding: 10px;
+      font-size: 0.9rem;
+    }
+
+    .performers-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+
+    .performer-card {
+      padding: 15px;
+    }
+
+    .player-stats-header {
+      grid-template-columns: 1.5fr repeat(6, 0.8fr);
+      padding: 8px;
+      font-size: 0.9rem;
+    }
+
+    .box-score-player-row {
+      grid-template-columns: 1.5fr repeat(6, 0.8fr);
+      padding: 8px;
+      font-size: 0.9rem;
+    }
+
+    .section-title {
+      font-size: 1.4rem;
+    }
+
+    .game-over-return-message {
+      font-size: 1.1rem;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .game-over-text {
+      font-size: 2rem;
+      letter-spacing: 2px;
+    }
+
+    .game-over-winner {
+      font-size: 1.5rem;
+    }
+
+    .game-over-final-score {
+      font-size: 1.3rem;
+    }
+
+    .period-scores-header,
+    .period-scores-row {
+      grid-template-columns: 1fr repeat(4, 50px);
+      padding: 8px;
+      font-size: 0.8rem;
+    }
+
+    .team-name {
+      font-size: 1.1rem;
+    }
+
+    .player-stats-table {
+      font-size: 0.8rem;
+    }
+
+    .performer-title {
+      font-size: 1rem;
+    }
+
+    .performer-name {
+      font-size: 1.1rem;
+    }
+
+    .performer-stat {
+      font-size: 1rem;
+    }
+  }
+
+  @keyframes gameOverFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(12px);
+    }
+  }
+
+  @keyframes gameOverTextSlide {
+    from {
+      transform: translateY(-80px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes gameOverWinnerSlide {
+    from {
+      transform: translateY(60px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes gameOverScoreSlide {
+    from {
+      transform: translateY(40px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes gameOverReturnFade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes gameOverHeaderSlide {
+    from {
+      transform: translateY(-50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  @keyframes boxScoreSlideIn {
+    from {
+      transform: translateY(30px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Enhanced Statistics Scoreboard */
+  .stats-scoreboard {
+    position: fixed;
+    top: 5%;
+    left: 5%;
+    right: 5%;
+    bottom: 5%;
+    background: rgba(0, 0, 0, 0.95);
+    border-radius: 15px;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    z-index: 1100;
+    overflow: hidden;
+    animation: statsSlideIn 0.3s ease-out;
+  }
+
+  .stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .stats-title {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    letter-spacing: 2px;
+  }
+
+  .stats-close {
+    font-size: 2.5rem;
+    color: #ccc;
+    cursor: pointer;
+    transition: color 0.2s ease;
+    line-height: 1;
+  }
+
+  .stats-close:hover {
+    color: #fff;
+  }
+
+  .stats-content {
+    padding: 30px;
+    height: calc(100% - 80px);
+    overflow-y: auto;
+  }
+
+  .stats-section {
+    margin-bottom: 40px;
+  }
+
+  .stats-section-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 20px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    letter-spacing: 1px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+    padding-bottom: 10px;
+  }
+
+  /* Team Statistics */
+  .team-stats-container {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+  }
+
+  .team-stats {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 25px;
+    min-width: 200px;
+    text-align: center;
+  }
+
+  .team-stats .team-name {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 20px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    letter-spacing: 1px;
+  }
+
+  .team-stats.red-team .team-name {
+    color: #ff4444;
+    text-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+  }
+
+  .team-stats.blue-team .team-name {
+    color: #44aaff;
+    text-shadow: 0 0 15px rgba(68, 170, 255, 0.5);
+  }
+
+  .team-stat {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 1.1rem;
+  }
+
+  .stat-label {
+    color: #ccc;
+    font-weight: 500;
+  }
+
+  .stat-value {
+    color: #fff;
+    font-weight: 700;
+  }
+
+  /* Top Performers */
+  .top-performers {
+    display: flex;
+    gap: 30px;
+    justify-content: center;
+  }
+
+  .performer {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    min-width: 150px;
+  }
+
+  .performer-title {
+    font-size: 1rem;
+    color: #ccc;
+    margin-bottom: 10px;
+    font-weight: 500;
+  }
+
+  .performer-name {
+    font-size: 1.2rem;
+    color: #fff;
+    font-weight: 700;
+    margin-bottom: 5px;
+  }
+
+  .performer-stat {
+    font-size: 1rem;
+    color: #44aaff;
+    font-weight: 600;
+  }
+
+  /* Player Statistics Table */
+  .player-stats-table {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .stats-table-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    font-weight: 700;
+    color: #fff;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+
+  .stats-table-body {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .player-stat-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    transition: background 0.2s ease;
+  }
+
+  .player-stat-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .player-stat-row.red-player {
+    border-left: 3px solid #ff4444;
+  }
+
+  .player-stat-row.blue-player {
+    border-left: 3px solid #44aaff;
+  }
+
+  .stat-col {
+    color: #fff;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .stat-col.player-col {
+    text-align: left;
+    font-weight: 600;
+  }
+
+  /* Goal History */
+  .goals-list {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 20px;
+    max-height: 250px;
+    overflow-y: auto;
+  }
+
+  .goal-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .goal-item:last-child {
+    border-bottom: none;
+  }
+
+  .goal-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .goal-period {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    color: #ccc;
+    font-weight: 600;
+  }
+
+  .goal-scorer {
+    color: #fff;
+    font-weight: 700;
+    font-size: 1.1rem;
+  }
+
+  .goal-assist {
+    color: #ccc;
+    font-size: 0.9rem;
+  }
+
+  .goal-team {
+    padding: 6px 12px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+
+  .goal-team.red {
+    background: rgba(255, 68, 68, 0.2);
+    color: #ff4444;
+    border: 1px solid #ff4444;
+  }
+
+  .goal-team.blue {
+    background: rgba(68, 170, 255, 0.2);
+    color: #44aaff;
+    border: 1px solid #44aaff;
+  }
+
+  /* Stats Toggle Button */
+  .stats-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .stats-toggle:hover {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .stats-icon {
+    font-size: 1.2rem;
+  }
+
+  .stats-label {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+
+  @keyframes statsSlideIn {
+    from {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .stats-scoreboard {
+      top: 2%;
+      left: 2%;
+      right: 2%;
+      bottom: 2%;
+    }
+
+    .team-stats-container {
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .top-performers {
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .stats-table-header,
+    .player-stat-row {
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      font-size: 0.8rem;
+    }
+
+    .stats-toggle {
+      top: 10px;
+      right: 10px;
+      padding: 8px 12px;
     }
   }
 </style>

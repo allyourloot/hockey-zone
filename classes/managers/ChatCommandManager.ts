@@ -10,6 +10,7 @@ import { PuckTrailManager } from './PuckTrailManager';
 import { GoalDetectionService } from '../services/GoalDetectionService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
+import { HockeyTeam } from '../utils/types';
 
 // Import the IceSkatingController type - we'll need to reference it
 // Note: This creates a circular dependency that we'll resolve in later phases
@@ -74,6 +75,7 @@ export class ChatCommandManager {
     this.registerGoalDetectionCommands();
     this.registerBodyCheckDebugCommand();
     this.registerStickCheckDebugCommand();
+    this.registerStatsTestCommands();
   }
   
   /**
@@ -248,15 +250,12 @@ export class ChatCommandManager {
   private registerGoalDetectionCommands(): void {
     if (!this.world) return;
 
-    // /startmatch - Force start a match for testing
+    // /startmatch - Force start a match for testing with proper game start sequence
     this.world.chatManager.registerCommand('/startmatch', (player) => {
       const gameManager = HockeyGameManager.instance;
-      gameManager.startMatch();
-      setTimeout(() => {
-        gameManager.startPeriod();
-      }, 1000);
-      this.world!.chatManager.sendPlayerMessage(player, 'Match started! Goal detection is now active.', '00FF00');
-      console.log('[ChatCommand] Match force started for goal testing');
+      gameManager.startMatchSequence();
+      this.world!.chatManager.sendPlayerMessage(player, 'Starting match sequence!', '00FF00');
+      console.log('[ChatCommand] Match sequence started with proper countdown and reset');
     });
 
     // /goalinfo - Show goal detection debug information
@@ -426,6 +425,90 @@ export class ChatCommandManager {
         console.log('[ChatCommand] Movement locked by', player.id);
       }
     });
+
+    // /testgamestart - Test the new game start sequence
+    this.world.chatManager.registerCommand('/testgamestart', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      this.world!.chatManager.sendPlayerMessage(player, 'Testing game start sequence...', '00FF00');
+      console.log('[ChatCommand] Testing game start sequence triggered by', player.id);
+      gameManager.startMatchSequence();
+    });
+
+    // /testmatchlock - Test movement lock during match start state
+    this.world.chatManager.registerCommand('/testmatchlock', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const currentState = gameManager.state;
+      
+      if (currentState === 'MATCH_START') {
+        // Unlock by setting to IN_PERIOD
+        (gameManager as any)._state = 'IN_PERIOD';
+        this.world!.chatManager.sendPlayerMessage(player, 'Movement unlocked - match start lock removed', '00FF00');
+        console.log('[ChatCommand] Match start movement lock removed by', player.id);
+      } else {
+        // Lock movement by setting to MATCH_START state
+        (gameManager as any)._state = 'MATCH_START';
+        this.world!.chatManager.sendPlayerMessage(player, 'Movement locked - testing match start lock', 'FF0000');
+        console.log('[ChatCommand] Match start movement lock activated by', player.id);
+      }
+    });
+
+    // /testperiodend - Test period ending transition sequence
+    this.world.chatManager.registerCommand('/testperiodend', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const currentPeriod = (gameManager as any)._period || 1;
+      this.world!.chatManager.sendPlayerMessage(player, `Testing period end transition for period ${currentPeriod}...`, '00FF00');
+      console.log(`[ChatCommand] Testing period end transition for period ${currentPeriod} triggered by`, player.id);
+      gameManager.endPeriod();
+    });
+
+    // /testtimer - Test timer synchronization
+    this.world.chatManager.registerCommand('/testtimer', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const currentState = gameManager.state;
+      const currentPeriod = (gameManager as any)._period || 1;
+      
+      this.world!.chatManager.sendPlayerMessage(player, `Game State: ${currentState}, Period: ${currentPeriod}`, '00FF00');
+      
+      if (currentState === 'IN_PERIOD') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Server timer is running. UI timer should also be running.', '00FF00');
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Server timer is NOT running.', 'FF0000');
+      }
+      
+      console.log(`[ChatCommand] Timer sync test - State: ${currentState}, Period: ${currentPeriod}`);
+    });
+
+    // /testgameover - Test enhanced game over sequence with box score
+    this.world.chatManager.registerCommand('/testgameover', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      
+      // Set some test scores
+      (gameManager as any)._scores = { RED: 3, BLUE: 1 };
+      
+      // Add some test stats for demonstration
+      PlayerStatsManager.instance.recordGoal(player.id, 'RED', 1, 120, false);
+      PlayerStatsManager.instance.recordGoal(player.id, 'RED', 2, 45, false);
+      PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false);
+      PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false);
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'Testing enhanced game over sequence with box score...', '00FF00');
+      console.log('[ChatCommand] Testing enhanced game over sequence with box score triggered by', player.id);
+      
+      gameManager.endGame();
+    });
+
+    // /resetgame - Reset game to lobby with team selection
+    this.world.chatManager.registerCommand('/resetgame', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'Resetting game to lobby...', '00FF00');
+      this.world!.chatManager.sendBroadcastMessage('Game reset to lobby by admin. Please reselect your teams!', 'FFFF00');
+      
+      console.log('[ChatCommand] Game reset to lobby triggered by', player.id);
+      
+      gameManager.resetToLobby();
+    });
   }
 
   /**
@@ -519,6 +602,213 @@ export class ChatCommandManager {
         `Stick check available when: NOT controlling puck AND colliding with puck AND cooldown = 0`, 
         '00FFFF'
       );
+    });
+  }
+
+  /**
+   * Register stats testing and management commands
+   */
+  private registerStatsTestCommands(): void {
+    if (!this.world) return;
+
+    // /stats - Show current statistics scoreboard
+    this.world.chatManager.registerCommand('/stats', (player) => {
+      this.world!.chatManager.sendPlayerMessage(player, 'Broadcasting current stats to all players...', '00FF00');
+      HockeyGameManager.instance.broadcastStatsUpdate();
+      console.log('[ChatCommand] Stats broadcast triggered by', player.id);
+    });
+
+    // /testgoal - Simulate a goal for testing stats
+    this.world.chatManager.registerCommand('/testgoal', (player, args) => {
+      const team = args[0]?.toUpperCase();
+      
+      if (team !== 'RED' && team !== 'BLUE') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <RED|BLUE>', 'FFFF00');
+        return;
+      }
+
+      // Get player's ID for goal attribution
+      const scorerId = player.id;
+      
+      this.world!.chatManager.sendPlayerMessage(player, `Simulating ${team} goal by ${player.username}...`, '00FF00');
+      console.log(`[ChatCommand] Test goal simulated: ${team} by ${player.username} (${player.id})`);
+      
+      // Trigger goal with proper attribution
+      HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId);
+    });
+
+    // /teststats - Add fake stats for testing
+    this.world.chatManager.registerCommand('/teststats', (player, args) => {
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      const action = args[0]?.toLowerCase();
+      
+      if (action === 'shot') {
+        // Record a shot on goal
+        PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false);
+        this.world!.chatManager.sendPlayerMessage(player, 'Recorded shot on goal for you!', '00FF00');
+      } else if (action === 'save') {
+        // Record a save (if player is goalie)
+        PlayerStatsManager.instance.recordShot('opponent', 'BLUE', true, true, player.id);
+        this.world!.chatManager.sendPlayerMessage(player, 'Recorded save for you!', '00FF00');
+      } else if (action === 'hit') {
+        // Record a hit
+        PlayerStatsManager.instance.recordHit(player.id);
+        this.world!.chatManager.sendPlayerMessage(player, 'Recorded hit for you!', '00FF00');
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /teststats <shot|save|hit>', 'FFFF00');
+        return;
+      }
+      
+      // Broadcast updated stats
+      HockeyGameManager.instance.broadcastStatsUpdate();
+      console.log(`[ChatCommand] Test stat recorded: ${action} for ${player.username}`);
+    });
+
+    // /resetstats - Reset all player statistics
+    this.world.chatManager.registerCommand('/resetstats', (player) => {
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      PlayerStatsManager.instance.resetStats();
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'All player statistics have been reset!', '00FF00');
+      this.world!.chatManager.sendBroadcastMessage('Player statistics have been reset by admin.', 'FFFF00');
+      
+      // Broadcast empty stats
+      HockeyGameManager.instance.broadcastStatsUpdate();
+      console.log(`[ChatCommand] All stats reset by ${player.username}`);
+    });
+
+    // /topstats - Show top performers in chat
+    this.world.chatManager.registerCommand('/topstats', (player) => {
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      const topScorers = PlayerStatsManager.instance.getTopScorers(3);
+      const summary = PlayerStatsManager.instance.getStatsSummary();
+      
+      this.world!.chatManager.sendPlayerMessage(player, '=== TOP PERFORMERS ===', 'FFFF00');
+      
+      if (summary.topScorer) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Top Scorer: ${summary.topScorer.name} (${summary.topScorer.points} pts)`, 
+          '00FF00'
+        );
+      }
+      
+      if (summary.mostGoals) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Most Goals: ${summary.mostGoals.name} (${summary.mostGoals.goals} goals)`, 
+          '00FF00'
+        );
+      }
+      
+      if (summary.mostSaves) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Most Saves: ${summary.mostSaves.name} (${summary.mostSaves.saves} saves)`, 
+          '00FF00'
+        );
+      }
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Team Goals: RED ${summary.teamStats.red.goals} - BLUE ${summary.teamStats.blue.goals}`, 
+        '00FFFF'
+      );
+      
+      console.log(`[ChatCommand] Top stats displayed to ${player.username}`);
+    });
+
+    // /debugstats - Show detailed stats debugging info
+    this.world.chatManager.registerCommand('/debugstats', (player) => {
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      const allStats = PlayerStatsManager.instance.getAllStats();
+      const goals = PlayerStatsManager.instance.getGoals();
+      const boxScore = PlayerStatsManager.instance.generateBoxScore();
+      
+      this.world!.chatManager.sendPlayerMessage(player, '=== STATS DEBUG ===', 'FFFF00');
+      this.world!.chatManager.sendPlayerMessage(player, `Total Players: ${allStats.length}`, '00FFFF');
+      this.world!.chatManager.sendPlayerMessage(player, `Total Goals: ${goals.length}`, '00FFFF');
+      
+      // Show each player's stats
+      allStats.forEach(stats => {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `${stats.playerName}: ${stats.goals}G ${stats.assists}A ${stats.saves}S`, 
+          '00FF00'
+        );
+      });
+      
+      // Show box score totals
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Box Score: RED ${boxScore.totalScore.red} - BLUE ${boxScore.totalScore.blue}`, 
+        'FFFF00'
+      );
+      
+      console.log(`[ChatCommand] Debug stats:`, {
+        playersCount: allStats.length,
+        goalsCount: goals.length,
+        boxScore: boxScore.totalScore
+      });
+    });
+
+    // /testgameover - Test game over with sample data
+    this.world.chatManager.registerCommand('/testgameover', (player) => {
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      const boxScore = PlayerStatsManager.instance.generateBoxScore();
+      
+      // Get actual current scores from HockeyGameManager
+      const gameManager = HockeyGameManager.instance;
+      const redScore = boxScore.totalScore.red;
+      const blueScore = boxScore.totalScore.blue;
+      const winner = redScore > blueScore ? 'RED' : blueScore > redScore ? 'BLUE' : 'TIED';
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'Triggering test game over with current stats...', '00FF00');
+      
+      // Broadcast game over with current box score
+      const allPlayerIds = [
+        ...Object.values(HockeyGameManager.instance.teams[HockeyTeam.RED]), 
+        ...Object.values(HockeyGameManager.instance.teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => HockeyGameManager.instance.getPlayerById(playerId))
+        .filter(Boolean) as Player[];
+      
+      allPlayers.forEach((p) => {
+        try {
+          p.ui.sendData({
+            type: 'game-over',
+            winner: winner,
+            redScore: redScore,
+            blueScore: blueScore,
+            finalMessage: winner === 'TIED' ? "It's a tie!" : `${winner} team wins!`,
+            boxScore: boxScore
+          });
+        } catch (error) {
+          console.error('Error sending test game over to player:', error);
+        }
+      });
+      
+      // Simulate the automatic return to lobby after 10 seconds (like in real endGame)
+      setTimeout(() => {
+        console.log('[ChatCommand] Test game over - returning to lobby after countdown');
+        
+        // Hide game over overlay
+        allPlayers.forEach((p) => {
+          try {
+            p.ui.sendData({ type: 'game-over-hide' });
+            p.ui.sendData({ type: 'timer-stop' });
+          } catch (error) {
+            console.error('Error hiding game over for player:', error);
+          }
+        });
+        
+        // Reset to lobby with team selection
+        HockeyGameManager.instance.resetToLobby();
+      }, 10000);
+      
+      console.log(`[ChatCommand] Test game over sent with actual scores: RED ${redScore} - BLUE ${blueScore}, box score:`, boxScore);
     });
   }
 } 
