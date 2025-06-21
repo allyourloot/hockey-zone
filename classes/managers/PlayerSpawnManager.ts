@@ -133,8 +133,13 @@ export class PlayerSpawnManager {
    * Reset the puck to center ice
    */
   public resetPuckToCenterIce(puckEntity: any): boolean {
-    if (!puckEntity || !puckEntity.isSpawned) {
-      console.warn('[PlayerSpawnManager] Cannot reset puck - puck not found or not spawned');
+    if (!puckEntity) {
+      console.warn('[PlayerSpawnManager] Cannot reset puck - puck entity is null or undefined');
+      return false;
+    }
+    
+    if (!puckEntity.isSpawned) {
+      console.warn('[PlayerSpawnManager] Cannot reset puck - puck not spawned');
       return false;
     }
 

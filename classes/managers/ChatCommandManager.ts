@@ -76,6 +76,7 @@ export class ChatCommandManager {
     this.registerBodyCheckDebugCommand();
     this.registerStickCheckDebugCommand();
     this.registerStatsTestCommands();
+    this.registerPlayerBarrierCommands();
   }
   
   /**
@@ -623,18 +624,19 @@ export class ChatCommandManager {
       const team = args[0]?.toUpperCase();
       
       if (team !== 'RED' && team !== 'BLUE') {
-        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <RED|BLUE>', 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <RED|BLUE> [assist_player_id]', 'FFFF00');
         return;
       }
 
       // Get player's ID for goal attribution
       const scorerId = player.id;
+      const assistId = args[1]; // Optional assist player ID
       
-      this.world!.chatManager.sendPlayerMessage(player, `Simulating ${team} goal by ${player.username}...`, '00FF00');
-      console.log(`[ChatCommand] Test goal simulated: ${team} by ${player.username} (${player.id})`);
+      this.world!.chatManager.sendPlayerMessage(player, `Simulating ${team} goal by ${player.username}${assistId ? ` (assist: ${assistId})` : ''}...`, '00FF00');
+      console.log(`[ChatCommand] Test goal simulated: ${team} by ${player.username} (${player.id})${assistId ? ` with assist from ${assistId}` : ''}`);
       
       // Trigger goal with proper attribution
-      HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId);
+      HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId, assistId);
     });
 
     // /teststats - Add fake stats for testing
@@ -809,6 +811,109 @@ export class ChatCommandManager {
       }, 10000);
       
       console.log(`[ChatCommand] Test game over sent with actual scores: RED ${redScore} - BLUE ${blueScore}, box score:`, boxScore);
+    });
+  }
+
+  /**
+   * Register player barrier debug commands
+   */
+  private registerPlayerBarrierCommands(): void {
+    if (!this.world) return;
+
+    // /barrierinfo - Show barrier status and debug information
+    this.world.chatManager.registerCommand('/barrierinfo', (player) => {
+      const { PlayerBarrierService } = require('../services/PlayerBarrierService');
+      const debugInfo = PlayerBarrierService.instance.getDebugInfo();
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Barriers Active: ${debugInfo.isActive ? 'YES' : 'NO'}`, 
+        debugInfo.isActive ? '00FF00' : 'FF0000'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Red Barrier: ${debugInfo.redBarrierSpawned ? 'SPAWNED' : 'NOT SPAWNED'}`, 
+        debugInfo.redBarrierSpawned ? '00FF00' : 'FF0000'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Blue Barrier: ${debugInfo.blueBarrierSpawned ? 'SPAWNED' : 'NOT SPAWNED'}`, 
+        debugInfo.blueBarrierSpawned ? '00FF00' : 'FF0000'
+      );
+
+      if (debugInfo.redBarrierPosition) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Red Barrier Position: X=${debugInfo.redBarrierPosition.x.toFixed(2)}, Y=${debugInfo.redBarrierPosition.y.toFixed(2)}, Z=${debugInfo.redBarrierPosition.z.toFixed(2)}`, 
+          'FF4444'
+        );
+      }
+
+      if (debugInfo.blueBarrierPosition) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Blue Barrier Position: X=${debugInfo.blueBarrierPosition.x.toFixed(2)}, Y=${debugInfo.blueBarrierPosition.y.toFixed(2)}, Z=${debugInfo.blueBarrierPosition.z.toFixed(2)}`, 
+          '44AAFF'
+        );
+      }
+
+      console.log('[ChatCommand] Barrier debug info:', debugInfo);
+    });
+
+    // /removebarriers - Remove all goal barriers (for testing)
+    this.world.chatManager.registerCommand('/removebarriers', (player) => {
+      const { PlayerBarrierService } = require('../services/PlayerBarrierService');
+      PlayerBarrierService.instance.removeBarriers();
+      this.world!.chatManager.sendPlayerMessage(player, 'All goal barriers removed!', 'FF0000');
+      console.log('[ChatCommand] Goal barriers removed by', player.id);
+    });
+
+    // /createbarriers - Recreate goal barriers (for testing)
+    this.world.chatManager.registerCommand('/createbarriers', (player) => {
+      const { PlayerBarrierService } = require('../services/PlayerBarrierService');
+      try {
+        PlayerBarrierService.instance.createBarriers(this.world!);
+        this.world!.chatManager.sendPlayerMessage(player, 'Goal barriers recreated!', '00FF00');
+        console.log('[ChatCommand] Goal barriers recreated by', player.id);
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Error creating barriers!', 'FF0000');
+        console.error('[ChatCommand] Error creating barriers:', error);
+      }
+    });
+
+    // /testbarrier - Test barrier collision by trying to teleport player into goal
+    this.world.chatManager.registerCommand('/testbarrier', (player, args) => {
+      const goal = args[0]?.toLowerCase();
+      if (goal !== 'red' && goal !== 'blue') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testbarrier <red|blue>', 'FFFF00');
+        return;
+      }
+
+      const playerEntities = this.world!.entityManager.getPlayerEntitiesByPlayer(player);
+      if (playerEntities.length === 0) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No player entity found!', 'FF0000');
+        return;
+      }
+
+      // Try to teleport player to goal line to test barrier
+      const testPosition = goal === 'red' 
+        ? { x: 0, y: 1.75, z: -31.5 }  // Just behind red goal line
+        : { x: 0, y: 1.75, z: 31.5 };   // Just behind blue goal line
+
+      try {
+        playerEntities[0].setPosition(testPosition);
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Teleported to ${goal} goal line to test barrier!`, 
+          goal === 'red' ? 'FF4444' : '44AAFF'
+        );
+        console.log(`[ChatCommand] Player ${player.id} teleported to ${goal} goal for barrier test`);
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Error teleporting player!', 'FF0000');
+        console.error('[ChatCommand] Error teleporting player for barrier test:', error);
+      }
     });
   }
 } 

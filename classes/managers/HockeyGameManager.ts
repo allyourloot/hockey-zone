@@ -129,18 +129,26 @@ export class HockeyGameManager {
     this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
   }
 
-  public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false, scorerId?: string, assistId?: string) {
+  public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false, scorerId?: string, primaryAssistId?: string) {
     if (this._state === HockeyGameState.GOAL_SCORED) return;
     this._scores[team]++;
     
     // Record goal in stats if we have scorer info
     if (scorerId) {
       console.log(`[HockeyGameManager] Recording goal for scorer: ${scorerId}, team: ${team}, period: ${this._period}`);
-      PlayerStatsManager.instance.recordGoal(scorerId, assistId, team, this._period, isOwnGoal);
+      if (primaryAssistId) {
+        console.log(`[HockeyGameManager] Recording primary assist for: ${primaryAssistId}`);
+      }
+      PlayerStatsManager.instance.recordGoal(scorerId, primaryAssistId, team, this._period, isOwnGoal);
       
       // Debug: Log current stats after goal
       const scorerStats = PlayerStatsManager.instance.getPlayerStats(scorerId);
       console.log(`[HockeyGameManager] Scorer stats after goal:`, scorerStats);
+      
+      if (primaryAssistId) {
+        const assistStats = PlayerStatsManager.instance.getPlayerStats(primaryAssistId);
+        console.log(`[HockeyGameManager] Primary assist stats after goal:`, assistStats);
+      }
     } else {
       console.log(`[HockeyGameManager] No scorer ID provided for goal - stats not recorded`);
     }
@@ -424,12 +432,16 @@ export class HockeyGameManager {
     // Reset all players to spawn positions and puck to center ice
     // We'll use the existing PlayerSpawnManager system
     const { PlayerSpawnManager } = require('./PlayerSpawnManager');
+    const { ChatCommandManager } = require('./ChatCommandManager');
     
-    // Perform the reset with valid teams
+    // Get the actual puck entity for reset
+    const puckEntity = ChatCommandManager.instance.getPuck();
+    
+    // Perform the reset with valid teams and actual puck entity
     PlayerSpawnManager.instance.performCompleteReset(
       this.getValidTeamsForReset(),
       this._playerIdToPlayer,
-      null // Puck will be reset by spawn manager
+      puckEntity
     );
     
     // Broadcast score reset to all players
@@ -708,6 +720,18 @@ export class HockeyGameManager {
       if (playerManager) {
         playerManager.resetAllPlayersToLobby();
       }
+    }
+    
+    // Reset the puck to center ice (important for lobby state)
+    const { ChatCommandManager } = require('./ChatCommandManager');
+    const { PlayerSpawnManager } = require('./PlayerSpawnManager');
+    const puckEntity = ChatCommandManager.instance.getPuck();
+    
+    if (puckEntity) {
+      PlayerSpawnManager.instance.resetPuckToCenterIce(puckEntity);
+      console.log('[HockeyGameManager] Puck reset to center ice during lobby reset');
+    } else {
+      console.warn('[HockeyGameManager] Could not reset puck - entity not found');
     }
     
     // Clear all teams and player assignments

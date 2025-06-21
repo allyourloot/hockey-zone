@@ -96,6 +96,12 @@ startServer(world => {
       console.log(`[Main] Goal detected! ${goalResult.scoringTeam} team scored!${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`);
       if (goalResult.lastTouchedBy) {
         console.log(`[Main] Goal scored by player: ${goalResult.lastTouchedBy}`);
+        if (goalResult.primaryAssist) {
+          console.log(`[Main] Primary assist by player: ${goalResult.primaryAssist}`);
+        }
+        if (goalResult.secondaryAssist) {
+          console.log(`[Main] Secondary assist by player: ${goalResult.secondaryAssist}`);
+        }
       } else {
         console.log(`[Main] WARNING: Goal scored but no lastTouchedBy information!`);
         // Debug: Check puck custom properties
@@ -112,7 +118,8 @@ startServer(world => {
         goalResult.scoringTeam, 
         puckRef.current, 
         goalResult.isOwnGoal, 
-        goalResult.lastTouchedBy  // Pass the scorer ID
+        goalResult.lastTouchedBy,  // Pass the scorer ID
+        goalResult.primaryAssist  // Pass the primary assist ID
       );
     }
   }, 50);

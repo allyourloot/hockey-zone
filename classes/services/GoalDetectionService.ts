@@ -1,6 +1,7 @@
 import { Entity, Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyGameState } from '../utils/types';
 import { HockeyGameManager } from '../managers/HockeyGameManager';
+import { IceSkatingController } from '../controllers/IceSkatingController';
 
 /**
  * Goal zone configuration for coordinate-based detection
@@ -75,7 +76,7 @@ export class GoalDetectionService {
    * @param puckEntity - The puck entity to check
    * @returns Object with scoring team and own goal info, or null if no goal
    */
-  public checkForGoal(puckEntity: Entity | null): { scoringTeam: HockeyTeam, isOwnGoal: boolean, lastTouchedBy?: string } | null {
+  public checkForGoal(puckEntity: Entity | null): { scoringTeam: HockeyTeam, isOwnGoal: boolean, lastTouchedBy?: string, primaryAssist?: string, secondaryAssist?: string } | null {
     // Early exit conditions
     if (!this._isActive || !puckEntity || !puckEntity.isSpawned) {
       return null;
@@ -144,7 +145,7 @@ export class GoalDetectionService {
     currPos: Vector3Like, 
     zone: GoalZone,
     puckEntity: Entity
-  ): { scoringTeam: HockeyTeam, isOwnGoal: boolean, lastTouchedBy?: string } | null {
+  ): { scoringTeam: HockeyTeam, isOwnGoal: boolean, lastTouchedBy?: string, primaryAssist?: string, secondaryAssist?: string } | null {
     
     // Check if puck is within goal width (X coordinate)
     if (currPos.x < zone.minX || currPos.x > zone.maxX) {
@@ -160,6 +161,13 @@ export class GoalDetectionService {
     const crossedGoalLine = this.didCrossLine(prevPos.z, currPos.z, zone.goalLineZ);
     
     if (crossedGoalLine) {
+      // Check if puck is currently being controlled by a player (carried into goal)
+      const isControlledByPlayer = this.isPuckControlledByPlayer(puckEntity);
+      if (isControlledByPlayer) {
+        console.log(`[GoalDetectionService] Goal DENIED - puck is being carried by player (not a valid shot)`);
+        return null; // Don't allow goals when puck is being carried into the goal
+      }
+      
       // Determine which team scored based on which goal was crossed
       let scoringTeam: HockeyTeam;
       if (zone.team === HockeyTeam.BLUE) {
@@ -174,10 +182,15 @@ export class GoalDetectionService {
       const lastTouchedBy = this.getLastPlayerToTouchPuck(puckEntity);
       const isOwnGoal = this.isOwnGoal(lastTouchedBy, scoringTeam);
       
+      // Get assist information from touch history
+      const assistInfo = this.getAssistInfo(puckEntity, lastTouchedBy, scoringTeam, isOwnGoal);
+      
       return {
         scoringTeam,
         isOwnGoal,
-        lastTouchedBy
+        lastTouchedBy,
+        primaryAssist: assistInfo.primaryAssist,
+        secondaryAssist: assistInfo.secondaryAssist
       };
     }
 
@@ -218,6 +231,23 @@ export class GoalDetectionService {
   }
 
   /**
+   * Check if the puck is currently being controlled/carried by a player
+   */
+  private isPuckControlledByPlayer(puckEntity: Entity): boolean {
+    try {
+      // Check if there's a global puck controller
+      const globalController = IceSkatingController._globalPuckController;
+      const isControlled = globalController !== null && globalController !== undefined;
+      
+      console.log(`[GoalDetectionService] isPuckControlledByPlayer: ${isControlled} (global controller: ${globalController ? 'exists' : 'none'})`);
+      return isControlled;
+    } catch (error) {
+      console.warn('[GoalDetectionService] Could not check puck controller:', error);
+      return false; // If we can't check, assume it's not controlled
+    }
+  }
+
+  /**
    * Get the last player to touch the puck (from custom properties)
    */
   private getLastPlayerToTouchPuck(puckEntity: Entity): string | undefined {
@@ -237,6 +267,7 @@ export class GoalDetectionService {
    */
   private isOwnGoal(lastTouchedPlayerId: string | undefined, scoringTeam: HockeyTeam): boolean {
     if (!lastTouchedPlayerId) {
+      console.log(`[GoalDetectionService] No last touched player - not an own goal`);
       return false; // Can't determine own goal without knowing who touched it
     }
 
@@ -245,10 +276,71 @@ export class GoalDetectionService {
     const playerTeamInfo = gameManager.getTeamAndPosition(lastTouchedPlayerId);
     
     if (!playerTeamInfo) {
+      console.log(`[GoalDetectionService] Player ${lastTouchedPlayerId} not found in teams - not an own goal`);
       return false; // Player not found in teams
     }
 
-    // It's an own goal if the player who last touched the puck is on the same team that's scoring
-    return playerTeamInfo.team === scoringTeam;
+    // It's an own goal if the player who last touched the puck is on the OPPOSITE team from the one scoring
+    // (i.e., they scored against their own team)
+    const isOwnGoal = playerTeamInfo.team !== scoringTeam;
+    console.log(`[GoalDetectionService] Own goal check: player ${lastTouchedPlayerId} (${playerTeamInfo.team}) vs scoring team (${scoringTeam}) = ${isOwnGoal ? 'OWN GOAL' : 'NORMAL GOAL'}`);
+    return isOwnGoal;
+  }
+
+  /**
+   * Get assist information from puck touch history
+   */
+  private getAssistInfo(puckEntity: Entity, scorerId: string | undefined, scoringTeam: HockeyTeam, isOwnGoal: boolean): { primaryAssist?: string, secondaryAssist?: string } {
+    try {
+      const customProps = (puckEntity as any).customProperties;
+      if (!customProps || !scorerId) {
+        return {};
+      }
+
+      const touchHistory = customProps.get('touchHistory') || [];
+      console.log(`[GoalDetectionService] Touch history for assists: ${JSON.stringify(touchHistory)}`);
+
+      if (touchHistory.length < 2) {
+        console.log(`[GoalDetectionService] Not enough touch history for assists`);
+        return {}; // Need at least 2 players (scorer + 1 assist)
+      }
+
+      const gameManager = HockeyGameManager.instance;
+      const scorerTeamInfo = gameManager.getTeamAndPosition(scorerId);
+      
+      if (!scorerTeamInfo) {
+        return {};
+      }
+
+      // For own goals, no assists are awarded
+      if (isOwnGoal) {
+        console.log(`[GoalDetectionService] Own goal - no assists awarded`);
+        return {};
+      }
+
+      const assists: string[] = [];
+      
+      // Check each player in touch history (excluding the scorer who is at index 0)
+      for (let i = 1; i < Math.min(touchHistory.length, 3); i++) {
+        const playerId = touchHistory[i];
+        const playerTeamInfo = gameManager.getTeamAndPosition(playerId);
+        
+        // Only award assists to players on the same team as the scorer
+        if (playerTeamInfo && playerTeamInfo.team === scorerTeamInfo.team) {
+          assists.push(playerId);
+          console.log(`[GoalDetectionService] Assist awarded to ${playerId} (${playerTeamInfo.team} team)`);
+        } else {
+          console.log(`[GoalDetectionService] No assist for ${playerId} - different team or not found`);
+        }
+      }
+
+      return {
+        primaryAssist: assists[0],
+        secondaryAssist: assists[1]
+      };
+    } catch (error) {
+      console.warn('[GoalDetectionService] Could not get assist info:', error);
+      return {};
+    }
   }
 } 

@@ -15,6 +15,7 @@ import {
 import type { World } from 'hytopia';
 import worldMap from '../../assets/maps/hockey-zone.json';
 import * as CONSTANTS from '../utils/constants';
+import { PlayerBarrierService } from '../services/PlayerBarrierService';
 
 export class WorldInitializer {
   private static _instance: WorldInitializer | null = null;
@@ -50,6 +51,9 @@ export class WorldInitializer {
     
     // Create hockey goals
     this.createHockeyGoals();
+    
+    // Create player barriers to prevent goal entry
+    this.createPlayerBarriers();
     
     console.log('WorldInitializer: World initialization complete');
   }
@@ -126,6 +130,24 @@ export class WorldInitializer {
     } catch (error) {
       console.error('WorldInitializer: Failed to create hockey goals:', error);
       throw new Error('Failed to create hockey goals');
+    }
+  }
+
+  /**
+   * Create invisible barriers to prevent players from entering goal areas
+   */
+  private createPlayerBarriers(): void {
+    if (!this.world) {
+      console.error('WorldInitializer: Cannot create barriers - world not initialized');
+      return;
+    }
+
+    try {
+      PlayerBarrierService.instance.createBarriers(this.world);
+      console.log('WorldInitializer: Player barriers created successfully');
+    } catch (error) {
+      console.error('WorldInitializer: Failed to create player barriers:', error);
+      throw new Error('Failed to create player barriers');
     }
   }
   
@@ -258,7 +280,10 @@ export class WorldInitializer {
             bouncinessCombineRule: CoefficientCombineRule.Max,
             collisionGroups: {
               belongsTo: [CollisionGroup.ENTITY],
+              // Pucks collide with blocks and entities, but NOT with player barriers
+              // This allows pucks to pass through goal barriers while players are blocked
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+              // Note: PLAYER_BARRIER group is intentionally excluded from collidesWith
             }
           }
         ]
@@ -268,6 +293,8 @@ export class WorldInitializer {
     // Initialize custom properties for tracking player interactions
     try {
       (puck as any).customProperties = new Map();
+      (puck as any).customProperties.set('touchHistory', []);
+      (puck as any).customProperties.set('lastTouchedBy', null);
       console.log('[WorldInitializer] Puck created with custom properties support');
     } catch (error) {
       console.warn('[WorldInitializer] Could not initialize puck custom properties:', error);

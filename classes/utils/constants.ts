@@ -268,6 +268,34 @@ export const PUCK_TRAIL = {
 } as const;
 
 // =========================
+// COLLISION GROUPS
+// =========================
+export const COLLISION_GROUPS = {
+  // Custom collision group for player barriers (value between 1-127)
+  PLAYER_BARRIER: 64,
+} as const;
+
+// =========================
+// PLAYER BARRIER CONSTANTS
+// =========================
+export const PLAYER_BARRIERS = {
+  // Barrier dimensions
+  HALF_EXTENTS: {
+    x: 1.5,  // Slightly wider than goal width (goal is -1.17 to 1.16)
+    y: 1.0,  // Tall enough to block players (2 meters total height)
+    z: 0.1   // Thin barrier
+  },
+  
+  // Barrier positions (same as goal lines)
+  RED_GOAL_Z: -31.285,  // Same as red goal line
+  BLUE_GOAL_Z: 31.26,   // Same as blue goal line
+  
+  // Physics properties
+  FRICTION: 0.0,
+  BOUNCINESS: 0.0,
+} as const;
+
+// =========================
 // SPAWN POSITIONS
 // =========================
 export const SPAWN_POSITIONS = {
