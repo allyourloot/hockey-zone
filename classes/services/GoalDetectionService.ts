@@ -28,15 +28,15 @@ export class GoalDetectionService {
   // Goal zones based on your measured coordinates
   private readonly GOAL_ZONES: Record<string, GoalZone> = {
     BLUE: {
-      minX: -1.17,
-      maxX: 1.16,
+      minX: -1.3,
+      maxX: 1.3,
       goalLineZ: 31.26, // Average of front posts: (31.21 + 31.31) / 2
       team: HockeyTeam.BLUE,
       name: 'Blue Goal'
     },
     RED: {
-      minX: -1.17,
-      maxX: 1.16,
+      minX: -1.3,
+      maxX: 1.3,
       goalLineZ: -31.285, // Average of front posts: (-31.29 + -31.28) / 2
       team: HockeyTeam.RED,
       name: 'Red Goal'

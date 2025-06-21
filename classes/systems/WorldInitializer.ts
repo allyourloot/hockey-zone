@@ -95,7 +95,7 @@ export class WorldInitializer {
     
     try {
       // Create red team goal
-      this.redGoal = this.createGoalEntity();
+      this.redGoal = this.createGoalEntity('models/structures/hockey-goal.gltf');
       this.redGoal.spawn(
         this.world, 
         CONSTANTS.SPAWN_POSITIONS.RED_GOAL, 
@@ -110,8 +110,8 @@ export class WorldInitializer {
       });
       redGoalLabelUI.load(this.world);
       
-      // Create blue team goal
-      this.blueGoal = this.createGoalEntity();
+      // Create blue team goal with custom model
+      this.blueGoal = this.createGoalEntity('models/structures/hockey-goal-blue.gltf');
       this.blueGoal.spawn(
         this.world, 
         CONSTANTS.SPAWN_POSITIONS.BLUE_GOAL, 
@@ -153,11 +153,12 @@ export class WorldInitializer {
   
   /**
    * Create a hockey goal entity with all colliders
+   * @param modelUri The model URI to use for the goal
    * @returns The goal entity with proper physics setup
    */
-  private createGoalEntity(): Entity {
+  private createGoalEntity(modelUri: string): Entity {
     return new Entity({
-      modelUri: 'models/structures/hockey-goal.gltf',
+      modelUri: modelUri,
       modelScale: 0.5,
       rigidBodyOptions: {
         type: RigidBodyType.FIXED,

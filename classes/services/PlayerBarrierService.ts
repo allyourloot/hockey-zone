@@ -23,19 +23,20 @@ export class PlayerBarrierService {
   private _world: any = null;
   private _monitoringInterval: NodeJS.Timeout | null = null;
   private _lastPushTime: Map<string, number> = new Map(); // Track last push time per player
+  private _persistentAttempts: Map<string, { count: number, firstAttempt: number, lastAttempt: number }> = new Map(); // Track persistent barrier breaking attempts
   
   // Goal zones based on the same coordinates as GoalDetectionService
   private readonly GOAL_ZONES: Record<string, GoalZone> = {
     BLUE: {
-      minX: -1.17,
-      maxX: 1.16,
+      minX: -1.3,
+      maxX: 1.3,
       goalLineZ: 31.26, // Blue goal line
       team: HockeyTeam.BLUE,
       name: 'Blue Goal'
     },
     RED: {
-      minX: -1.17,
-      maxX: 1.16,
+      minX: -1.3,
+      maxX: 1.3,
       goalLineZ: -31.285, // Red goal line
       team: HockeyTeam.RED,
       name: 'Red Goal'
@@ -174,6 +175,7 @@ export class PlayerBarrierService {
 
   /**
    * Create an invisible wall effect by blocking movement toward the goal
+   * Now includes persistence detection to prevent barrier breaking through repeated attempts
    */
   private blockPlayerMovement(playerEntity: Entity, zone: GoalZone): void {
     try {
@@ -181,12 +183,41 @@ export class PlayerBarrierService {
       const currentTime = Date.now();
       const lastBlockTime = this._lastPushTime.get(playerId) || 0;
       
-      // More responsive blocking for high-speed players
+      // Track persistent attempts to break through barrier
+      let persistenceInfo = this._persistentAttempts.get(playerId);
+      if (!persistenceInfo) {
+        persistenceInfo = { count: 0, firstAttempt: currentTime, lastAttempt: currentTime };
+        this._persistentAttempts.set(playerId, persistenceInfo);
+      }
+      
+      // Update persistence tracking
+      const timeSinceFirstAttempt = currentTime - persistenceInfo.firstAttempt;
+      const timeSinceLastAttempt = currentTime - persistenceInfo.lastAttempt;
+      
+      // Reset persistence counter if player has been away for more than 2 seconds
+      if (timeSinceLastAttempt > 2000) {
+        persistenceInfo.count = 0;
+        persistenceInfo.firstAttempt = currentTime;
+      }
+      
+      persistenceInfo.lastAttempt = currentTime;
+      persistenceInfo.count++;
+      
+      // Calculate persistence level (how aggressively they've been trying to break through)
+      const persistenceLevel = Math.min(5, Math.floor(timeSinceFirstAttempt / 1000)); // 0-5 based on seconds of persistence
+      const isPersistent = persistenceLevel >= 2; // Persistent after 2+ seconds of attempts
+      
+      // More responsive blocking for high-speed players and persistent attempts
       const velocity = playerEntity.velocity;
       const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
       
-      // Reduce cooldown for high-speed players
-      const cooldown = speed > 10 ? 10 : 25; // 10ms for fast players, 25ms for normal
+      // Dramatically reduce cooldown for persistent attempts, eliminate it entirely for very persistent ones
+      let cooldown = 25; // Default cooldown
+      if (isPersistent) {
+        cooldown = persistenceLevel >= 4 ? 0 : 5; // No cooldown for very persistent (4+ seconds), minimal for moderately persistent
+      } else if (speed > 10) {
+        cooldown = 10; // High speed players get reduced cooldown
+      }
       
       if (currentTime - lastBlockTime < cooldown) {
         return;
@@ -197,13 +228,16 @@ export class PlayerBarrierService {
       // Get current position
       const position = playerEntity.position;
       
-      // Determine safe position based on goal zone and player speed
+      // Determine safe position based on goal zone, player speed, and persistence level
       let safeZ: number;
       let shouldTeleport = false;
       
-      // For high-speed players, teleport them further back and trigger earlier
-      const teleportThreshold = speed > 10 ? 1.2 : 0.8; // Earlier teleport for fast players
-      const safeDistance = speed > 10 ? 2.0 : 1.5; // Further back for fast players
+      // For persistent attempts, be much more aggressive with teleportation
+      const baseTeleportThreshold = speed > 10 ? 1.2 : 0.8;
+      const teleportThreshold = isPersistent ? baseTeleportThreshold + (persistenceLevel * 0.3) : baseTeleportThreshold;
+      
+      const baseSafeDistance = speed > 10 ? 2.0 : 1.5;
+      const safeDistance = isPersistent ? baseSafeDistance + (persistenceLevel * 0.5) : baseSafeDistance;
       
       if (zone.team === HockeyTeam.BLUE) {
         // Blue goal at Z=31.26 - keep player at safe distance
@@ -215,8 +249,8 @@ export class PlayerBarrierService {
         shouldTeleport = position.z < (zone.goalLineZ + teleportThreshold);
       }
       
-      if (shouldTeleport) {
-        // Player got too close - teleport them back to safe position
+      if (shouldTeleport || isPersistent) {
+        // For persistent attempts or close approaches, always teleport
         const safePosition = {
           x: position.x,
           y: position.y,
@@ -225,17 +259,28 @@ export class PlayerBarrierService {
         
         playerEntity.setPosition(safePosition);
         
-        // Also stop their velocity to prevent continued movement
+        // Apply stronger counter-force for persistent attempts
+        const baseForce = zone.team === HockeyTeam.BLUE ? -5.0 : 5.0;
+        const persistenceMultiplier = isPersistent ? (1.5 + persistenceLevel * 0.5) : 1.0;
+        const counterForce = baseForce * persistenceMultiplier;
+        
+        // Always stop velocity and apply counter-impulse for persistent attempts
         try {
           playerEntity.setVelocity({ x: 0, y: 0, z: 0 });
+          
+          // Apply additional counter-impulse for persistent attempts
+          if (isPersistent) {
+            const mass = playerEntity.mass || 1.0;
+            playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
+          }
         } catch (velocityError) {
-          // If velocity setting fails, try applying an impulse in the opposite direction
-          const pushForce = zone.team === HockeyTeam.BLUE ? -5.0 : 5.0;
+          // If velocity setting fails, apply stronger impulse for persistent attempts
           const mass = playerEntity.mass || 1.0;
-          playerEntity.applyImpulse({ x: 0, y: 0, z: pushForce * mass });
+          playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
         }
         
-        console.log(`[PlayerBarrierService] Teleported player ${playerId} away from ${zone.name} to safe position Z=${safeZ.toFixed(2)}`);
+        const persistenceMsg = isPersistent ? ` (PERSISTENT ATTEMPT - Level ${persistenceLevel})` : '';
+        console.log(`[PlayerBarrierService] Teleported player ${playerId} away from ${zone.name} to safe position Z=${safeZ.toFixed(2)}${persistenceMsg}`);
       } else {
         // Player is in buffer zone - try to stop their movement toward goal
         try {
