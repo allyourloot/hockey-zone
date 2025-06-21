@@ -933,23 +933,11 @@ export class HockeyGameManager {
       await new Promise(res => setTimeout(res, 1000));
     }
     world.chatManager.sendBroadcastMessage('Go!');
-    // Move all players to their starting positions
-    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
-      for (const pos of Object.values(HockeyPosition)) {
-        const playerId = this._teams[team][pos];
-        if (playerId) {
-          const player = this._playerIdToPlayer.get(playerId);
-          if (player) {
-            // Move their entity if it exists
-            const entities = world.entityManager.getPlayerEntitiesByPlayer(player);
-            for (const entity of entities) {
-              entity.setPosition(this.getStartingPosition(team, pos));
-              entity.setLinearVelocity({ x: 0, y: 0, z: 0 });
-            }
-          }
-        }
-      }
-    }
+    // Move all players to their starting positions using PlayerSpawnManager
+    PlayerSpawnManager.instance.teleportAllPlayersToSpawn(
+      this.getValidTeamsForReset(),
+      this._playerIdToPlayer
+    );
     this.startPeriod();
   }
 

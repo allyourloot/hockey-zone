@@ -1,5 +1,10 @@
-import { World, Player, Vector3Like } from 'hytopia';
+import { World, Player, type Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
+
+interface SpawnData {
+  position: Vector3Like;
+  yaw: number; // Rotation in radians
+}
 
 /**
  * Manages player spawning and positioning for hockey matches
@@ -9,23 +14,60 @@ export class PlayerSpawnManager {
   private static _instance: PlayerSpawnManager;
   private _world: World | null = null;
 
-  // Spawn positions based on your measured coordinates
-  private readonly SPAWN_POSITIONS: Record<HockeyTeam, Record<HockeyPosition, Vector3Like>> = {
+  // Spawn positions and rotations based on your measured coordinates
+  // Red team faces towards positive Z (Blue goal), Blue team faces towards negative Z (Red goal)
+  private readonly SPAWN_POSITIONS: Record<HockeyTeam, Record<HockeyPosition, SpawnData>> = {
     [HockeyTeam.RED]: {
-      [HockeyPosition.GOALIE]: { x: 0, y: 1.75, z: -29 }, // In front of red goal
-      [HockeyPosition.DEFENDER1]: { x: 10.11, y: 1.75, z: -6.21 },
-      [HockeyPosition.DEFENDER2]: { x: -10.11, y: 1.75, z: -6.21 },
-      [HockeyPosition.WINGER1]: { x: 10.11, y: 1.75, z: -0.30 },
-      [HockeyPosition.WINGER2]: { x: -10.11, y: 1.75, z: -0.30 },
-      [HockeyPosition.CENTER]: { x: 0.05, y: 1.75, z: -1.30 }
+      [HockeyPosition.GOALIE]: { 
+        position: { x: 0, y: 1.75, z: -29 }, 
+        yaw: Math.PI // Face towards positive Z (Blue goal) - 180° rotation
+      },
+      [HockeyPosition.DEFENDER1]: { 
+        position: { x: 10.11, y: 1.75, z: -6.21 }, 
+        yaw: Math.PI 
+      },
+      [HockeyPosition.DEFENDER2]: { 
+        position: { x: -10.11, y: 1.75, z: -6.21 }, 
+        yaw: Math.PI 
+      },
+      [HockeyPosition.WINGER1]: { 
+        position: { x: 10.11, y: 1.75, z: -0.30 }, 
+        yaw: Math.PI 
+      },
+      [HockeyPosition.WINGER2]: { 
+        position: { x: -10.11, y: 1.75, z: -0.30 }, 
+        yaw: Math.PI 
+      },
+      [HockeyPosition.CENTER]: { 
+        position: { x: 0.05, y: 1.75, z: -1.30 }, 
+        yaw: Math.PI 
+      }
     },
     [HockeyTeam.BLUE]: {
-      [HockeyPosition.GOALIE]: { x: 0, y: 1.75, z: 29 }, // In front of blue goal
-      [HockeyPosition.DEFENDER1]: { x: -10.11, y: 1.75, z: 8 },
-      [HockeyPosition.DEFENDER2]: { x: 10.11, y: 1.75, z: 8 },
-      [HockeyPosition.WINGER1]: { x: -10.11, y: 1.75, z: 1.76 },
-      [HockeyPosition.WINGER2]: { x: 10.11, y: 1.75, z: 1.76 },
-      [HockeyPosition.CENTER]: { x: 0.05, y: 1.75, z: 3.30 }
+      [HockeyPosition.GOALIE]: { 
+        position: { x: 0, y: 1.75, z: 29 }, 
+        yaw: 0 // Face towards negative Z (Red goal)
+      },
+      [HockeyPosition.DEFENDER1]: { 
+        position: { x: -10.11, y: 1.75, z: 8 }, 
+        yaw: 0 
+      },
+      [HockeyPosition.DEFENDER2]: { 
+        position: { x: 10.11, y: 1.75, z: 8 }, 
+        yaw: 0 
+      },
+      [HockeyPosition.WINGER1]: { 
+        position: { x: -10.11, y: 1.75, z: 1.76 }, 
+        yaw: 0 
+      },
+      [HockeyPosition.WINGER2]: { 
+        position: { x: 10.11, y: 1.75, z: 1.76 }, 
+        yaw: 0 
+      },
+      [HockeyPosition.CENTER]: { 
+        position: { x: 0.05, y: 1.75, z: 3.30 }, 
+        yaw: 0 
+      }
     }
   };
 
@@ -50,11 +92,18 @@ export class PlayerSpawnManager {
    * Get the spawn position for a specific team and position
    */
   public getSpawnPosition(team: HockeyTeam, position: HockeyPosition): Vector3Like {
+    return { ...this.SPAWN_POSITIONS[team][position].position }; // Return a copy of the position
+  }
+
+  /**
+   * Get the spawn data (position and rotation) for a specific team and position
+   */
+  public getSpawnData(team: HockeyTeam, position: HockeyPosition): SpawnData {
     return { ...this.SPAWN_POSITIONS[team][position] }; // Return a copy
   }
 
   /**
-   * Teleport a player to their designated spawn position
+   * Teleport a player to their designated spawn position with correct rotation
    */
   public teleportPlayerToSpawn(player: Player, team: HockeyTeam, position: HockeyPosition): boolean {
     if (!this._world) {
@@ -62,7 +111,7 @@ export class PlayerSpawnManager {
       return false;
     }
 
-    const spawnPosition = this.getSpawnPosition(team, position);
+    const spawnData = this.getSpawnData(team, position);
     const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
 
     if (playerEntities.length === 0) {
@@ -73,11 +122,23 @@ export class PlayerSpawnManager {
     let teleported = false;
     playerEntities.forEach((entity, index) => {
       try {
-        entity.setPosition(spawnPosition);
-        entity.setLinearVelocity({ x: 0, y: 0, z: 0 }); // Stop any movement
-        entity.setAngularVelocity({ x: 0, y: 0, z: 0 }); // Stop any rotation
+        // Set position
+        entity.setPosition(spawnData.position);
         
-        console.log(`[PlayerSpawnManager] Teleported ${player.id} (entity ${index}) to ${team} ${position} at:`, spawnPosition);
+        // Set rotation - convert yaw to quaternion
+        const halfYaw = spawnData.yaw / 2;
+        entity.setRotation({
+          x: 0,
+          y: Math.sin(halfYaw),
+          z: 0,
+          w: Math.cos(halfYaw),
+        });
+        
+        // Stop any movement
+        entity.setLinearVelocity({ x: 0, y: 0, z: 0 });
+        entity.setAngularVelocity({ x: 0, y: 0, z: 0 });
+        
+        console.log(`[PlayerSpawnManager] Teleported ${player.id} (entity ${index}) to ${team} ${position} at:`, spawnData.position, `with rotation: ${spawnData.yaw} radians`);
         teleported = true;
       } catch (error) {
         console.error(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error);
@@ -223,7 +284,16 @@ export class PlayerSpawnManager {
    * Get all spawn positions for debugging
    */
   public getAllSpawnPositions(): Record<HockeyTeam, Record<HockeyPosition, Vector3Like>> {
-    return JSON.parse(JSON.stringify(this.SPAWN_POSITIONS)); // Deep copy
+    const positions: Record<HockeyTeam, Record<HockeyPosition, Vector3Like>> = {} as any;
+    
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      positions[team] = {} as any;
+      for (const position of Object.values(HockeyPosition)) {
+        positions[team][position] = { ...this.SPAWN_POSITIONS[team][position].position };
+      }
+    }
+    
+    return positions;
   }
 
   /**
@@ -232,9 +302,14 @@ export class PlayerSpawnManager {
   public validateSpawnPositions(): boolean {
     for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
       for (const position of Object.values(HockeyPosition)) {
-        const spawnPos = this.SPAWN_POSITIONS[team][position];
-        if (!spawnPos || typeof spawnPos.x !== 'number' || typeof spawnPos.y !== 'number' || typeof spawnPos.z !== 'number') {
-          console.error(`[PlayerSpawnManager] Invalid spawn position for ${team} ${position}:`, spawnPos);
+        const spawnData = this.SPAWN_POSITIONS[team][position];
+        if (!spawnData || 
+            !spawnData.position ||
+            typeof spawnData.position.x !== 'number' || 
+            typeof spawnData.position.y !== 'number' || 
+            typeof spawnData.position.z !== 'number' ||
+            typeof spawnData.yaw !== 'number') {
+          console.error(`[PlayerSpawnManager] Invalid spawn data for ${team} ${position}:`, spawnData);
           return false;
         }
       }

@@ -132,6 +132,15 @@ and also configure additional buttons for mobile compatibility.
       // Hide team selection overlay immediately when position is confirmed
       teamSelectionOverlay.style.display = 'none';
       selectedMsg.textContent = '';
+      
+      // Show Body Check button for Defenders
+      if (selectedPosition === 'DEFENDER1' || selectedPosition === 'DEFENDER2') {
+        const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+        if (bodyCheckIndicator) {
+          bodyCheckIndicator.style.display = 'flex';
+          bodyCheckIndicator.classList.add('disabled'); // Start disabled until targets available
+        }
+      }
     }
     if (data.type === 'show-waiting-overlay') {
       // Hide team selection overlay if it's still visible
@@ -298,27 +307,7 @@ and also configure additional buttons for mobile compatibility.
       if (shotIconGroup) shotIconGroup.classList.toggle('disabled', !hasPuck);
       if (spinMoveIndicator) spinMoveIndicator.classList.toggle('disabled', !hasPuck);
     }
-    if (data.type === 'body-check-available') {
-      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
-      if (bodyCheckIndicator) {
-        if (data.available) {
-          bodyCheckIndicator.classList.remove('disabled');
-          bodyCheckIndicator.style.display = 'flex'; // Show the indicator
-          console.log('UI: Body check enabled - indicator should be visible');
-        } else {
-          bodyCheckIndicator.classList.add('disabled');
-          // Don't hide completely, just disable
-          console.log('UI: Body check disabled');
-        }
-      }
-    }
-    if (data.type === 'set-body-check-visibility') {
-      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
-      if (bodyCheckIndicator) {
-        bodyCheckIndicator.style.display = data.visible ? 'flex' : 'none';
-        console.log('UI: Body check visibility set to:', data.visible);
-      }
-    }
+    // Body Check handlers moved to the last active onData handler
     if (data.type === 'stats-update') {
       // Update statistics data
       updateStatsData(data.statsData);
@@ -594,6 +583,24 @@ and also configure additional buttons for mobile compatibility.
           cancelAnimationFrame(bodyCheckCooldownAnimationFrame);
         }
         bodyCheckCooldownAnimationFrame = requestAnimationFrame(updateBodyCheckCooldownDisplay);
+      }
+    }
+    // Body Check availability handler
+    if (data.type === 'body-check-available') {
+      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+      if (bodyCheckIndicator) {
+        if (data.available) {
+          bodyCheckIndicator.classList.remove('disabled');
+        } else {
+          bodyCheckIndicator.classList.add('disabled');
+        }
+      }
+    }
+    // Body Check visibility handler (kept for compatibility, but now handled in team-position-confirmed)
+    if (data.type === 'set-body-check-visibility') {
+      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+      if (bodyCheckIndicator) {
+        bodyCheckIndicator.style.display = data.visible ? 'flex' : 'none';
       }
     }
   });
@@ -1094,7 +1101,7 @@ and also configure additional buttons for mobile compatibility.
       <div class="skill-input-label">R</div>
       <div class="cooldown-text" id="spin-cooldown-text"></div>
     </div>
-    <div class="body-check-cooldown-indicator disabled" id="body-check-cooldown-indicator">
+    <div class="body-check-cooldown-indicator disabled" id="body-check-cooldown-indicator" style="display: none;">
       <div class="cooldown-overlay"></div>
       <img class="body-check-cooldown-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/body-check-icon.png" alt="Body Check" />
       <div class="skill-input-label">LMB</div>

@@ -337,10 +337,11 @@ export class ChatCommandManager {
       const teamAndPos = gameManager.getTeamAndPosition(player);
       
       if (teamAndPos) {
-        const spawnPos = PlayerSpawnManager.instance.getSpawnPosition(teamAndPos.team, teamAndPos.position);
+        const spawnData = PlayerSpawnManager.instance.getSpawnData(teamAndPos.team, teamAndPos.position);
+        const rotationDegrees = Math.round((spawnData.yaw * 180) / Math.PI);
         this.world!.chatManager.sendPlayerMessage(
           player,
-          `Your spawn: ${teamAndPos.team} ${teamAndPos.position} at X=${spawnPos.x}, Y=${spawnPos.y}, Z=${spawnPos.z}`,
+          `Your spawn: ${teamAndPos.team} ${teamAndPos.position} at X=${spawnData.position.x}, Y=${spawnData.position.y}, Z=${spawnData.position.z}, Rotation=${rotationDegrees}°`,
           teamAndPos.team === 'RED' ? 'FF4444' : '44AAFF'
         );
       } else {
