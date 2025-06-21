@@ -65,10 +65,10 @@ export class PlayerBarrierService {
     this._world = world;
     this._isActive = true;
     
-    // Monitor player positions every 50ms (20 times per second)
+    // Monitor player positions every 16ms (~60 times per second) for high-speed detection
     this._monitoringInterval = setInterval(() => {
       this.checkPlayerPositions();
-    }, 50);
+    }, 16);
     
     console.log('[PlayerBarrierService] Player position monitoring started');
   }
@@ -103,12 +103,13 @@ export class PlayerBarrierService {
         if (entity.isSpawned) {
           const position = entity.position;
           
-          // Check if player is in any goal zone
+          // Check if player is in any goal zone (with velocity prediction)
           for (const zone of Object.values(this.GOAL_ZONES)) {
-            if (this.isPlayerInGoalZone(position, zone)) {
+            const velocity = entity.velocity;
+            if (this.isPlayerInGoalZone(position, zone, velocity)) {
               // Add more detailed debug info
-              const velocity = entity.velocity;
-              console.log(`[PlayerBarrierService] Player ${entity.id} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}`);
+              const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
+              console.log(`[PlayerBarrierService] Player ${entity.id} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}, speed: ${speed.toFixed(2)}`);
               this.blockPlayerMovement(entity, zone);
             }
           }
@@ -121,8 +122,9 @@ export class PlayerBarrierService {
 
   /**
    * Check if a player is within a goal zone (approaching from center ice side only)
+   * Uses velocity prediction to catch high-speed players before they tunnel through
    */
-  private isPlayerInGoalZone(position: Vector3Like, zone: GoalZone): boolean {
+  private isPlayerInGoalZone(position: Vector3Like, zone: GoalZone, velocity?: Vector3Like): boolean {
     // Check X bounds (goal width)
     if (position.x < zone.minX || position.x > zone.maxX) {
       return false;
@@ -133,9 +135,29 @@ export class PlayerBarrierService {
       return false;
     }
     
-    // Check if player is approaching the goal line from the CENTER ICE side only
-    // Don't block players who are behind the goal (outside the rink)
-    const bufferDistance = 1.2; // 1.2 blocks buffer before goal line
+    // Base buffer distance
+    let bufferDistance = 1.2; // 1.2 blocks buffer before goal line
+    
+    // Velocity-based prediction: if player is moving fast toward goal, extend detection range
+    if (velocity) {
+      const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+      
+      // For high-speed players, increase buffer distance to catch them earlier
+      if (speed > 8) { // High speed threshold (sprinting)
+        // Extend buffer based on speed - up to 2x more distance for very fast players
+        const speedMultiplier = Math.min(2.0, speed / 8);
+        bufferDistance = bufferDistance * speedMultiplier;
+        
+        // Also check if they're moving toward the goal
+        const isMovingTowardGoal = (zone.team === HockeyTeam.BLUE && velocity.z > 0) || 
+                                   (zone.team === HockeyTeam.RED && velocity.z < 0);
+        
+        // If moving very fast toward goal, catch them even earlier
+        if (isMovingTowardGoal && speed > 12) {
+          bufferDistance = bufferDistance * 1.5; // Extra early detection for very fast approach
+        }
+      }
+    }
     
     if (zone.team === HockeyTeam.BLUE) {
       // Blue goal at Z=31.26 - only block players coming from negative Z (center ice)
@@ -159,8 +181,14 @@ export class PlayerBarrierService {
       const currentTime = Date.now();
       const lastBlockTime = this._lastPushTime.get(playerId) || 0;
       
-      // Only apply blocking every 25ms for more responsive blocking
-      if (currentTime - lastBlockTime < 25) {
+      // More responsive blocking for high-speed players
+      const velocity = playerEntity.velocity;
+      const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
+      
+      // Reduce cooldown for high-speed players
+      const cooldown = speed > 10 ? 10 : 25; // 10ms for fast players, 25ms for normal
+      
+      if (currentTime - lastBlockTime < cooldown) {
         return;
       }
       
@@ -169,18 +197,22 @@ export class PlayerBarrierService {
       // Get current position
       const position = playerEntity.position;
       
-      // Determine safe position based on goal zone
+      // Determine safe position based on goal zone and player speed
       let safeZ: number;
       let shouldTeleport = false;
       
+      // For high-speed players, teleport them further back and trigger earlier
+      const teleportThreshold = speed > 10 ? 1.2 : 0.8; // Earlier teleport for fast players
+      const safeDistance = speed > 10 ? 2.0 : 1.5; // Further back for fast players
+      
       if (zone.team === HockeyTeam.BLUE) {
         // Blue goal at Z=31.26 - keep player at safe distance
-        safeZ = zone.goalLineZ - 1.5; // 1.5 blocks before goal line (reduced from 2.5)
-        shouldTeleport = position.z > (zone.goalLineZ - 0.8); // If within 0.8 blocks, teleport back
+        safeZ = zone.goalLineZ - safeDistance;
+        shouldTeleport = position.z > (zone.goalLineZ - teleportThreshold);
       } else {
         // Red goal at Z=-31.285 - keep player at safe distance  
-        safeZ = zone.goalLineZ + 1.5; // 1.5 blocks before goal line (reduced from 2.5)
-        shouldTeleport = position.z < (zone.goalLineZ + 0.8); // If within 0.8 blocks, teleport back
+        safeZ = zone.goalLineZ + safeDistance;
+        shouldTeleport = position.z < (zone.goalLineZ + teleportThreshold);
       }
       
       if (shouldTeleport) {
