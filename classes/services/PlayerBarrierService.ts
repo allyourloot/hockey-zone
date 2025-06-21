@@ -16,6 +16,7 @@ interface GoalZone {
 /**
  * Service to prevent players from entering goal areas using coordinate-based detection
  * Similar to GoalDetectionService but for player position monitoring
+ * Now includes goalie-aware logic for better positioning experience
  */
 export class PlayerBarrierService {
   private static _instance: PlayerBarrierService;
@@ -89,6 +90,309 @@ export class PlayerBarrierService {
   }
 
   /**
+   * Check if a player is a goalie and if they're near their own goal
+   */
+  private getPlayerInfo(playerEntity: Entity): { 
+    isGoalie: boolean, 
+    team: HockeyTeam | null,
+    isAtOwnGoal: (zone: GoalZone) => boolean 
+  } {
+    try {
+      // Import HockeyGameManager dynamically to avoid circular dependencies
+      const { HockeyGameManager } = require('../managers/HockeyGameManager');
+      const gameManager = HockeyGameManager.instance;
+      
+      // Get the actual player ID from the entity's player property
+      const actualPlayerId = playerEntity.player?.id;
+      
+      if (!actualPlayerId) {
+        return { 
+          isGoalie: false, 
+          team: null, 
+          isAtOwnGoal: () => false 
+        };
+      }
+      
+      const teamInfo = gameManager.getTeamAndPosition(actualPlayerId);
+      
+      if (!teamInfo) {
+        return { 
+          isGoalie: false, 
+          team: null, 
+          isAtOwnGoal: () => false 
+        };
+      }
+      
+      const isGoalie = teamInfo.position === 'GOALIE';
+      const playerTeam = teamInfo.team;
+      
+      return {
+        isGoalie,
+        team: playerTeam,
+        isAtOwnGoal: (zone: GoalZone) => zone.team === playerTeam
+      };
+      
+    } catch (error) {
+      console.warn('[PlayerBarrierService] Error getting player info:', error);
+      return { 
+        isGoalie: false, 
+        team: null, 
+        isAtOwnGoal: () => false 
+      };
+    }
+  }
+
+  /**
+   * Check if a player is within a goal zone with goalie-aware logic
+   */
+  private isPlayerInGoalZone(position: Vector3Like, zone: GoalZone, velocity?: Vector3Like, playerEntity?: Entity): boolean {
+    // Check X bounds (goal width)
+    if (position.x < zone.minX || position.x > zone.maxX) {
+      return false;
+    }
+    
+    // Check Y bounds (reasonable height)
+    if (position.y < 0.5 || position.y > 4.0) {
+      return false;
+    }
+    
+    // Get player information for goalie-aware logic
+    const playerInfo = playerEntity ? this.getPlayerInfo(playerEntity) : { isGoalie: false, team: null, isAtOwnGoal: () => false };
+    
+    // Different buffer distances based on player type and goal ownership
+    let bufferDistance: number;
+    
+    if (playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone)) {
+      // Goalies at their own goal: Extremely small buffer - only detect when very close to actual goal line
+      bufferDistance = 0.9; // Match the wall position so detection only happens at the wall
+    } else if (playerInfo.isGoalie && !playerInfo.isAtOwnGoal(zone)) {
+      // Goalies at opponent's goal: Standard buffer (they shouldn't be camping there)
+      bufferDistance = 1.2;
+    } else {
+      // Non-goalies: Standard buffer for all goals
+      bufferDistance = 1.2;
+    }
+    
+    // Velocity-based prediction (completely disabled for goalies at own goal)
+    if (velocity && !(playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone))) {
+      const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
+      
+      // For high-speed players, increase buffer distance to catch them earlier
+      if (speed > 8) {
+        const speedMultiplier = Math.min(2.0, speed / 8);
+        bufferDistance = bufferDistance * speedMultiplier;
+        
+        // Check if they're moving toward the goal
+        const isMovingTowardGoal = (zone.team === HockeyTeam.BLUE && velocity.z > 0) || 
+                                   (zone.team === HockeyTeam.RED && velocity.z < 0);
+        
+        if (isMovingTowardGoal && speed > 12) {
+          bufferDistance = bufferDistance * 1.5;
+        }
+      }
+    }
+    
+    if (zone.team === HockeyTeam.BLUE) {
+      // Blue goal at Z=31.26 - only block players coming from negative Z (center ice)
+      const isApproachingFromCenterIce = position.z >= (zone.goalLineZ - bufferDistance) && position.z <= zone.goalLineZ;
+      return isApproachingFromCenterIce;
+    } else {
+      // Red goal at Z=-31.285 - only block players coming from positive Z (center ice)
+      const isApproachingFromCenterIce = position.z <= (zone.goalLineZ + bufferDistance) && position.z >= zone.goalLineZ;
+      return isApproachingFromCenterIce;
+    }
+  }
+
+  /**
+   * Create an invisible wall effect with goalie-aware blocking
+   */
+  private blockPlayerMovement(playerEntity: Entity, zone: GoalZone): void {
+    try {
+      const playerId = playerEntity.id;
+      const currentTime = Date.now();
+      const lastBlockTime = this._lastPushTime.get(playerId) || 0;
+      
+      // Get player information for goalie-aware logic
+      const playerInfo = this.getPlayerInfo(playerEntity);
+      const isGoalieAtOwnGoal = playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone);
+      
+      // Debug: Log goalie detection
+      if (playerInfo.isGoalie) {
+        console.log(`[PlayerBarrierService] GOALIE DETECTED: Player ${playerId}, isGoalie: ${playerInfo.isGoalie}, team: ${playerInfo.team}, zone.team: ${zone.team}, isAtOwnGoal: ${playerInfo.isAtOwnGoal(zone)}`);
+      }
+      
+      // Special handling for goalies at their own goal - create a gentle "wall" effect
+      if (isGoalieAtOwnGoal) {
+        // For goalies at their own goal, just create a position-based wall with minimal intervention
+        const position = playerEntity.position;
+        const goalLine = zone.goalLineZ;
+        
+        // Define the absolute "do not cross" line - further out from goal line to actually prevent entry
+        const wallPosition = zone.team === HockeyTeam.BLUE ? goalLine - 0.8 : goalLine + 0.8;
+        
+        // Check if goalie has crossed the absolute line
+        const hasCrossedWall = zone.team === HockeyTeam.BLUE 
+          ? position.z > wallPosition 
+          : position.z < wallPosition;
+        
+        if (hasCrossedWall) {
+          // Gentle position correction - just put them right at the wall
+          const correctedPosition = {
+            x: position.x,
+            y: position.y,
+            z: wallPosition
+          };
+          
+          playerEntity.setPosition(correctedPosition);
+          
+          // Stop only the Z velocity component gently
+          try {
+            const velocity = playerEntity.velocity;
+            if (velocity) {
+              playerEntity.setVelocity({
+                x: velocity.x,
+                y: velocity.y,
+                z: 0 // Just stop Z movement, no impulse
+              });
+            }
+          } catch (velocityError) {
+            // If velocity setting fails, do nothing - no impulses for goalies at own goal
+          }
+          
+          console.log(`[PlayerBarrierService] GOALIE WALL: Gently positioned goalie ${playerId} at wall Z=${wallPosition.toFixed(2)} (own ${zone.name})`);
+        }
+        
+        return; // Exit early for goalies at own goal - no further processing
+      }
+      
+      // === STANDARD LOGIC FOR NON-GOALIES OR GOALIES AT OPPONENT GOAL ===
+      
+      // Track persistent attempts
+      let persistenceInfo = this._persistentAttempts.get(playerId);
+      if (!persistenceInfo) {
+        persistenceInfo = { count: 0, firstAttempt: currentTime, lastAttempt: currentTime };
+        this._persistentAttempts.set(playerId, persistenceInfo);
+      }
+      
+      // Update persistence tracking
+      const timeSinceFirstAttempt = currentTime - persistenceInfo.firstAttempt;
+      const timeSinceLastAttempt = currentTime - persistenceInfo.lastAttempt;
+      
+      // Reset persistence counter
+      if (timeSinceLastAttempt > 2000) {
+        persistenceInfo.count = 0;
+        persistenceInfo.firstAttempt = currentTime;
+      }
+      
+      persistenceInfo.lastAttempt = currentTime;
+      persistenceInfo.count++;
+      
+      // Calculate persistence level
+      const persistenceLevel = Math.min(5, Math.floor(timeSinceFirstAttempt / 1000));
+      const isPersistent = persistenceLevel >= 2;
+      
+      // Get current velocity and speed
+      const velocity = playerEntity.velocity;
+      const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
+      
+      // Standard cooldown system
+      let cooldown = 25; // Default cooldown
+      if (isPersistent) {
+        cooldown = persistenceLevel >= 4 ? 0 : 5;
+      } else if (speed > 10) {
+        cooldown = 10;
+      }
+      
+      if (currentTime - lastBlockTime < cooldown) {
+        return;
+      }
+      
+      this._lastPushTime.set(playerId, currentTime);
+      
+      // Get current position and determine safe position
+      const position = playerEntity.position;
+      let safeZ: number;
+      let shouldTeleport = false;
+      
+      // Standard teleport thresholds and safe distances
+      const baseTeleportThreshold = speed > 10 ? 1.2 : 0.8;
+      const teleportThreshold = isPersistent ? baseTeleportThreshold + (persistenceLevel * 0.3) : baseTeleportThreshold;
+      
+      const baseSafeDistance = speed > 10 ? 2.0 : 1.5;
+      const safeDistance = isPersistent ? baseSafeDistance + (persistenceLevel * 0.5) : baseSafeDistance;
+      
+      if (zone.team === HockeyTeam.BLUE) {
+        safeZ = zone.goalLineZ - safeDistance;
+        shouldTeleport = position.z > (zone.goalLineZ - teleportThreshold);
+      } else {
+        safeZ = zone.goalLineZ + safeDistance;
+        shouldTeleport = position.z < (zone.goalLineZ + teleportThreshold);
+      }
+      
+      if (shouldTeleport || isPersistent) {
+        // Standard teleport logic for non-goalies
+        const safePosition = {
+          x: position.x,
+          y: position.y,
+          z: safeZ
+        };
+        
+        playerEntity.setPosition(safePosition);
+        
+        // Apply standard force
+        const baseForce = zone.team === HockeyTeam.BLUE ? -5.0 : 5.0;
+        const forceMultiplier = isPersistent ? (1.5 + persistenceLevel * 0.5) : 1.0;
+        const counterForce = baseForce * forceMultiplier;
+        
+        // Apply velocity changes and impulses
+        try {
+          playerEntity.setVelocity({ x: 0, y: 0, z: 0 });
+          const mass = playerEntity.mass || 1.0;
+          playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
+        } catch (velocityError) {
+          const mass = playerEntity.mass || 1.0;
+          playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
+        }
+        
+        const persistenceMsg = isPersistent ? ` (PERSISTENT - Level ${persistenceLevel})` : '';
+        console.log(`[PlayerBarrierService] Moved player ${playerId} away from ${zone.name} to Z=${safeZ.toFixed(2)}${persistenceMsg}`);
+      } else {
+        // Player is in buffer zone - standard velocity stopping
+        try {
+          const velocity = playerEntity.velocity;
+          if (velocity) {
+            let shouldBlock = false;
+            
+            if (zone.team === HockeyTeam.BLUE && velocity.z > 0.1) {
+              shouldBlock = true;
+            } else if (zone.team === HockeyTeam.RED && velocity.z < -0.1) {
+              shouldBlock = true;
+            }
+            
+            if (shouldBlock) {
+              playerEntity.setVelocity({
+                x: velocity.x,
+                y: velocity.y,
+                z: 0
+              });
+              console.log(`[PlayerBarrierService] Stopped Z movement for player ${playerId} in ${zone.name}`);
+            }
+          }
+        } catch (velocityError) {
+          // Fallback: apply counter-impulse
+          const pushForce = zone.team === HockeyTeam.BLUE ? -3.0 : 3.0;
+          const mass = playerEntity.mass || 1.0;
+          playerEntity.applyImpulse({ x: 0, y: 0, z: pushForce * mass });
+          console.log(`[PlayerBarrierService] Applied counter-impulse to player ${playerId} in ${zone.name}`);
+        }
+      }
+      
+    } catch (error) {
+      console.warn('[PlayerBarrierService] Error blocking player movement:', error);
+    }
+  }
+
+  /**
    * Check all player positions and push back any players in goal areas
    */
   private checkPlayerPositions(): void {
@@ -103,14 +407,18 @@ export class PlayerBarrierService {
       for (const entity of playerEntities) {
         if (entity.isSpawned) {
           const position = entity.position;
+          const playerId = entity.id;
           
-          // Check if player is in any goal zone (with velocity prediction)
+          // Check if player is in any goal zone (with velocity prediction and player entity for goalie logic)
           for (const zone of Object.values(this.GOAL_ZONES)) {
             const velocity = entity.velocity;
-            if (this.isPlayerInGoalZone(position, zone, velocity)) {
-              // Add more detailed debug info
+            if (this.isPlayerInGoalZone(position, zone, velocity, entity)) {
+              // Get player info for better logging
+              const playerInfo = this.getPlayerInfo(entity);
+              const goalieNote = playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone) ? ' (GOALIE at own goal)' : '';
               const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
-              console.log(`[PlayerBarrierService] Player ${entity.id} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}, speed: ${speed.toFixed(2)}`);
+              
+              console.log(`[PlayerBarrierService] Player ${playerId} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name}${goalieNote} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}, speed: ${speed.toFixed(2)}`);
               this.blockPlayerMovement(entity, zone);
             }
           }
@@ -118,203 +426,6 @@ export class PlayerBarrierService {
       }
     } catch (error) {
       console.warn('[PlayerBarrierService] Error checking player positions:', error);
-    }
-  }
-
-  /**
-   * Check if a player is within a goal zone (approaching from center ice side only)
-   * Uses velocity prediction to catch high-speed players before they tunnel through
-   */
-  private isPlayerInGoalZone(position: Vector3Like, zone: GoalZone, velocity?: Vector3Like): boolean {
-    // Check X bounds (goal width)
-    if (position.x < zone.minX || position.x > zone.maxX) {
-      return false;
-    }
-    
-    // Check Y bounds (reasonable height)
-    if (position.y < 0.5 || position.y > 4.0) {
-      return false;
-    }
-    
-    // Base buffer distance
-    let bufferDistance = 1.2; // 1.2 blocks buffer before goal line
-    
-    // Velocity-based prediction: if player is moving fast toward goal, extend detection range
-    if (velocity) {
-      const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-      
-      // For high-speed players, increase buffer distance to catch them earlier
-      if (speed > 8) { // High speed threshold (sprinting)
-        // Extend buffer based on speed - up to 2x more distance for very fast players
-        const speedMultiplier = Math.min(2.0, speed / 8);
-        bufferDistance = bufferDistance * speedMultiplier;
-        
-        // Also check if they're moving toward the goal
-        const isMovingTowardGoal = (zone.team === HockeyTeam.BLUE && velocity.z > 0) || 
-                                   (zone.team === HockeyTeam.RED && velocity.z < 0);
-        
-        // If moving very fast toward goal, catch them even earlier
-        if (isMovingTowardGoal && speed > 12) {
-          bufferDistance = bufferDistance * 1.5; // Extra early detection for very fast approach
-        }
-      }
-    }
-    
-    if (zone.team === HockeyTeam.BLUE) {
-      // Blue goal at Z=31.26 - only block players coming from negative Z (center ice)
-      // Don't block players who are already past the goal line (behind the goal)
-      const isApproachingFromCenterIce = position.z >= (zone.goalLineZ - bufferDistance) && position.z <= zone.goalLineZ;
-      return isApproachingFromCenterIce;
-    } else {
-      // Red goal at Z=-31.285 - only block players coming from positive Z (center ice)
-      // Don't block players who are already past the goal line (behind the goal)
-      const isApproachingFromCenterIce = position.z <= (zone.goalLineZ + bufferDistance) && position.z >= zone.goalLineZ;
-      return isApproachingFromCenterIce;
-    }
-  }
-
-  /**
-   * Create an invisible wall effect by blocking movement toward the goal
-   * Now includes persistence detection to prevent barrier breaking through repeated attempts
-   */
-  private blockPlayerMovement(playerEntity: Entity, zone: GoalZone): void {
-    try {
-      const playerId = playerEntity.id;
-      const currentTime = Date.now();
-      const lastBlockTime = this._lastPushTime.get(playerId) || 0;
-      
-      // Track persistent attempts to break through barrier
-      let persistenceInfo = this._persistentAttempts.get(playerId);
-      if (!persistenceInfo) {
-        persistenceInfo = { count: 0, firstAttempt: currentTime, lastAttempt: currentTime };
-        this._persistentAttempts.set(playerId, persistenceInfo);
-      }
-      
-      // Update persistence tracking
-      const timeSinceFirstAttempt = currentTime - persistenceInfo.firstAttempt;
-      const timeSinceLastAttempt = currentTime - persistenceInfo.lastAttempt;
-      
-      // Reset persistence counter if player has been away for more than 2 seconds
-      if (timeSinceLastAttempt > 2000) {
-        persistenceInfo.count = 0;
-        persistenceInfo.firstAttempt = currentTime;
-      }
-      
-      persistenceInfo.lastAttempt = currentTime;
-      persistenceInfo.count++;
-      
-      // Calculate persistence level (how aggressively they've been trying to break through)
-      const persistenceLevel = Math.min(5, Math.floor(timeSinceFirstAttempt / 1000)); // 0-5 based on seconds of persistence
-      const isPersistent = persistenceLevel >= 2; // Persistent after 2+ seconds of attempts
-      
-      // More responsive blocking for high-speed players and persistent attempts
-      const velocity = playerEntity.velocity;
-      const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
-      
-      // Dramatically reduce cooldown for persistent attempts, eliminate it entirely for very persistent ones
-      let cooldown = 25; // Default cooldown
-      if (isPersistent) {
-        cooldown = persistenceLevel >= 4 ? 0 : 5; // No cooldown for very persistent (4+ seconds), minimal for moderately persistent
-      } else if (speed > 10) {
-        cooldown = 10; // High speed players get reduced cooldown
-      }
-      
-      if (currentTime - lastBlockTime < cooldown) {
-        return;
-      }
-      
-      this._lastPushTime.set(playerId, currentTime);
-      
-      // Get current position
-      const position = playerEntity.position;
-      
-      // Determine safe position based on goal zone, player speed, and persistence level
-      let safeZ: number;
-      let shouldTeleport = false;
-      
-      // For persistent attempts, be much more aggressive with teleportation
-      const baseTeleportThreshold = speed > 10 ? 1.2 : 0.8;
-      const teleportThreshold = isPersistent ? baseTeleportThreshold + (persistenceLevel * 0.3) : baseTeleportThreshold;
-      
-      const baseSafeDistance = speed > 10 ? 2.0 : 1.5;
-      const safeDistance = isPersistent ? baseSafeDistance + (persistenceLevel * 0.5) : baseSafeDistance;
-      
-      if (zone.team === HockeyTeam.BLUE) {
-        // Blue goal at Z=31.26 - keep player at safe distance
-        safeZ = zone.goalLineZ - safeDistance;
-        shouldTeleport = position.z > (zone.goalLineZ - teleportThreshold);
-      } else {
-        // Red goal at Z=-31.285 - keep player at safe distance  
-        safeZ = zone.goalLineZ + safeDistance;
-        shouldTeleport = position.z < (zone.goalLineZ + teleportThreshold);
-      }
-      
-      if (shouldTeleport || isPersistent) {
-        // For persistent attempts or close approaches, always teleport
-        const safePosition = {
-          x: position.x,
-          y: position.y,
-          z: safeZ
-        };
-        
-        playerEntity.setPosition(safePosition);
-        
-        // Apply stronger counter-force for persistent attempts
-        const baseForce = zone.team === HockeyTeam.BLUE ? -5.0 : 5.0;
-        const persistenceMultiplier = isPersistent ? (1.5 + persistenceLevel * 0.5) : 1.0;
-        const counterForce = baseForce * persistenceMultiplier;
-        
-        // Always stop velocity and apply counter-impulse for persistent attempts
-        try {
-          playerEntity.setVelocity({ x: 0, y: 0, z: 0 });
-          
-          // Apply additional counter-impulse for persistent attempts
-          if (isPersistent) {
-            const mass = playerEntity.mass || 1.0;
-            playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
-          }
-        } catch (velocityError) {
-          // If velocity setting fails, apply stronger impulse for persistent attempts
-          const mass = playerEntity.mass || 1.0;
-          playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
-        }
-        
-        const persistenceMsg = isPersistent ? ` (PERSISTENT ATTEMPT - Level ${persistenceLevel})` : '';
-        console.log(`[PlayerBarrierService] Teleported player ${playerId} away from ${zone.name} to safe position Z=${safeZ.toFixed(2)}${persistenceMsg}`);
-      } else {
-        // Player is in buffer zone - try to stop their movement toward goal
-        try {
-          const velocity = playerEntity.velocity;
-          if (velocity) {
-            let shouldBlock = false;
-            
-            if (zone.team === HockeyTeam.BLUE && velocity.z > 0.1) {
-              shouldBlock = true;
-            } else if (zone.team === HockeyTeam.RED && velocity.z < -0.1) {
-              shouldBlock = true;
-            }
-            
-            if (shouldBlock) {
-              // Stop Z movement only
-              playerEntity.setVelocity({
-                x: velocity.x,
-                y: velocity.y,
-                z: 0
-              });
-              console.log(`[PlayerBarrierService] Stopped Z movement for player ${playerId} in ${zone.name}`);
-            }
-          }
-        } catch (velocityError) {
-          // If velocity methods fail, apply counter-impulse
-          const pushForce = zone.team === HockeyTeam.BLUE ? -3.0 : 3.0;
-          const mass = playerEntity.mass || 1.0;
-          playerEntity.applyImpulse({ x: 0, y: 0, z: pushForce * mass });
-          console.log(`[PlayerBarrierService] Applied counter-impulse to player ${playerId} in ${zone.name}`);
-        }
-      }
-      
-    } catch (error) {
-      console.warn('[PlayerBarrierService] Error blocking player movement:', error);
     }
   }
 

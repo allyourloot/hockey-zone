@@ -181,7 +181,13 @@ export const POSITION_STATS = {
     maxShotForce: 40,
     passingPower: 1.1,
   },
-  // GOALIE uses base stats
+  GOALIE: {
+    runVelocity: 6,
+    walkVelocity: 4,
+    minShotForce: 8,
+    maxShotForce: 15,
+    passingPower: 0.8,
+  },
 } as const;
 
 // =========================
