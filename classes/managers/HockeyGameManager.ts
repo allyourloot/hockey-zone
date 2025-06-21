@@ -924,22 +924,7 @@ export class HockeyGameManager {
     };
   }
 
-  // Start match countdown, then move all players to starting positions and start period
-  public async startMatchCountdown(world: World) {
-    if (this._state === HockeyGameState.MATCH_START) return;
-    this._state = HockeyGameState.MATCH_START;
-    for (let i = 5; i > 0; i--) {
-      world.chatManager.sendBroadcastMessage(`Match starting in ${i}...`);
-      await new Promise(res => setTimeout(res, 1000));
-    }
-    world.chatManager.sendBroadcastMessage('Go!');
-    // Move all players to their starting positions using PlayerSpawnManager
-    PlayerSpawnManager.instance.teleportAllPlayersToSpawn(
-      this.getValidTeamsForReset(),
-      this._playerIdToPlayer
-    );
-    this.startPeriod();
-  }
+  // Removed old startMatchCountdown - replaced with startMatchSequence() which has proper countdown UI
 
   // Mark a player as locked in
   public lockInPlayer(player: Player) {
@@ -971,6 +956,10 @@ export class HockeyGameManager {
 
   public get state(): HockeyGameState {
     return this._state;
+  }
+
+  public get scores(): Record<HockeyTeam, number> {
+    return this._scores;
   }
 
   // --- Movement Lock System Removed ---
