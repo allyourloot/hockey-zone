@@ -11,6 +11,7 @@ import type {
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { AudioManager } from './AudioManager';
 import { PlayerStatsManager } from './PlayerStatsManager';
+import * as CONSTANTS from '../utils/constants';
 
 export class HockeyGameManager {
   private static _instance: HockeyGameManager;
@@ -236,7 +237,7 @@ export class HockeyGameManager {
       // Start countdown immediately after reset
       this.startResumeCountdown();
       
-    }, 3000); // 3s celebration before reset
+    }, 6000); // 6s celebration before reset
   }
 
   /**
@@ -261,7 +262,7 @@ export class HockeyGameManager {
         const entities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
         if (entities.length > 0 && entities[0].world) {
           new Audio({ 
-            uri: 'audio/sfx/hockey/referee-whistle.mp3', 
+            uri: CONSTANTS.AUDIO_PATHS.REFEREE_WHISTLE, 
             volume: 0.6, 
             attachedToEntity: entities[0] 
           }).play(entities[0].world, true);
@@ -272,6 +273,41 @@ export class HockeyGameManager {
     });
     
     console.log('[HockeyGameManager] Referee whistle played for all players');
+  }
+
+  /**
+   * Play countdown sound effect for all players
+   */
+  private playCountdownSound(): void {
+    if (!this._world) return;
+    
+    // Get all player IDs from teams and convert to Player objects
+    const allPlayerIds = [
+      ...Object.values(this._teams[HockeyTeam.RED]), 
+      ...Object.values(this._teams[HockeyTeam.BLUE])
+    ].filter(Boolean) as string[];
+    
+    const allPlayers = allPlayerIds
+      .map(playerId => this._playerIdToPlayer.get(playerId))
+      .filter(Boolean) as Player[];
+    
+    // Play countdown sound for each player
+    allPlayers.forEach((player) => {
+      try {
+        const entities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
+        if (entities.length > 0 && entities[0].world) {
+          new Audio({ 
+            uri: CONSTANTS.AUDIO_PATHS.COUNTDOWN_SOUND, 
+            volume: 0.5, 
+            attachedToEntity: entities[0] 
+          }).play(entities[0].world, true);
+        }
+      } catch (error) {
+        console.error('Error playing countdown sound for player:', error);
+      }
+    });
+    
+    console.log('[HockeyGameManager] Countdown sound played for all players');
   }
 
   /**
@@ -355,6 +391,11 @@ export class HockeyGameManager {
     
     const countdownInterval = setInterval(() => {
       if (countdown > 0) {
+        // Play countdown sound effect only once at the start (when countdown is 3)
+        if (countdown === 3) {
+          this.playCountdownSound();
+        }
+        
         // Send countdown update to UI
         this.broadcastToAllPlayers({
           type: 'countdown-update',
@@ -470,6 +511,11 @@ export class HockeyGameManager {
     
     const countdownInterval = setInterval(() => {
       if (countdown > 0) {
+        // Play countdown sound effect only once at the start (when countdown is 3)
+        if (countdown === 3) {
+          this.playCountdownSound();
+        }
+        
         // Send countdown update to UI with game start subtitle
         this.broadcastToAllPlayers({
           type: 'countdown-update',
@@ -634,6 +680,11 @@ export class HockeyGameManager {
     
     const countdownInterval = setInterval(() => {
       if (countdown > 0) {
+        // Play countdown sound effect only once at the start (when countdown is 3)
+        if (countdown === 3) {
+          this.playCountdownSound();
+        }
+        
         // Send countdown update to UI with period start subtitle
         this.broadcastToAllPlayers({
           type: 'countdown-update',

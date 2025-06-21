@@ -303,9 +303,12 @@ and also configure additional buttons for mobile compatibility.
       const passIconGroup = document.getElementById('pass-icon-group');
       const shotIconGroup = document.getElementById('shot-icon-group');
       const spinMoveIndicator = document.getElementById('spin-move-indicator');
+      const stickCheckIconGroup = document.getElementById('stick-check-icon-group');
       if (passIconGroup) passIconGroup.classList.toggle('disabled', !hasPuck);
       if (shotIconGroup) shotIconGroup.classList.toggle('disabled', !hasPuck);
       if (spinMoveIndicator) spinMoveIndicator.classList.toggle('disabled', !hasPuck);
+      // Stick check is enabled when NOT controlling the puck (opposite of pass/shot)
+      if (stickCheckIconGroup) stickCheckIconGroup.classList.toggle('disabled', hasPuck);
     }
     // Body Check handlers moved to the last active onData handler
     if (data.type === 'stats-update') {
@@ -391,6 +394,66 @@ and also configure additional buttons for mobile compatibility.
   // Prevent context menu on right click
   document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
+  });
+
+  // Button Press Visual Effects
+  function applyButtonPressEffect(buttonId, pressed) {
+    const button = document.getElementById(buttonId);
+    if (button) {
+      if (pressed) {
+        button.classList.add('pressed');
+      } else {
+        button.classList.remove('pressed');
+      }
+    }
+  }
+
+  // Mouse button press effects
+  document.addEventListener('mousedown', (e) => {
+    if (e.button === 0) { // Left mouse button
+      // Determine which LMB action is active based on game state
+      const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+      const isBodyCheckVisible = bodyCheckIndicator && bodyCheckIndicator.style.display !== 'none' && !bodyCheckIndicator.classList.contains('disabled');
+      
+      if (isBodyCheckVisible) {
+        applyButtonPressEffect('body-check-cooldown-indicator', true);
+      } else if (hasPuck) {
+        applyButtonPressEffect('pass-icon-group', true);
+      }
+    } else if (e.button === 2) { // Right mouse button
+      if (hasPuck) {
+        applyButtonPressEffect('shot-icon-group', true);
+      } else {
+        applyButtonPressEffect('stick-check-icon-group', true);
+      }
+    }
+  });
+
+  document.addEventListener('mouseup', (e) => {
+    if (e.button === 0) { // Left mouse button
+      applyButtonPressEffect('body-check-cooldown-indicator', false);
+      applyButtonPressEffect('pass-icon-group', false);
+    } else if (e.button === 2) { // Right mouse button
+      applyButtonPressEffect('shot-icon-group', false);
+      applyButtonPressEffect('stick-check-icon-group', false);
+    }
+  });
+
+  // Keyboard press effects
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      applyButtonPressEffect('hockey-stop-indicator', true);
+    } else if (e.code === 'KeyR') {
+      applyButtonPressEffect('spin-move-indicator', true);
+    }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.code === 'Space') {
+      applyButtonPressEffect('hockey-stop-indicator', false);
+    } else if (e.code === 'KeyR') {
+      applyButtonPressEffect('spin-move-indicator', false);
+    }
   });
 
   // Hockey stop cooldown handling
@@ -616,6 +679,39 @@ and also configure additional buttons for mobile compatibility.
   const passIconGroup = document.getElementById('pass-icon-group');
   const shotIconGroup = document.getElementById('shot-icon-group');
 
+  // Set initial UI state - players spawn without puck control
+  function setInitialUIState() {
+    console.log('Setting initial UI state - hasPuck:', hasPuck);
+    const passIconGroup = document.getElementById('pass-icon-group');
+    const shotIconGroup = document.getElementById('shot-icon-group');
+    const spinMoveIndicator = document.getElementById('spin-move-indicator');
+    const stickCheckIconGroup = document.getElementById('stick-check-icon-group');
+    
+    // Initially disable puck-dependent actions (pass, shot, spin move)
+    if (passIconGroup) {
+      passIconGroup.classList.add('disabled');
+      console.log('Pass icon disabled');
+    }
+    if (shotIconGroup) {
+      shotIconGroup.classList.add('disabled');
+      console.log('Shot icon disabled');
+    }
+    if (spinMoveIndicator) {
+      spinMoveIndicator.classList.add('disabled');
+      console.log('Spin move disabled');
+    }
+    
+    // Initially enable stick check (since no puck)
+    if (stickCheckIconGroup) {
+      stickCheckIconGroup.classList.remove('disabled');
+      console.log('Stick check enabled');
+    }
+  }
+
+  // Apply initial state immediately and also when DOM is ready
+  setTimeout(setInitialUIState, 100); // Small delay to ensure elements exist
+  document.addEventListener('DOMContentLoaded', setInitialUIState);
+
   // --- SceneUI template for RED GOAL label ---
   hytopia.registerSceneUITemplate('red-goal-label', (id, onState) => {
     const template = document.getElementById('red-goal-label-template');
@@ -645,10 +741,10 @@ and also configure additional buttons for mobile compatibility.
     // Show the overlay
     overlay.style.display = 'flex';
     
-    // Hide after 3 seconds
+    // Hide after 6 seconds
     setTimeout(() => {
       overlay.style.display = 'none';
-    }, 3000);
+    }, 6000);
   }
 
   // Countdown overlay functionality
@@ -1005,7 +1101,6 @@ and also configure additional buttons for mobile compatibility.
         <div class="stat-col">${player.shotsOnGoal}</div>
         <div class="stat-col">${player.saves}</div>
         <div class="stat-col">${plusMinus}</div>
-        <div class="stat-col">${player.hits}</div>
       `;
       
       tableBody.appendChild(row);
@@ -1081,12 +1176,16 @@ and also configure additional buttons for mobile compatibility.
 
   <!-- Skill Bar Row Overlay (bottom right) -->
   <div class="skill-bar-row" id="skill-bar-row">
-    <div class="pass-shot-icon-group" id="pass-icon-group">
+    <div class="pass-shot-icon-group disabled" id="pass-icon-group">
       <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
       <div class="pass-shot-label">LMB</div>
     </div>
-    <div class="pass-shot-icon-group" id="shot-icon-group">
+    <div class="pass-shot-icon-group disabled" id="shot-icon-group">
       <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
+      <div class="pass-shot-label">RMB</div>
+    </div>
+    <div class="pass-shot-icon-group" id="stick-check-icon-group">
+      <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/stick-check-icon.png" alt="Stick Check" />
       <div class="pass-shot-label">RMB</div>
     </div>
     <div class="hockey-stop-indicator" id="hockey-stop-indicator">
@@ -1095,7 +1194,7 @@ and also configure additional buttons for mobile compatibility.
       <div class="skill-input-label">SPACE</div>
       <div class="cooldown-text" id="cooldown-text"></div>
     </div>
-    <div class="spin-move-indicator" id="spin-move-indicator">
+    <div class="spin-move-indicator disabled" id="spin-move-indicator">
       <div class="cooldown-overlay"></div>
       <img class="spin-move-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/spin-icon.png" alt="Spin Move" />
       <div class="skill-input-label">R</div>
@@ -2018,6 +2117,35 @@ and also configure additional buttons for mobile compatibility.
     filter: grayscale(1) brightness(0.6);
     color: #aaa !important;
     opacity: 0.7;
+  }
+
+  /* Button Press Effects */
+  .pass-shot-icon-group.pressed,
+  .hockey-stop-indicator.pressed,
+  .spin-move-indicator.pressed,
+  .body-check-cooldown-indicator.pressed {
+    transform: scale(0.90);
+    box-shadow: 0 1px 6px rgba(0,0,0,0.3);
+    background: rgba(40, 40, 40, 0.98);
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .pass-shot-icon-group.pressed .pass-shot-icon,
+  .hockey-stop-indicator.pressed .hockey-stop-icon,
+  .spin-move-indicator.pressed .spin-move-icon,
+  .body-check-cooldown-indicator.pressed .body-check-cooldown-icon {
+    transform: scale(0.9);
+    filter: brightness(1.2);
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .pass-shot-icon-group.pressed .pass-shot-label,
+  .hockey-stop-indicator.pressed .skill-input-label,
+  .spin-move-indicator.pressed .skill-input-label,
+  .body-check-cooldown-indicator.pressed .skill-input-label {
+    color: #fff !important;
+    text-shadow: 0 0 8px rgba(255,255,255,0.6);
+    transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .body-check-cooldown-indicator.disabled .body-check-cooldown-icon,

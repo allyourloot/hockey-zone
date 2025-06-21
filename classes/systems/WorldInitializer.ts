@@ -13,7 +13,7 @@ import {
   SceneUI
 } from 'hytopia';
 import type { World } from 'hytopia';
-import worldMap from '../../assets/maps/hockey-zone.json';
+import worldMap from '../../assets/maps/hockey-zone-4.json';
 import * as CONSTANTS from '../utils/constants';
 import { PlayerBarrierService } from '../services/PlayerBarrierService';
 

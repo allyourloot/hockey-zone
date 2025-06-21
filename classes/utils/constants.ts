@@ -99,10 +99,10 @@ export const PUCK_SOUND = {
 // STICK CHECK CONSTANTS
 // =========================
 export const STICK_CHECK = {
-  COOLDOWN: 500, // ms (reduced for more responsive checks)
+  COOLDOWN: 1000, // ms (increased to prevent spam)
   RANGE: 2.2, // meters
   ANGLE: Math.PI / 3, // 60 degrees cone
-  INPUT_DEBOUNCE: 250, // ms
+  INPUT_DEBOUNCE: 400, // ms (increased to prevent spam)
 } as const;
 
 // =========================
@@ -122,18 +122,18 @@ export const BODY_CHECK = {
 // =========================
 export const AUDIO = {
   // Ambient sound scheduling
-  MIN_GAP_BETWEEN_SOUNDS: 10000, // 10 seconds
-  CROWD_CHANT_MIN: 40000, // 40s
-  CROWD_CHANT_MAX: 80000, // 80s
-  PERCUSSION_MIN: 30000, // 30s
-  PERCUSSION_MAX: 60000, // 60s
+  MIN_GAP_BETWEEN_SOUNDS: 30000, // 30 seconds
+  CROWD_CHANT_MIN: 20000, // 20s
+  CROWD_CHANT_MAX: 130000, // 130s
+  PERCUSSION_MIN: 50000, // 50s
+  PERCUSSION_MAX: 150000, // 150s
   
   // Background music
   BACKGROUND_MUSIC_VOLUME: 0.05,
   
   // Stomp beat timing
-  STOMP_BEAT_MIN: 25000, // 25s
-  STOMP_BEAT_MAX: 50000, // 50s
+  STOMP_BEAT_MIN: 35000, // 35s
+  STOMP_BEAT_MAX: 90000, // 90s
   
   // Sound effect volumes
   CROWD_CHANT_VOLUME: 0.3,
@@ -209,6 +209,7 @@ export const AUDIO_PATHS = {
   BODY_CHECK: 'audio/sfx/hockey/body-check.mp3',
   WHOOSH: 'audio/sfx/hockey/whoosh.mp3',
   REFEREE_WHISTLE: 'audio/sfx/hockey/referee-whistle.mp3',
+  COUNTDOWN_SOUND: 'audio/sfx/hockey/countdown-sound.mp3',
   
   // Ambient sounds
   CROWD_HEY: 'audio/sfx/hockey/crowd-hey.mp3',
