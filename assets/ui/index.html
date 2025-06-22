@@ -89,44 +89,48 @@ and also configure additional buttons for mobile compatibility.
   // Handle server messages for team/position selection
   hytopia.onData(data => {
     if (data.type === 'team-positions-update') {
-      // Disable taken positions
+      // Disable taken positions (only positions with locked-in players)
       const teams = data.teams;
+      console.log('UI: Received team-positions-update:', teams);
+      
       positionButtons.forEach(btn => {
         const team = btn.getAttribute('data-team');
         const position = btn.getAttribute('data-position');
-        // Try to get playerId from hytopia, fallback to last selected
-        let playerId = (window.hytopia && hytopia.playerId) || null;
-        let isMine = false;
-        if (playerId && teams && teams[team] && teams[team][position]) {
-          isMine = teams[team][position] === playerId;
-        } else if (!playerId && selectedTeam === team && selectedPosition === position && teams && teams[team] && teams[team][position]) {
-          // Fallback: if this is the last selected position, assume it's ours
-          isMine = true;
+        
+        // A position is only "taken" if someone is locked in there
+        // Tentative selections are not sent in this update (only locked-in positions)
+        const positionData = teams && teams[team] && teams[team][position];
+        const taken = !!positionData;
+        
+        // Reset button state first
+        btn.disabled = false;
+        const playerNameEl = btn.querySelector('.player-name');
+        if (playerNameEl) {
+          playerNameEl.textContent = '';
         }
-        let taken = teams && teams[team] && teams[team][position] && !isMine;
-        btn.disabled = taken;
-        if (taken && !isMine) btn.classList.remove('selected');
+        
+        if (taken) {
+          console.log(`UI: Position ${team}-${position} is taken by player ${positionData.playerName} (${positionData.playerId})`);
+          btn.disabled = true;
+          btn.classList.remove('selected');
+          
+          // Show player name
+          if (playerNameEl) {
+            playerNameEl.textContent = positionData.playerName;
+          }
+          
+          // If this was our selected position, clear our selection
+          if (selectedTeam === team && selectedPosition === position) {
+            if (selectedBtn) selectedBtn.classList.remove('selected');
+            selectedBtn = null;
+            selectedTeam = null;
+            selectedPosition = null;
+            lockInBtn.disabled = true;
+            selectedMsg.textContent = '';
+            console.log(`UI: Cleared selection because position ${team}-${position} was taken`);
+          }
+        }
       });
-      // If the selected position was taken by someone else, clear selection and disable lock in
-      if (selectedTeam && selectedPosition && teams[selectedTeam] && teams[selectedTeam][selectedPosition]) {
-        let playerId = (window.hytopia && hytopia.playerId) || null;
-        let isMine = false;
-        if (playerId) {
-          isMine = teams[selectedTeam][selectedPosition] === playerId;
-        } else {
-          isMine = true; // Fallback: assume it's ours if we just selected it
-        }
-        if (!isMine) {
-          if (selectedBtn) selectedBtn.classList.remove('selected');
-          selectedBtn = null;
-          selectedTeam = null;
-          selectedPosition = null;
-          lockInBtn.disabled = true;
-          selectedMsg.textContent = '';
-        } else {
-          lockInBtn.disabled = false;
-        }
-      }
     }
     if (data.type === 'team-position-confirmed') {
       // Hide team selection overlay immediately when position is confirmed
@@ -1060,11 +1064,16 @@ and also configure additional buttons for mobile compatibility.
       selectedMsg.textContent = '';
     }
     
-    // Re-enable all position buttons
+    // Re-enable all position buttons (they'll be properly updated by team-positions-update)
     const positionButtons = document.querySelectorAll('.position-btn');
     positionButtons.forEach(btn => {
       btn.disabled = false;
       btn.classList.remove('selected');
+      // Clear any player names
+      const playerNameEl = btn.querySelector('.player-name');
+      if (playerNameEl) {
+        playerNameEl.textContent = '';
+      }
     });
     
     console.log('UI: Showing team selection overlay with reset state');
@@ -1276,21 +1285,57 @@ and also configure additional buttons for mobile compatibility.
     <div class="teams-container">
       <div class="team-column red-team">
         <div class="team-name">Red</div>
-        <button class="position-btn" data-team="RED" data-position="GOALIE">Goalie</button>
-        <button class="position-btn" data-team="RED" data-position="DEFENDER1">Defender 1</button>
-        <button class="position-btn" data-team="RED" data-position="DEFENDER2">Defender 2</button>
-        <button class="position-btn" data-team="RED" data-position="WINGER1">Winger 1</button>
-        <button class="position-btn" data-team="RED" data-position="WINGER2">Winger 2</button>
-        <button class="position-btn" data-team="RED" data-position="CENTER">Center</button>
+        <button class="position-btn" data-team="RED" data-position="GOALIE">
+          <span class="position-name">Goalie</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="RED" data-position="DEFENDER1">
+          <span class="position-name">Defender 1</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="RED" data-position="DEFENDER2">
+          <span class="position-name">Defender 2</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="RED" data-position="WINGER1">
+          <span class="position-name">Winger 1</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="RED" data-position="WINGER2">
+          <span class="position-name">Winger 2</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="RED" data-position="CENTER">
+          <span class="position-name">Center</span>
+          <div class="player-name"></div>
+        </button>
       </div>
       <div class="team-column blue-team">
         <div class="team-name">Blue</div>
-        <button class="position-btn" data-team="BLUE" data-position="GOALIE">Goalie</button>
-        <button class="position-btn" data-team="BLUE" data-position="DEFENDER1">Defender 1</button>
-        <button class="position-btn" data-team="BLUE" data-position="DEFENDER2">Defender 2</button>
-        <button class="position-btn" data-team="BLUE" data-position="WINGER1">Winger 1</button>
-        <button class="position-btn" data-team="BLUE" data-position="WINGER2">Winger 2</button>
-        <button class="position-btn" data-team="BLUE" data-position="CENTER">Center</button>
+        <button class="position-btn" data-team="BLUE" data-position="GOALIE">
+          <span class="position-name">Goalie</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="BLUE" data-position="DEFENDER1">
+          <span class="position-name">Defender 1</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="BLUE" data-position="DEFENDER2">
+          <span class="position-name">Defender 2</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="BLUE" data-position="WINGER1">
+          <span class="position-name">Winger 1</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="BLUE" data-position="WINGER2">
+          <span class="position-name">Winger 2</span>
+          <div class="player-name"></div>
+        </button>
+        <button class="position-btn" data-team="BLUE" data-position="CENTER">
+          <span class="position-name">Center</span>
+          <div class="player-name"></div>
+        </button>
       </div>
     </div>
     <div id="selected-position-msg" class="selected-position-msg"></div>
@@ -1676,6 +1721,10 @@ and also configure additional buttons for mobile compatibility.
     cursor: pointer;
     transition: background 0.15s, color 0.15s, box-shadow 0.15s;
     box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 44px;
   }
   .position-btn.selected {
     background: #44aaff;
@@ -1691,6 +1740,20 @@ and also configure additional buttons for mobile compatibility.
     color: #bbb;
     cursor: not-allowed;
     opacity: 0.7;
+    position: relative;
+    padding-bottom: 8px; /* Extra space for player name */
+  }
+  .position-btn .player-name {
+    display: none;
+    font-size: 0.65rem;
+    font-weight: 500;
+    color: #999;
+    margin-top: 2px;
+    line-height: 1.2;
+  }
+  .position-btn:disabled .player-name {
+    display: block;
+    color: #aaa;
   }
   .selected-position-msg {
     margin-top: 24px;

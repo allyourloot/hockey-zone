@@ -21,6 +21,8 @@ export class HockeyGameManager {
     [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
     [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
   };
+  // Track tentative selections (before lock-in) separately
+  private _tentativeSelections: Map<string, { team: HockeyTeam, position: HockeyPosition }> = new Map();
   private _scores: Record<HockeyTeam, number> = {
     [HockeyTeam.RED]: 0,
     [HockeyTeam.BLUE]: 0,
@@ -49,6 +51,7 @@ export class HockeyGameManager {
       [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
       [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
     };
+    this._tentativeSelections.clear();
     this._scores = {
       [HockeyTeam.RED]: 0,
       [HockeyTeam.BLUE]: 0,
@@ -745,6 +748,7 @@ export class HockeyGameManager {
       [HockeyTeam.RED]: {},
       [HockeyTeam.BLUE]: {}
     };
+    this._tentativeSelections.clear();
     this._lockedInPlayers.clear();
     
     // Reset scores and period
@@ -847,16 +851,17 @@ export class HockeyGameManager {
 
   // --- Player/Team Management ---
   public assignPlayerToTeam(player: Player, team: HockeyTeam, position: HockeyPosition): boolean {
-    // Prevent duplicate positions
-    if (this._teams[team][position]) return false;
-    this._teams[team][position] = player.id;
+    // Check if position is already locked in by another player
+    if (this._teams[team][position] && this._lockedInPlayers.has(this._teams[team][position])) {
+      return false; // Position is taken by a locked-in player
+    }
+    
+    // Store this as a tentative selection (can be changed until lock-in)
+    this._tentativeSelections.set(player.id, { team, position });
     this._playerIdToPlayer.set(player.id, player);
     
-    // Initialize player stats
-    PlayerStatsManager.instance.initializePlayer(player, team, position);
-    
-    console.log(`[HGM] assignPlayerToTeam: player.id=${player.id}, team=${team}, position=${position}`);
-    console.log('[HGM] Teams after assignment:', JSON.stringify(this._teams));
+    console.log(`[HGM] assignPlayerToTeam (tentative): player.id=${player.id}, team=${team}, position=${position}`);
+    console.log('[HGM] Tentative selections:', Array.from(this._tentativeSelections.entries()));
     return true;
   }
 
@@ -868,6 +873,7 @@ export class HockeyGameManager {
         }
       }
     }
+    this._tentativeSelections.delete(player.id);
     this._lockedInPlayers.delete(player.id);
     this._playerIdToPlayer.delete(player.id);
     
@@ -877,6 +883,8 @@ export class HockeyGameManager {
 
   public getTeamAndPosition(player: Player | string): { team: HockeyTeam, position: HockeyPosition } | undefined {
     const playerId = typeof player === 'string' ? player : player.id;
+    
+    // First check locked-in teams
     for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
       for (const pos of Object.values(HockeyPosition)) {
         if (this._teams[team][pos] === playerId) {
@@ -884,7 +892,58 @@ export class HockeyGameManager {
         }
       }
     }
+    
+    // If not locked in, check tentative selections
+    const tentativeSelection = this._tentativeSelections.get(playerId);
+    if (tentativeSelection) {
+      return tentativeSelection;
+    }
+    
     return undefined;
+  }
+
+  /**
+   * Get teams for UI display - only shows locked-in positions as "taken"
+   */
+  public getTeamsForUI(): Teams {
+    return {
+      [HockeyTeam.RED]: { ...this._teams[HockeyTeam.RED] },
+      [HockeyTeam.BLUE]: { ...this._teams[HockeyTeam.BLUE] }
+    };
+  }
+
+  /**
+   * Get teams with player names for UI display
+   */
+  public getTeamsWithNamesForUI(): Record<HockeyTeam, Record<HockeyPosition, { playerId: string, playerName: string } | undefined>> {
+    const result: Record<HockeyTeam, Record<HockeyPosition, { playerId: string, playerName: string } | undefined>> = {
+      [HockeyTeam.RED]: {} as Record<HockeyPosition, { playerId: string, playerName: string } | undefined>,
+      [HockeyTeam.BLUE]: {} as Record<HockeyPosition, { playerId: string, playerName: string } | undefined>
+    };
+
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const position of Object.values(HockeyPosition)) {
+        const playerId = this._teams[team][position];
+        if (playerId) {
+          const player = this._playerIdToPlayer.get(playerId);
+          result[team][position] = {
+            playerId: playerId,
+            playerName: player ? (player.username || player.id) : playerId // Use player.username, fallback to player.id
+          };
+        } else {
+          result[team][position] = undefined;
+        }
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Check if a player has a tentative selection for a specific team/position
+   */
+  public getTentativeSelection(playerId: string): { team: HockeyTeam, position: HockeyPosition } | undefined {
+    return this._tentativeSelections.get(playerId);
   }
 
   public getPlayerById(id: string): Player | undefined {
@@ -937,8 +996,31 @@ export class HockeyGameManager {
 
   // Mark a player as locked in
   public lockInPlayer(player: Player) {
+    const tentativeSelection = this._tentativeSelections.get(player.id);
+    if (!tentativeSelection) {
+      console.warn(`[HGM] No tentative selection found for player ${player.id}`);
+      return false;
+    }
+    
+    const { team, position } = tentativeSelection;
+    
+    // Check if position is still available
+    if (this._teams[team][position] && this._lockedInPlayers.has(this._teams[team][position])) {
+      console.warn(`[HGM] Position ${team}-${position} already taken by locked-in player`);
+      return false;
+    }
+    
+    // Actually assign to team now that they're locking in
+    this._teams[team][position] = player.id;
     this._lockedInPlayers.add(player.id);
     this._playerIdToPlayer.set(player.id, player);
+    
+    // Initialize player stats now that they're locked in
+    PlayerStatsManager.instance.initializePlayer(player, team, position);
+    
+    console.log(`[HGM] Player ${player.id} locked in to ${team}-${position}`);
+    console.log('[HGM] Teams after lock-in:', JSON.stringify(this._teams));
+    return true;
   }
 
   // Check if all positions are filled and all players are locked in
