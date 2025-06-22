@@ -18,6 +18,7 @@ import type { World } from 'hytopia';
 import worldMap from '../../assets/maps/hockey-zone-ayl.json';
 import * as CONSTANTS from '../utils/constants';
 import { PlayerBarrierService } from '../services/PlayerBarrierService';
+import { AudioManager } from '../managers/AudioManager';
 
 export class WorldInitializer {
   private static _instance: WorldInitializer | null = null;
@@ -43,7 +44,7 @@ export class WorldInitializer {
   public initialize(world: World): void {
     this.world = world;
     
-    console.log('WorldInitializer: Starting world initialization...');
+    CONSTANTS.debugLog('Starting world initialization...', 'WorldInitializer');
     
     // Configure model registry
     this.configureModelRegistry();
@@ -57,7 +58,7 @@ export class WorldInitializer {
     // Create player barriers to prevent goal entry
     this.createPlayerBarriers();
     
-    console.log('WorldInitializer: World initialization complete');
+    CONSTANTS.debugLog('World initialization complete', 'WorldInitializer');
   }
   
   /**
@@ -65,7 +66,7 @@ export class WorldInitializer {
    */
   private configureModelRegistry(): void {
     ModelRegistry.instance.optimize = false;
-    console.log('WorldInitializer: Model registry configured');
+    CONSTANTS.debugLog('Model registry configured', 'WorldInitializer');
   }
   
   /**
@@ -73,15 +74,15 @@ export class WorldInitializer {
    */
   private loadGameMap(): void {
     if (!this.world) {
-      console.error('WorldInitializer: Cannot load map - world not initialized');
+      CONSTANTS.debugError('Cannot load map - world not initialized', undefined, 'WorldInitializer');
       return;
     }
     
     try {
       this.world.loadMap(worldMap);
-      console.log('WorldInitializer: Hockey zone map loaded successfully');
+      CONSTANTS.debugLog('Hockey zone map loaded successfully', 'WorldInitializer');
     } catch (error) {
-      console.error('WorldInitializer: Failed to load map:', error);
+      CONSTANTS.debugError('Failed to load map', error, 'WorldInitializer');
       throw new Error('Failed to load game map');
     }
   }
@@ -128,9 +129,9 @@ export class WorldInitializer {
       });
       blueGoalLabelUI.load(this.world);
       
-      console.log('WorldInitializer: Hockey goals created and positioned');
+      CONSTANTS.debugLog('Hockey goals created and positioned', 'WorldInitializer');
     } catch (error) {
-      console.error('WorldInitializer: Failed to create hockey goals:', error);
+      CONSTANTS.debugError('Failed to create hockey goals', error, 'WorldInitializer');
       throw new Error('Failed to create hockey goals');
     }
   }
@@ -140,15 +141,15 @@ export class WorldInitializer {
    */
   private createPlayerBarriers(): void {
     if (!this.world) {
-      console.error('WorldInitializer: Cannot create barriers - world not initialized');
+      CONSTANTS.debugError('Cannot create barriers - world not initialized', undefined, 'WorldInitializer');
       return;
     }
 
     try {
       PlayerBarrierService.instance.createBarriers(this.world);
-      console.log('WorldInitializer: Player barriers created successfully');
+      CONSTANTS.debugLog('Player barriers created successfully', 'WorldInitializer');
     } catch (error) {
-      console.error('WorldInitializer: Failed to create player barriers:', error);
+      CONSTANTS.debugError('Failed to create player barriers', error, 'WorldInitializer');
       throw new Error('Failed to create player barriers');
     }
   }
@@ -310,9 +311,9 @@ export class WorldInitializer {
       (puck as any).customProperties = new Map();
       (puck as any).customProperties.set('touchHistory', []);
       (puck as any).customProperties.set('lastTouchedBy', null);
-      console.log('[WorldInitializer] Puck created with custom properties support');
+      CONSTANTS.debugLog('Puck created with custom properties support', 'WorldInitializer');
     } catch (error) {
-      console.warn('[WorldInitializer] Could not initialize puck custom properties:', error);
+      CONSTANTS.debugWarn('Could not initialize puck custom properties: ' + error, 'WorldInitializer');
     }
     
     return puck;
@@ -349,7 +350,7 @@ export class WorldInitializer {
       const isControlled = customProperties && customProperties.get('isControlled');
       
       if (isControlled) {
-        console.log('[WorldInitializer] Puck hit goal post but is controlled by player - skipping sound');
+        CONSTANTS.debugLog('Puck hit goal post but is controlled by player - skipping sound', 'WorldInitializer');
         return;
       }
       
@@ -360,22 +361,22 @@ export class WorldInitializer {
         
         // Only play sound if puck is moving with sufficient speed (to avoid tiny bumps)
         if (speed > 2.0) {
-          // Check cooldown to prevent sound spam
+                    // Check cooldown to prevent sound spam
           const currentTime = Date.now();
           if (currentTime - lastHitPostSoundTime > CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN) {
-                                    // Play hit-post sound effect with volume based on speed
-                        const volume = Math.min(CONSTANTS.PUCK_SOUND.HIT_POST_VOLUME, speed * 0.1);
-                        const hitPostSound = new Audio({
-                          uri: CONSTANTS.AUDIO_PATHS.HIT_POST,
-                          volume: volume,
-                          attachedToEntity: other,
-                          referenceDistance: CONSTANTS.PUCK_SOUND.HIT_POST_REFERENCE_DISTANCE
-                        });
+            // Play hit-post sound effect with volume based on speed using managed audio
+            const volume = Math.min(CONSTANTS.PUCK_SOUND.HIT_POST_VOLUME, speed * 0.1);
+            const hitPostSound = AudioManager.instance.createManagedAudio({
+              uri: CONSTANTS.AUDIO_PATHS.HIT_POST,
+              volume: volume,
+              attachedToEntity: other,
+              referenceDistance: CONSTANTS.PUCK_SOUND.HIT_POST_REFERENCE_DISTANCE
+            }, 'effect');
             
-            if (other.world) {
+            if (hitPostSound && other.world) {
               hitPostSound.play(other.world);
               updateLastSoundTime(currentTime);
-              console.log(`[WorldInitializer] Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`);
+              CONSTANTS.debugLog(`Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`, 'WorldInitializer');
             }
           }
         }

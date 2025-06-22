@@ -246,33 +246,9 @@ export class HockeyGameManager {
   private playRefereeWhistle(): void {
     if (!this._world) return;
     
-    // Get all player IDs from teams and convert to Player objects
-    const allPlayerIds = [
-      ...Object.values(this._teams[HockeyTeam.RED]), 
-      ...Object.values(this._teams[HockeyTeam.BLUE])
-    ].filter(Boolean) as string[];
-    
-    const allPlayers = allPlayerIds
-      .map(playerId => this._playerIdToPlayer.get(playerId))
-      .filter(Boolean) as Player[];
-    
-    // Play whistle sound for each player
-    allPlayers.forEach((player) => {
-      try {
-        const entities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
-        if (entities.length > 0 && entities[0].world) {
-          new Audio({ 
-            uri: CONSTANTS.AUDIO_PATHS.REFEREE_WHISTLE, 
-            volume: 0.6, 
-            attachedToEntity: entities[0] 
-          }).play(entities[0].world, true);
-        }
-      } catch (error) {
-        console.error('Error playing referee whistle for player:', error);
-      }
-    });
-    
-    console.log('[HockeyGameManager] Referee whistle played for all players');
+    // Use centralized AudioManager instead of creating audio for each player
+    AudioManager.instance.playRefereeWhistle();
+    CONSTANTS.debugLog('[HockeyGameManager] Referee whistle played globally', 'HockeyGameManager');
   }
 
   /**
@@ -281,33 +257,9 @@ export class HockeyGameManager {
   private playCountdownSound(): void {
     if (!this._world) return;
     
-    // Get all player IDs from teams and convert to Player objects
-    const allPlayerIds = [
-      ...Object.values(this._teams[HockeyTeam.RED]), 
-      ...Object.values(this._teams[HockeyTeam.BLUE])
-    ].filter(Boolean) as string[];
-    
-    const allPlayers = allPlayerIds
-      .map(playerId => this._playerIdToPlayer.get(playerId))
-      .filter(Boolean) as Player[];
-    
-    // Play countdown sound for each player
-    allPlayers.forEach((player) => {
-      try {
-        const entities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
-        if (entities.length > 0 && entities[0].world) {
-          new Audio({ 
-            uri: CONSTANTS.AUDIO_PATHS.COUNTDOWN_SOUND, 
-            volume: 0.5, 
-            attachedToEntity: entities[0] 
-          }).play(entities[0].world, true);
-        }
-      } catch (error) {
-        console.error('Error playing countdown sound for player:', error);
-      }
-    });
-    
-    console.log('[HockeyGameManager] Countdown sound played for all players');
+    // Use centralized AudioManager instead of creating audio for each player
+    AudioManager.instance.playCountdownSound();
+    CONSTANTS.debugLog('[HockeyGameManager] Countdown sound played globally', 'HockeyGameManager');
   }
 
   /**
@@ -600,6 +552,9 @@ export class HockeyGameManager {
     
     console.log(`[HockeyGameManager] Starting period break after period ${endedPeriod}`);
     
+    // Play referee whistle sound effect when period ends
+    this.playRefereeWhistle();
+    
     // Show "End of [X] Period" overlay
     this.broadcastToAllPlayers({
       type: 'period-end',
@@ -841,6 +796,9 @@ export class HockeyGameManager {
     
     // Calculate game results
     if (this._world) {
+      // Play referee whistle sound effect when game ends
+      this.playRefereeWhistle();
+      
       const redScore = this._scores[HockeyTeam.RED];
       const blueScore = this._scores[HockeyTeam.BLUE];
       const winner = redScore > blueScore ? 'RED' : blueScore > redScore ? 'BLUE' : 'TIED';

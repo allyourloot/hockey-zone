@@ -26,7 +26,7 @@
 // =========================
 // 1. IMPORTS & TYPE DEFINITIONS
 // =========================
-import { startServer, Entity, Audio } from 'hytopia';
+import { startServer, Entity } from 'hytopia';
 import { HockeyGameManager } from './classes/managers/HockeyGameManager';
 
 // Import managers
@@ -69,15 +69,17 @@ startServer(world => {
   // Initialize AudioManager for ambient sounds and SFX
   AudioManager.instance.initialize(world);
   
-  // Simple background music following HYTOPIA SDK pattern
-  const gameMusic = new Audio({
+  // Create managed background music using AudioManager
+  const gameMusic = AudioManager.instance.createManagedAudio({
     uri: 'audio/music/ready-for-this.mp3',
     loop: true,
     volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
-  });
+  }, 'music');
   
   // Music will start when user interacts (browser autoplay policy)
-  (world as any)._gameMusic = gameMusic; // Store reference for user activation
+  if (gameMusic) {
+    (world as any)._gameMusic = gameMusic; // Store reference for user activation
+  }
   PuckTrailManager.instance.initialize(world);
 
   // Initialize goal detection service
@@ -93,24 +95,24 @@ startServer(world => {
   const goalDetectionInterval = setInterval(() => {
     const goalResult = goalDetectionService.checkForGoal(puckRef.current);
     if (goalResult) {
-      console.log(`[Main] Goal detected! ${goalResult.scoringTeam} team scored!${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`);
+      CONSTANTS.debugLog(`Goal detected! ${goalResult.scoringTeam} team scored!${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`, 'Main');
       if (goalResult.lastTouchedBy) {
-        console.log(`[Main] Goal scored by player: ${goalResult.lastTouchedBy}`);
+        CONSTANTS.debugLog(`Goal scored by player: ${goalResult.lastTouchedBy}`, 'Main');
         if (goalResult.primaryAssist) {
-          console.log(`[Main] Primary assist by player: ${goalResult.primaryAssist}`);
+          CONSTANTS.debugLog(`Primary assist by player: ${goalResult.primaryAssist}`, 'Main');
         }
         if (goalResult.secondaryAssist) {
-          console.log(`[Main] Secondary assist by player: ${goalResult.secondaryAssist}`);
+          CONSTANTS.debugLog(`Secondary assist by player: ${goalResult.secondaryAssist}`, 'Main');
         }
       } else {
-        console.log(`[Main] WARNING: Goal scored but no lastTouchedBy information!`);
+        CONSTANTS.debugWarn(`Goal scored but no lastTouchedBy information!`, 'Main');
         // Debug: Check puck custom properties
         if (puckRef.current) {
           try {
             const lastTouched = (puckRef.current as any).customProperties?.get('lastTouchedBy');
-            console.log(`[Main] lastTouchedBy from puck:`, lastTouched);
+            CONSTANTS.debugLog(`lastTouchedBy from puck: ${lastTouched}`, 'Main');
           } catch (error) {
-            console.log(`[Main] Could not access puck custom properties:`, error);
+            CONSTANTS.debugError(`Could not access puck custom properties`, error, 'Main');
           }
         }
       }
@@ -125,14 +127,15 @@ startServer(world => {
   }, 50);
 
   // Start monitoring when the world is ready
-  console.log('[Main] Goal detection service initialized');
-  console.log('[Main] Player spawn manager initialized');
+  CONSTANTS.debugLog('Goal detection service initialized', 'Main');
+  CONSTANTS.debugLog('Player spawn manager initialized', 'Main');
   goalDetectionService.startMonitoring();
 
   // Clean up on server shutdown
   process.on('SIGINT', () => {
-    console.log('[Main] Shutting down goal detection service...');
+    CONSTANTS.debugLog('Shutting down goal detection service...', 'Main');
     goalDetectionService.stopMonitoring();
+    AudioManager.instance.stop(); // Clean up all audio resources
     clearInterval(goalDetectionInterval);
     process.exit(0);
   });

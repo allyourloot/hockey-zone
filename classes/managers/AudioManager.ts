@@ -1,11 +1,19 @@
 /**
  * AudioManager handles all ambient sound scheduling and background music
+ * Enhanced with proper audio object lifecycle management and memory cleanup
  * Extracted from index.ts section 9. AUDIO MANAGEMENT
  */
 
 import { Audio } from 'hytopia';
-import type { World } from 'hytopia';
+import type { World, Entity } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
+
+interface ManagedAudio {
+  audio: Audio;
+  createdAt: number;
+  type: 'ambient' | 'effect' | 'music';
+  cleanup?: () => void;
+}
 
 export class AudioManager {
   private static _instance: AudioManager | null = null;
@@ -16,6 +24,11 @@ export class AudioManager {
   private nextStompBeatTime: number = 0;
   private world: World | null = null;
   private backgroundMusic: Audio | null = null;
+  
+  // Audio object management
+  private activeAudioInstances: Set<ManagedAudio> = new Set();
+  private lastGlobalSoundTime: number = 0;
+  private cleanupInterval: NodeJS.Timeout | null = null;
   
   // Private constructor for singleton pattern
   private constructor() {}
@@ -33,28 +46,131 @@ export class AudioManager {
    */
   public initialize(world: World): void {
     this.world = world;
-    // Don't start background music here - handled separately in index.ts
-    // this.startBackgroundMusic();
     this.startAmbientSounds();
+    this.startCleanupTimer();
+    CONSTANTS.debugLog('Audio manager initialized with enhanced memory management', 'AudioManager');
   }
   
   /**
-   * Start background music
+   * Create a managed audio instance with automatic cleanup
+   * @param config - Audio configuration
+   * @param type - Type of audio for management purposes
+   * @returns Managed audio instance
    */
-  private startBackgroundMusic(): void {
-    if (!this.world) {
-      console.warn('AudioManager: Cannot start background music - world not initialized');
-      return;
+  public createManagedAudio(config: any, type: 'ambient' | 'effect' | 'music' = 'effect'): Audio | null {
+    // Global sound cooldown check
+    const now = Date.now();
+    if (now - this.lastGlobalSoundTime < CONSTANTS.AUDIO_PERFORMANCE.SOUND_COOLDOWN_GLOBAL) {
+      CONSTANTS.debugLog(`Audio creation skipped due to global cooldown`, 'AudioManager');
+      return null;
     }
     
-    this.backgroundMusic = new Audio({
-      uri: CONSTANTS.AUDIO_PATHS.READY_FOR_THIS,
-      loop: true,
-      volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
-    });
+    // Check if we're at max concurrent sounds
+    if (this.activeAudioInstances.size >= CONSTANTS.AUDIO_PERFORMANCE.MAX_CONCURRENT_SOUNDS) {
+      CONSTANTS.debugLog(`Audio creation skipped - max concurrent sounds reached (${this.activeAudioInstances.size})`, 'AudioManager');
+      this.cleanupOldestAudio();
+    }
     
-    this.backgroundMusic.play(this.world);
-    console.log('AudioManager: Background music started');
+    try {
+      const audio = new Audio(config);
+      const managedAudio: ManagedAudio = {
+        audio,
+        createdAt: now,
+        type,
+      };
+      
+      this.activeAudioInstances.add(managedAudio);
+      this.lastGlobalSoundTime = now;
+      
+      CONSTANTS.debugLog(`Created managed audio (${type}). Active: ${this.activeAudioInstances.size}`, 'AudioManager');
+      return audio;
+    } catch (error) {
+      CONSTANTS.debugError('Failed to create managed audio', error, 'AudioManager');
+      return null;
+    }
+  }
+  
+  /**
+   * Play a single global audio effect (no per-player duplication)
+   * @param uri - Audio file URI
+   * @param volume - Volume level
+   * @param attachedToEntity - Optional entity to attach to
+   * @returns Whether the audio was played successfully
+   */
+  public playGlobalSoundEffect(uri: string, volume: number = 0.5, attachedToEntity?: Entity): boolean {
+    if (!this.world) {
+      CONSTANTS.debugWarn('Cannot play global sound - world not initialized', 'AudioManager');
+      return false;
+    }
+    
+    const audio = this.createManagedAudio({
+      uri,
+      volume,
+      attachedToEntity
+    }, 'effect');
+    
+    if (audio) {
+      audio.play(this.world);
+      return true;
+    }
+    
+    return false;
+  }
+  
+  /**
+   * Clean up the oldest audio instance to make room for new ones
+   */
+  private cleanupOldestAudio(): void {
+    if (this.activeAudioInstances.size === 0) return;
+    
+    const oldest = Array.from(this.activeAudioInstances)
+      .filter(managed => managed.type === 'effect') // Only cleanup effect sounds, not ambient/music
+      .sort((a, b) => a.createdAt - b.createdAt)[0];
+    
+    if (oldest) {
+      this.cleanupManagedAudio(oldest);
+      CONSTANTS.debugLog('Cleaned up oldest audio instance to make room', 'AudioManager');
+    }
+  }
+  
+  /**
+   * Clean up a specific managed audio instance
+   * @param managedAudio - The managed audio to clean up
+   */
+  private cleanupManagedAudio(managedAudio: ManagedAudio): void {
+    try {
+      // Stop the audio if it has a stop method
+      if ((managedAudio.audio as any).stop) {
+        (managedAudio.audio as any).stop();
+      }
+      
+      // Run custom cleanup if provided
+      if (managedAudio.cleanup) {
+        managedAudio.cleanup();
+      }
+      
+      this.activeAudioInstances.delete(managedAudio);
+    } catch (error) {
+      CONSTANTS.debugError('Error cleaning up managed audio', error, 'AudioManager');
+    }
+  }
+  
+  /**
+   * Start periodic cleanup of old audio instances
+   */
+  private startCleanupTimer(): void {
+    this.cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      const instancesToCleanup = Array.from(this.activeAudioInstances).filter(
+        managed => now - managed.createdAt > CONSTANTS.AUDIO_PERFORMANCE.CLEANUP_DELAY
+      );
+      
+      instancesToCleanup.forEach(managed => this.cleanupManagedAudio(managed));
+      
+      if (instancesToCleanup.length > 0) {
+        CONSTANTS.debugLog(`Cleaned up ${instancesToCleanup.length} old audio instances. Active: ${this.activeAudioInstances.size}`, 'AudioManager');
+      }
+    }, CONSTANTS.AUDIO_PERFORMANCE.CLEANUP_DELAY / 2); // Check twice as often as cleanup delay
   }
   
   /**
@@ -65,12 +181,15 @@ export class AudioManager {
     
     const now = Date.now();
     
-    // Play the crowd chant sound effect globally
-    const chant = new Audio({
+    // Use managed audio creation
+    const chant = this.createManagedAudio({
       uri: CONSTANTS.AUDIO_PATHS.CROWD_HEY,
       volume: CONSTANTS.AUDIO.CROWD_CHANT_VOLUME,
-    });
-    chant.play(this.world);
+    }, 'ambient');
+    
+    if (chant) {
+      chant.play(this.world);
+    }
     
     // Pick a random interval within allowed range
     let nextDelay = CONSTANTS.AUDIO.CROWD_CHANT_MIN + 
@@ -105,12 +224,15 @@ export class AudioManager {
     
     const now = Date.now();
     
-    // Play the percussion beat sound effect globally
-    const percussion = new Audio({
+    // Use managed audio creation
+    const percussion = this.createManagedAudio({
       uri: CONSTANTS.AUDIO_PATHS.PERCUSSION_BEAT,
       volume: CONSTANTS.AUDIO.PERCUSSION_VOLUME,
-    });
-    percussion.play(this.world);
+    }, 'ambient');
+    
+    if (percussion) {
+      percussion.play(this.world);
+    }
     
     // Pick a random interval within allowed range
     let nextDelay = CONSTANTS.AUDIO.PERCUSSION_MIN + 
@@ -145,12 +267,15 @@ export class AudioManager {
     
     const now = Date.now();
     
-    // Play the stomp beat sound effect globally
-    const stompBeat = new Audio({
+    // Use managed audio creation
+    const stompBeat = this.createManagedAudio({
       uri: CONSTANTS.AUDIO_PATHS.STOMP_BEAT,
       volume: CONSTANTS.AUDIO.STOMP_BEAT_VOLUME,
-    });
-    stompBeat.play(this.world);
+    }, 'ambient');
+    
+    if (stompBeat) {
+      stompBeat.play(this.world);
+    }
     
     // Pick a random interval within allowed range
     let nextDelay = CONSTANTS.AUDIO.STOMP_BEAT_MIN + 
@@ -218,39 +343,68 @@ export class AudioManager {
     setTimeout(this.schedulePercussionBeat, percData.delay);
     setTimeout(this.scheduleStompBeat, stompData.delay);
     
-    console.log('AudioManager: Ambient sounds scheduled');
-    console.log(`- First crowd chant in ${Math.round(chantData.delay / 1000)}s`);
-    console.log(`- First percussion beat in ${Math.round(percData.delay / 1000)}s`);
-    console.log(`- First stomp beat in ${Math.round(stompData.delay / 1000)}s`);
+    CONSTANTS.debugLog('Ambient sounds scheduled', 'AudioManager');
+    CONSTANTS.debugLog(`- First crowd chant in ${Math.round(chantData.delay / 1000)}s`, 'AudioManager');
+    CONSTANTS.debugLog(`- First percussion beat in ${Math.round(percData.delay / 1000)}s`, 'AudioManager');
+    CONSTANTS.debugLog(`- First stomp beat in ${Math.round(stompData.delay / 1000)}s`, 'AudioManager');
   }
   
   /**
-   * Stop all audio (cleanup method)
+   * Stop all audio and cleanup resources
    */
   public stop(): void {
+    // Stop cleanup timer
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
+    
+    // Stop background music
     if (this.backgroundMusic) {
-      this.backgroundMusic.pause();
+      if ((this.backgroundMusic as any).stop) {
+        (this.backgroundMusic as any).stop();
+      }
       this.backgroundMusic = null;
     }
-    console.log('AudioManager: All audio stopped');
+    
+    // Cleanup all active audio instances
+    this.activeAudioInstances.forEach(managed => this.cleanupManagedAudio(managed));
+    this.activeAudioInstances.clear();
+    
+    CONSTANTS.debugLog('All audio stopped and cleaned up', 'AudioManager');
   }
   
   /**
-   * Play the goal horn sound effect
+   * Play the goal horn sound effect (single global instance)
    */
   public playGoalHorn(): void {
-    if (!this.world) {
-      console.warn('AudioManager: Cannot play goal horn - world not initialized');
-      return;
-    }
-    
-    const goalHorn = new Audio({
-      uri: CONSTANTS.AUDIO_PATHS.GOAL_HORN,
-      volume: CONSTANTS.AUDIO.GOAL_HORN_VOLUME,
-    });
-    
-    goalHorn.play(this.world);
-    console.log('AudioManager: Goal horn played');
+    this.playGlobalSoundEffect(
+      CONSTANTS.AUDIO_PATHS.GOAL_HORN,
+      CONSTANTS.AUDIO.GOAL_HORN_VOLUME
+    );
+    CONSTANTS.debugLog('Goal horn played', 'AudioManager');
+  }
+  
+  /**
+   * Play referee whistle sound effect (single global instance)
+   */
+  public playRefereeWhistle(): void {
+    this.playGlobalSoundEffect(
+      CONSTANTS.AUDIO_PATHS.REFEREE_WHISTLE,
+      0.6
+    );
+    CONSTANTS.debugLog('Referee whistle played', 'AudioManager');
+  }
+  
+  /**
+   * Play countdown sound effect (single global instance)
+   */
+  public playCountdownSound(): void {
+    this.playGlobalSoundEffect(
+      CONSTANTS.AUDIO_PATHS.COUNTDOWN_SOUND,
+      0.5
+    );
+    CONSTANTS.debugLog('Countdown sound played', 'AudioManager');
   }
 
   /**
@@ -258,5 +412,20 @@ export class AudioManager {
    */
   public getBackgroundMusic(): Audio | null {
     return this.backgroundMusic;
+  }
+  
+  /**
+   * Get audio performance stats (for debugging)
+   */
+  public getAudioStats(): { active: number; types: Record<string, number> } {
+    const types: Record<string, number> = {};
+    this.activeAudioInstances.forEach(managed => {
+      types[managed.type] = (types[managed.type] || 0) + 1;
+    });
+    
+    return {
+      active: this.activeAudioInstances.size,
+      types
+    };
   }
 } 

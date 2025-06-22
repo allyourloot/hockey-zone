@@ -4,6 +4,14 @@
  */
 
 // =========================
+// DEVELOPMENT & PERFORMANCE CONSTANTS
+// =========================
+export const DEBUG_MODE = false; // Set to true during development, false for production
+
+// NOTE: Toggle this to false for multiplayer performance.
+// Set to true only when debugging specific issues locally.
+
+// =========================
 // ICE SKATING PHYSICS CONSTANTS
 // =========================
 export const ICE_SKATING = {
@@ -143,6 +151,16 @@ export const AUDIO = {
   PERCUSSION_VOLUME: 0.4,
   STOMP_BEAT_VOLUME: 0.4,
   GOAL_HORN_VOLUME: 0.6,
+} as const;
+
+// =========================
+// AUDIO PERFORMANCE CONSTANTS
+// =========================
+export const AUDIO_PERFORMANCE = {
+  // Audio object cleanup settings
+  CLEANUP_DELAY: 8000, // 8 seconds after playback to cleanup audio objects
+  MAX_CONCURRENT_SOUNDS: 20, // Maximum number of sound effects playing simultaneously
+  SOUND_COOLDOWN_GLOBAL: 50, // Global minimum time between any sound effects (ms)
 } as const;
 
 // =========================
@@ -314,4 +332,49 @@ export const SPAWN_POSITIONS = {
   PLAYER_DEFAULT: { x: 0, y: 10, z: 0 },
   RED_GOAL: { x: 0, y: 2, z: -32 },
   BLUE_GOAL: { x: 0, y: 2, z: 32 },
-} as const; 
+} as const;
+
+// =========================
+// UTILITY FUNCTIONS
+// =========================
+
+/**
+ * Debug logging utility - only logs when DEBUG_MODE is enabled
+ * @param message - The message to log
+ * @param prefix - Optional prefix for categorizing logs
+ */
+export function debugLog(message: string, prefix?: string): void {
+  if (DEBUG_MODE) {
+    const logMessage = prefix ? `[${prefix}] ${message}` : message;
+    console.log(logMessage);
+  }
+}
+
+/**
+ * Debug error logging utility - only logs when DEBUG_MODE is enabled
+ * @param message - The error message to log
+ * @param error - Optional error object
+ * @param prefix - Optional prefix for categorizing logs
+ */
+export function debugError(message: string, error?: any, prefix?: string): void {
+  if (DEBUG_MODE) {
+    const logMessage = prefix ? `[${prefix}] ${message}` : message;
+    if (error) {
+      console.error(logMessage, error);
+    } else {
+      console.error(logMessage);
+    }
+  }
+}
+
+/**
+ * Debug warning logging utility - only logs when DEBUG_MODE is enabled
+ * @param message - The warning message to log
+ * @param prefix - Optional prefix for categorizing logs
+ */
+export function debugWarn(message: string, prefix?: string): void {
+  if (DEBUG_MODE) {
+    const logMessage = prefix ? `[${prefix}] ${message}` : message;
+    console.warn(logMessage);
+  }
+} 
