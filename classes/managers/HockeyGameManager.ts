@@ -860,8 +860,8 @@ export class HockeyGameManager {
     this._tentativeSelections.set(player.id, { team, position });
     this._playerIdToPlayer.set(player.id, player);
     
-    console.log(`[HGM] assignPlayerToTeam (tentative): player.id=${player.id}, team=${team}, position=${position}`);
-    console.log('[HGM] Tentative selections:', Array.from(this._tentativeSelections.entries()));
+    CONSTANTS.debugLog(`assignPlayerToTeam (tentative): player.id=${player.id}, team=${team}, position=${position}`, 'HGM');
+    CONSTANTS.debugLog(`Tentative selections: ${JSON.stringify(Array.from(this._tentativeSelections.entries()))}`, 'HGM');
     return true;
   }
 
@@ -1018,8 +1018,8 @@ export class HockeyGameManager {
     // Initialize player stats now that they're locked in
     PlayerStatsManager.instance.initializePlayer(player, team, position);
     
-    console.log(`[HGM] Player ${player.id} locked in to ${team}-${position}`);
-    console.log('[HGM] Teams after lock-in:', JSON.stringify(this._teams));
+    CONSTANTS.debugLog(`Player ${player.id} locked in to ${team}-${position}`, 'HGM');
+          CONSTANTS.debugLog(`Teams after lock-in: ${JSON.stringify(this._teams)}`, 'HGM');
     return true;
   }
 

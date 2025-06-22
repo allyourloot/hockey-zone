@@ -355,7 +355,7 @@ export class PlayerBarrierService {
         }
         
         const persistenceMsg = isPersistent ? ` (PERSISTENT - Level ${persistenceLevel})` : '';
-        console.log(`[PlayerBarrierService] Moved player ${playerId} away from ${zone.name} to Z=${safeZ.toFixed(2)}${persistenceMsg}`);
+        CONSTANTS.debugLog(`Moved player ${playerId} away from ${zone.name} to Z=${safeZ.toFixed(2)}${persistenceMsg}`, 'PlayerBarrierService');
       } else {
         // Player is in buffer zone - standard velocity stopping
         try {
@@ -375,7 +375,7 @@ export class PlayerBarrierService {
                 y: velocity.y,
                 z: 0
               });
-              console.log(`[PlayerBarrierService] Stopped Z movement for player ${playerId} in ${zone.name}`);
+              CONSTANTS.debugLog(`Stopped Z movement for player ${playerId} in ${zone.name}`, 'PlayerBarrierService');
             }
           }
         } catch (velocityError) {
@@ -383,7 +383,7 @@ export class PlayerBarrierService {
           const pushForce = zone.team === HockeyTeam.BLUE ? -3.0 : 3.0;
           const mass = playerEntity.mass || 1.0;
           playerEntity.applyImpulse({ x: 0, y: 0, z: pushForce * mass });
-          console.log(`[PlayerBarrierService] Applied counter-impulse to player ${playerId} in ${zone.name}`);
+          CONSTANTS.debugLog(`Applied counter-impulse to player ${playerId} in ${zone.name}`, 'PlayerBarrierService');
         }
       }
       
@@ -418,7 +418,7 @@ export class PlayerBarrierService {
               const goalieNote = playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone) ? ' (GOALIE at own goal)' : '';
               const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
               
-              console.log(`[PlayerBarrierService] Player ${playerId} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name}${goalieNote} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}, speed: ${speed.toFixed(2)}`);
+              CONSTANTS.debugLog(`Player ${playerId} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name}${goalieNote} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}, speed: ${speed.toFixed(2)}`, 'PlayerBarrierService');
               this.blockPlayerMovement(entity, zone);
             }
           }
