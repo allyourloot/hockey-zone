@@ -10,10 +10,12 @@ import {
   ColliderShape,
   CoefficientCombineRule,
   CollisionGroup,
-  SceneUI
+  SceneUI,
+  BlockType,
+  Audio
 } from 'hytopia';
 import type { World } from 'hytopia';
-import worldMap from '../../assets/maps/hockey-zone-4.json';
+import worldMap from '../../assets/maps/hockey-zone-ayl.json';
 import * as CONSTANTS from '../utils/constants';
 import { PlayerBarrierService } from '../services/PlayerBarrierService';
 
@@ -157,6 +159,9 @@ export class WorldInitializer {
    * @returns The goal entity with proper physics setup
    */
   private createGoalEntity(modelUri: string): Entity {
+    // Track last hit-post sound time to prevent spam
+    let lastHitPostSoundTime = 0;
+    
     return new Entity({
       modelUri: modelUri,
       modelScale: 0.5,
@@ -179,6 +184,9 @@ export class WorldInitializer {
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+            },
+            onCollision: (other: Entity | BlockType, started: boolean) => {
+              this.handleGoalPostCollision(other, started, lastHitPostSoundTime, (time: number) => { lastHitPostSoundTime = time; });
             }
           },
           // Right post (vertical bar on the right side of the goal)
@@ -197,6 +205,9 @@ export class WorldInitializer {
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+            },
+            onCollision: (other: Entity | BlockType, started: boolean) => {
+              this.handleGoalPostCollision(other, started, lastHitPostSoundTime, (time: number) => { lastHitPostSoundTime = time; });
             }
           },
           // Crossbar (horizontal bar at the top front of the goal)
@@ -211,6 +222,9 @@ export class WorldInitializer {
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+            },
+            onCollision: (other: Entity | BlockType, started: boolean) => {
+              this.handleGoalPostCollision(other, started, lastHitPostSoundTime, (time: number) => { lastHitPostSoundTime = time; });
             }
           },
           // Bottom bar (horizontal bar at the bottom front of the goal)
@@ -316,5 +330,56 @@ export class WorldInitializer {
    */
   public getBlueGoal(): Entity | null {
     return this.blueGoal;
+  }
+
+  /**
+   * Handle collision between puck and goal posts/crossbar
+   */
+  private handleGoalPostCollision(
+    other: Entity | BlockType, 
+    started: boolean, 
+    lastHitPostSoundTime: number, 
+    updateLastSoundTime: (time: number) => void
+  ): void {
+    // Only handle collision start events with puck entities
+    if (started && other instanceof Entity && other.modelUri && other.modelUri.includes('puck')) {
+      // Check if the puck is currently being controlled by a player
+      // If so, don't play the hit-post sound (player is just skating into the posts)
+      const customProperties = (other as any).customProperties;
+      const isControlled = customProperties && customProperties.get('isControlled');
+      
+      if (isControlled) {
+        console.log('[WorldInitializer] Puck hit goal post but is controlled by player - skipping sound');
+        return;
+      }
+      
+      // Check if the puck is moving fast enough to warrant a sound
+      const puckVelocity = other.linearVelocity;
+      if (puckVelocity) {
+        const speed = Math.sqrt(puckVelocity.x * puckVelocity.x + puckVelocity.z * puckVelocity.z);
+        
+        // Only play sound if puck is moving with sufficient speed (to avoid tiny bumps)
+        if (speed > 2.0) {
+          // Check cooldown to prevent sound spam
+          const currentTime = Date.now();
+          if (currentTime - lastHitPostSoundTime > CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN) {
+                                    // Play hit-post sound effect with volume based on speed
+                        const volume = Math.min(CONSTANTS.PUCK_SOUND.HIT_POST_VOLUME, speed * 0.1);
+                        const hitPostSound = new Audio({
+                          uri: CONSTANTS.AUDIO_PATHS.HIT_POST,
+                          volume: volume,
+                          attachedToEntity: other,
+                          referenceDistance: CONSTANTS.PUCK_SOUND.HIT_POST_REFERENCE_DISTANCE
+                        });
+            
+            if (other.world) {
+              hitPostSound.play(other.world);
+              updateLastSoundTime(currentTime);
+              console.log(`[WorldInitializer] Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`);
+            }
+          }
+        }
+      }
+    }
   }
 } 

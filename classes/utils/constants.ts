@@ -59,7 +59,7 @@ export const DASH = {
 // SKATING SOUND CONSTANTS
 // =========================
 export const SKATING_SOUND = {
-  VOLUME: 0.2,
+  VOLUME: 0.13,
   MIN_SPEED: 0.5,
   DURATION: 800,
   MIN_PLAYBACK_RATE: 0.7,
@@ -93,6 +93,9 @@ export const PASS_SHOT = {
 export const PUCK_SOUND = {
   COOLDOWN: 200, // 200ms cooldown between puck sounds
   VOLUME: 0.4, // Volume for puck movement sounds
+  HIT_POST_VOLUME: 0.6, // Volume for post collision sounds
+  HIT_POST_COOLDOWN: 500, // 500ms cooldown between post hit sounds
+  HIT_POST_REFERENCE_DISTANCE: 45, // Distance for spatial audio (audible across rink with proper falloff)
 } as const;
 
 // =========================
@@ -210,6 +213,7 @@ export const AUDIO_PATHS = {
   WHOOSH: 'audio/sfx/hockey/whoosh.mp3',
   REFEREE_WHISTLE: 'audio/sfx/hockey/referee-whistle.mp3',
   COUNTDOWN_SOUND: 'audio/sfx/hockey/countdown-sound.mp3',
+  HIT_POST: 'audio/sfx/hockey/hit-post.wav',
   
   // Ambient sounds
   CROWD_HEY: 'audio/sfx/hockey/crowd-hey.mp3',
