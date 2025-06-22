@@ -77,6 +77,7 @@ export class ChatCommandManager {
     this.registerStickCheckDebugCommand();
     this.registerStatsTestCommands();
     this.registerPlayerBarrierCommands();
+    this.registerTestCommands();
   }
   
   /**
@@ -774,6 +775,107 @@ export class ChatCommandManager {
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(player, 'Error teleporting player!', 'FF0000');
         console.error('[ChatCommand] Error teleporting player for barrier test:', error);
+      }
+    });
+  }
+
+  private registerTestCommands(): void {
+    if (!this.world) return;
+    
+    // Test command to list available node names and verify all anchor points
+    this.world.chatManager.registerCommand('/test-nodes', (player) => {
+      try {
+        const { ModelRegistry } = require('hytopia');
+        const nodeNames = ModelRegistry.instance.getNodeNames('models/players/player.gltf');
+        
+        // Check if required anchor nodes exist
+        const hasHeadAnchor = nodeNames.includes('head-anchor');
+        const hasHeadAnchorUnderscore = nodeNames.includes('head_anchor');
+        const hasEyesAnchor = nodeNames.includes('eyes-anchor');
+        const hasEyesAnchorUnderscore = nodeNames.includes('eyes_anchor');
+        const hasFootRightAnchor = nodeNames.includes('foot-right-anchor');
+        const hasFootLeftAnchor = nodeNames.includes('foot-left-anchor');
+        const hasFootRightAnchorUnderscore = nodeNames.includes('foot_right_anchor');
+        const hasFootLeftAnchorUnderscore = nodeNames.includes('foot_left_anchor');
+        const hasTorsoAnchor = nodeNames.includes('torso-anchor');
+        const hasTorsoAnchorUnderscore = nodeNames.includes('torso_anchor');
+        const hasHandRightAnchor = nodeNames.includes('hand-right-anchor');
+        const hasHandLeftAnchor = nodeNames.includes('hand-left-anchor');
+        const hasHandRightAnchorUnderscore = nodeNames.includes('hand_right_anchor');
+        const hasHandLeftAnchorUnderscore = nodeNames.includes('hand_left_anchor');
+        const hasLegRightAnchor = nodeNames.includes('leg-right-anchor');
+        const hasLegLeftAnchor = nodeNames.includes('leg-left-anchor');
+        const hasLegRightAnchorUnderscore = nodeNames.includes('leg_right_anchor');
+        const hasLegLeftAnchorUnderscore = nodeNames.includes('leg_left_anchor');
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Player model nodes: ${nodeNames.join(', ')}`, 
+          '00FF00'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Head anchor: ${hasHeadAnchor ? '✓ head-anchor' : hasHeadAnchorUnderscore ? '✓ head_anchor' : '✗ not found'}`, 
+          hasHeadAnchor || hasHeadAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Eyes anchor: ${hasEyesAnchor ? '✓ eyes-anchor' : hasEyesAnchorUnderscore ? '✓ eyes_anchor' : '✗ not found'}`, 
+          hasEyesAnchor || hasEyesAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Right foot: ${hasFootRightAnchor ? '✓ foot-right-anchor' : hasFootRightAnchorUnderscore ? '✓ foot_right_anchor' : '✗ not found'}`, 
+          hasFootRightAnchor || hasFootRightAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Left foot: ${hasFootLeftAnchor ? '✓ foot-left-anchor' : hasFootLeftAnchorUnderscore ? '✓ foot_left_anchor' : '✗ not found'}`, 
+          hasFootLeftAnchor || hasFootLeftAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Torso: ${hasTorsoAnchor ? '✓ torso-anchor' : hasTorsoAnchorUnderscore ? '✓ torso_anchor' : '✗ not found'}`, 
+          hasTorsoAnchor || hasTorsoAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Right hand: ${hasHandRightAnchor ? '✓ hand-right-anchor' : hasHandRightAnchorUnderscore ? '✓ hand_right_anchor' : '✗ not found'}`, 
+          hasHandRightAnchor || hasHandRightAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Left hand: ${hasHandLeftAnchor ? '✓ hand-left-anchor' : hasHandLeftAnchorUnderscore ? '✓ hand_left_anchor' : '✗ not found'}`, 
+          hasHandLeftAnchor || hasHandLeftAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Right leg: ${hasLegRightAnchor ? '✓ leg-right-anchor' : hasLegRightAnchorUnderscore ? '✓ leg_right_anchor' : '✗ not found'}`, 
+          hasLegRightAnchor || hasLegRightAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Left leg: ${hasLegLeftAnchor ? '✓ leg-left-anchor' : hasLegLeftAnchorUnderscore ? '✓ leg_left_anchor' : '✗ not found'}`, 
+          hasLegLeftAnchor || hasLegLeftAnchorUnderscore ? '00FF00' : 'FF0000'
+        );
+        
+        console.log('Available node names for player.gltf:', nodeNames);
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Error getting node names: ${error.message}`, 
+          'FF0000'
+        );
+        console.error('Error getting node names:', error);
       }
     });
   }
