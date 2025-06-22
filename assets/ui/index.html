@@ -228,6 +228,14 @@ and also configure additional buttons for mobile compatibility.
       // Show goal overlay with enhanced info
       showGoalOverlay(data.team, data.isOwnGoal);
       
+      // Stop the timer when goal is scored
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        timeWhenGoalScored = timeRemaining; // Store current time for resumption
+        console.log('UI: Timer stopped after goal scored, time saved:', timeWhenGoalScored);
+      }
+      
       // Log enhanced goal message if we have scorer info
       if (data.scorerName) {
         const goalMessage = data.isOwnGoal 
@@ -248,6 +256,12 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'countdown-go') {
       // Show "GO!" text
       showCountdownGo();
+      
+      // Resume the timer immediately when "GO!" appears
+      if (timeWhenGoalScored !== null) {
+        resumeGameTimer();
+        console.log('UI: Timer resumed when GO! appeared');
+      }
     }
     if (data.type === 'countdown-end') {
       // Hide countdown overlay
@@ -278,6 +292,8 @@ and also configure additional buttons for mobile compatibility.
         clearInterval(timerInterval);
         timerInterval = null;
       }
+      // Clear any saved goal time
+      timeWhenGoalScored = null;
       // Set timer display to --:--
       document.querySelector('.timer').textContent = '--:--';
     }
@@ -294,6 +310,8 @@ and also configure additional buttons for mobile compatibility.
         clearInterval(timerInterval);
         timerInterval = null;
       }
+      // Clear any saved goal time
+      timeWhenGoalScored = null;
       document.querySelector('.timer').textContent = '--:--';
       console.log('UI: Timer stopped after game over hide');
     }
@@ -511,6 +529,7 @@ and also configure additional buttons for mobile compatibility.
   // Game timer functionality
   let timerInterval = null;
   let timeRemaining = 120; // 2 minutes in seconds
+  let timeWhenGoalScored = null; // Track time when goal was scored for proper resumption
 
   function startGameTimer() {
     // Clear any existing timer
@@ -520,6 +539,38 @@ and also configure additional buttons for mobile compatibility.
     
     // Reset time to 2 minutes
     timeRemaining = 120;
+    timeWhenGoalScored = null; // Clear saved time when starting new timer
+    updateTimerDisplay();
+    
+    // Start countdown
+    timerInterval = setInterval(() => {
+      timeRemaining--;
+      updateTimerDisplay();
+      
+      if (timeRemaining <= 0) {
+        clearInterval(timerInterval);
+        // Send period end event to server
+        hytopia.sendData({ type: 'period-end' });
+      }
+    }, 1000);
+  }
+
+  function resumeGameTimer() {
+    // Clear any existing timer
+    if (timerInterval) {
+      clearInterval(timerInterval);
+    }
+    
+    // Resume from saved time if available, otherwise start from 2 minutes
+    if (timeWhenGoalScored !== null) {
+      timeRemaining = timeWhenGoalScored;
+      timeWhenGoalScored = null; // Clear saved time after resuming
+      console.log('UI: Resuming timer from saved time:', timeRemaining);
+    } else {
+      timeRemaining = 120;
+      console.log('UI: No saved time found, starting timer from 2 minutes');
+    }
+    
     updateTimerDisplay();
     
     // Start countdown
