@@ -7,16 +7,71 @@
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 180,
+      "count": 36,
       "bufferView": 0,
       "byteOffset": 0
     },
     {
       "type": "SCALAR",
       "componentType": 5123,
-      "count": 36,
+      "count": 180,
       "bufferView": 0,
-      "byteOffset": 360
+      "byteOffset": 72
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        0.015625,
+        0.15625,
+        0.03125
+      ],
+      "min": [
+        -0.015625,
+        0.03125,
+        0
+      ],
+      "bufferView": 1,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 1,
+      "byteOffset": 12
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 1,
+      "byteOffset": 24
+    },
+    {
+      "type": "VEC3",
+      "componentType": 5126,
+      "count": 24,
+      "max": [
+        0.03125,
+        0.484375,
+        0.03125
+      ],
+      "min": [
+        0,
+        0.015625,
+        0
+      ],
+      "bufferView": 2,
+      "byteOffset": 0
+    },
+    {
+      "type": "VEC2",
+      "componentType": 5126,
+      "count": 24,
+      "bufferView": 2,
+      "byteOffset": 12
     },
     {
       "type": "VEC3",
@@ -32,21 +87,21 @@
         -0.3125,
         -0.09375
       ],
-      "bufferView": 1,
+      "bufferView": 3,
       "byteOffset": 0
     },
     {
       "type": "VEC3",
       "componentType": 5126,
       "count": 120,
-      "bufferView": 1,
+      "bufferView": 3,
       "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
       "count": 120,
-      "bufferView": 1,
+      "bufferView": 3,
       "byteOffset": 24
     },
     {
@@ -55,30 +110,23 @@
       "count": 24,
       "max": [
         0.03125,
-        0.0625,
+        0.125,
         0.03125
       ],
       "min": [
         -0.03125,
-        0,
+        0.0625,
         -0.03125
       ],
-      "bufferView": 2,
+      "bufferView": 4,
       "byteOffset": 0
-    },
-    {
-      "type": "VEC3",
-      "componentType": 5126,
-      "count": 24,
-      "bufferView": 2,
-      "byteOffset": 12
     },
     {
       "type": "VEC2",
       "componentType": 5126,
       "count": 24,
-      "bufferView": 2,
-      "byteOffset": 24
+      "bufferView": 4,
+      "byteOffset": 12
     }
   ],
   "bufferViews": [
@@ -91,15 +139,29 @@
     {
       "buffer": 0,
       "byteOffset": 432,
+      "byteLength": 768,
+      "byteStride": 32,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1200,
+      "byteLength": 480,
+      "byteStride": 20,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 1680,
       "byteLength": 3840,
       "byteStride": 32,
       "target": 34962
     },
     {
       "buffer": 0,
-      "byteOffset": 4272,
-      "byteLength": 768,
-      "byteStride": 32,
+      "byteOffset": 5520,
+      "byteLength": 480,
+      "byteStride": 20,
       "target": 34962
     }
   ],
@@ -115,18 +177,42 @@
     {
       "source": 0,
       "sampler": 0
+    },
+    {
+      "source": 1,
+      "sampler": 0
+    },
+    {
+      "source": 2,
+      "sampler": 0
+    },
+    {
+      "source": 3,
+      "sampler": 0
     }
   ],
   "images": [
     {
       "mimeType": "image/png",
-      "uri": "baseColor.png"
+      "uri": "baseColor_1.png"
+    },
+    {
+      "mimeType": "image/png",
+      "uri": "baseColor_2.png"
+    },
+    {
+      "mimeType": "image/png",
+      "uri": "baseColor_3.png"
+    },
+    {
+      "mimeType": "image/png",
+      "uri": "baseColor_4.png"
     }
   ],
   "buffers": [
     {
       "uri": "blue-helmet-named-nodes.bin",
-      "byteLength": 5040
+      "byteLength": 6000
     }
   ],
   "materials": [
@@ -138,6 +224,39 @@
         "metallicFactor": 0,
         "baseColorTexture": {
           "index": 0
+        }
+      }
+    },
+    {
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.05,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 1
+        }
+      }
+    },
+    {
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.05,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 2
+        }
+      }
+    },
+    {
+      "alphaMode": "MASK",
+      "alphaCutoff": 0.05,
+      "doubleSided": true,
+      "pbrMetallicRoughness": {
+        "metallicFactor": 0,
+        "baseColorTexture": {
+          "index": 3
         }
       }
     }
@@ -162,34 +281,95 @@
         {
           "attributes": {
             "POSITION": 5,
-            "NORMAL": 6,
-            "TEXCOORD_0": 7
+            "TEXCOORD_0": 6,
+            "NORMAL": 3
           },
           "mode": 4,
-          "material": 0,
+          "material": 1,
+          "indices": 0
+        }
+      ]
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 7,
+            "NORMAL": 8,
+            "TEXCOORD_0": 9
+          },
+          "mode": 4,
+          "material": 2,
           "indices": 1
+        }
+      ]
+    },
+    {
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 10,
+            "TEXCOORD_0": 11,
+            "NORMAL": 3
+          },
+          "mode": 4,
+          "material": 3,
+          "indices": 0
         }
       ]
     }
   ],
   "nodes": [
     {
-      "name": "nicehatbro-geo",
+      "name": "cube",
       "translation": [
-        -0.1875,
-        0.0625,
+        -0.25,
+        -0.4375,
         -0.1875
       ],
       "mesh": 0
     },
     {
+      "name": "cube",
+      "translation": [
+        0.25,
+        -0.4375,
+        -0.1875
+      ],
+      "mesh": 0
+    },
+    {
+      "name": "cube",
+      "translation": [
+        0.25,
+        -0.4375,
+        -0.1875
+      ],
+      "rotation": [
+        0,
+        0,
+        0.7071067811865475,
+        0.7071067811865476
+      ],
+      "mesh": 1
+    },
+    {
+      "name": "nicehatbro-geo",
+      "translation": [
+        -0.1875,
+        0.03125,
+        -0.1875
+      ],
+      "mesh": 2
+    },
+    {
       "name": "head-anchor",
       "translation": [
         0,
-        0.03125,
+        -0.03125,
         0.03125
       ],
-      "mesh": 1
+      "mesh": 3
     }
   ],
   "scenes": [
@@ -197,7 +377,10 @@
       "name": "blockbench_export",
       "nodes": [
         0,
-        1
+        1,
+        2,
+        3,
+        4
       ]
     }
   ],
