@@ -28,10 +28,27 @@ export class HockeyGameManager {
     [HockeyTeam.BLUE]: 0,
   };
   private _period: number = 1;
-  private _periodTimeMs: number = 3 * 60 * 1000; // 3 minutes
+  private _periodTimeMs: number = 2 * 60 * 1000; // 2 minutes
   private _periodTimer: NodeJS.Timeout | undefined;
   private _lockedInPlayers: Set<string> = new Set();
   private _playerIdToPlayer: Map<string, Player> = new Map();
+  
+  // Track ongoing goal celebration/countdown state for new players
+  private _goalCelebrationState: {
+    isActive: boolean;
+    team?: HockeyTeam;
+    isOwnGoal?: boolean;
+    scorerName?: string;
+    assistName?: string;
+  } = { isActive: false };
+  private _countdownState: {
+    isActive: boolean;
+    countdown?: number;
+    subtitle?: string;
+  } = { isActive: false };
+  
+  // Track the exact time when timer was paused (for goal celebrations)
+  private _pausedTimerValue: number | null = null;
   
   // Removed movement lock system - was interfering with puck controls
 
@@ -69,6 +86,39 @@ export class HockeyGameManager {
   public startTeamSelection() {
     if (this._state === HockeyGameState.TEAM_SELECTION) return;
     this._state = HockeyGameState.TEAM_SELECTION;
+    
+    // Unlock pointer for all players during team selection
+    this.broadcastToAllPlayers({
+      type: 'team-selection-start'
+    });
+    
+    // Unlock pointer for team selection UI interaction
+    if (this._world) {
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
+      // Also include any players not yet assigned to teams
+      this._playerIdToPlayer.forEach((player) => {
+        if (!allPlayers.includes(player)) {
+          allPlayers.push(player);
+        }
+      });
+      
+      allPlayers.forEach((player) => {
+        try {
+          player.ui.lockPointer(false); // Unlock pointer for team selection
+        } catch (error) {
+          console.error('Error unlocking pointer for player:', error);
+        }
+      });
+    }
+    
     // TODO: Show team/position selection UI
   }
 
@@ -180,6 +230,26 @@ export class HockeyGameManager {
       const scorerName = goalInfo ? PlayerStatsManager.instance.getPlayerStats(goalInfo.scorerId)?.playerName : 'Unknown';
       const assistName = goalInfo?.assistId ? PlayerStatsManager.instance.getPlayerStats(goalInfo.assistId)?.playerName : undefined;
       
+      // Track goal celebration state for new players
+      this._goalCelebrationState = {
+        isActive: true,
+        team: team,
+        isOwnGoal: isOwnGoal,
+        scorerName: scorerName,
+        assistName: assistName
+      };
+      
+      // Capture the current timer value when goal is scored (for new players)
+      const currentPeriodTime = PlayerStatsManager.instance.getCurrentPeriodTimeRemaining();
+      this._pausedTimerValue = currentPeriodTime;
+      console.log(`[HockeyGameManager] Goal scored - captured paused timer value: ${this._pausedTimerValue} seconds`);
+      
+      // Broadcast the paused timer value to all existing players
+      this.broadcastToAllPlayers({
+        type: 'timer-pause',
+        pausedTime: this._pausedTimerValue
+      });
+      
       allPlayers.forEach((player) => {
         try {
           player.ui.sendData({
@@ -229,6 +299,9 @@ export class HockeyGameManager {
       // Lock movement IMMEDIATELY when reset starts
       this._state = HockeyGameState.GOAL_SCORED;
       console.log('[HockeyGameManager] Entered GOAL_SCORED state - players locked during reset and countdown');
+      
+      // Clear goal celebration state (celebration is over, countdown begins)
+      this._goalCelebrationState.isActive = false;
       
       // Perform complete reset using PlayerSpawnManager
       PlayerSpawnManager.instance.performCompleteReset(
@@ -315,6 +388,43 @@ export class HockeyGameManager {
   }
 
   /**
+   * Send live stats to a specific player
+   */
+  public sendLiveStatsToPlayer(player: Player): void {
+    if (!this._world) return;
+    
+    const statsData = PlayerStatsManager.instance.getStatsSummary();
+    const playerStats = PlayerStatsManager.instance.getAllStats();
+    const goalHistory = PlayerStatsManager.instance.getGoals().map(goal => ({
+      ...goal,
+      scorerName: PlayerStatsManager.instance.getPlayerStats(goal.scorerId)?.playerName || 'Unknown',
+      assistName: goal.assistId ? PlayerStatsManager.instance.getPlayerStats(goal.assistId)?.playerName : undefined
+    }));
+    
+    // Generate box score for period-by-period breakdown
+    const boxScore = PlayerStatsManager.instance.generateBoxScore();
+    
+    try {
+      player.ui.sendData({
+        type: 'live-stats-response',
+        redScore: this._scores[HockeyTeam.RED],
+        blueScore: this._scores[HockeyTeam.BLUE],
+        period: this._period,
+        topScorer: statsData.topScorer,
+        mostGoals: statsData.mostGoals,
+        mostSaves: statsData.mostSaves,
+        playerStats,
+        goalHistory,
+        boxScore
+      });
+      
+      console.log('[HockeyGameManager] Sent live stats with box score to player:', player.id);
+    } catch (error) {
+      console.error('Error sending live stats to player:', error);
+    }
+  }
+
+  /**
    * Helper method to convert teams to valid format for PlayerSpawnManager
    */
   private getValidTeamsForReset(): Record<HockeyTeam, Record<HockeyPosition, string>> {
@@ -344,12 +454,22 @@ export class HockeyGameManager {
     
     let countdown = 3;
     
+    // Track countdown state for new players
+    this._countdownState = {
+      isActive: true,
+      countdown: countdown,
+      subtitle: 'Resuming Play'
+    };
+    
     const countdownInterval = setInterval(() => {
       if (countdown > 0) {
         // Play countdown sound effect only once at the start (when countdown is 3)
         if (countdown === 3) {
           this.playCountdownSound();
         }
+        
+        // Update countdown state
+        this._countdownState.countdown = countdown;
         
         // Send countdown update to UI
         this.broadcastToAllPlayers({
@@ -366,6 +486,23 @@ export class HockeyGameManager {
         countdown--;
       } else {
         clearInterval(countdownInterval);
+        
+        // Clear countdown state (countdown is over)
+        this._countdownState.isActive = false;
+        
+        // Clear paused timer value (play is resuming)
+        this._pausedTimerValue = null;
+        
+        // Adjust period start time to account for goal celebration + countdown pause
+        // 6s celebration + 3s countdown = 9s total pause
+        const pauseDurationMs = 9000;
+        PlayerStatsManager.instance.adjustPeriodStartTime(pauseDurationMs);
+        
+        // Send updated period start time to UI for synchronization
+        this.broadcastToAllPlayers({
+          type: 'period-time-adjusted',
+          pauseDurationMs: pauseDurationMs
+        });
         
         // Send "GO!" to UI
         this.broadcastToAllPlayers({
@@ -399,6 +536,26 @@ export class HockeyGameManager {
     if (this._state === HockeyGameState.MATCH_START) return;
     
     console.log('[HockeyGameManager] Starting match sequence...');
+    
+    // Lock pointer back for gameplay - team selection is over
+    if (this._world) {
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
+      allPlayers.forEach((player) => {
+        try {
+          player.ui.lockPointer(true); // Lock pointer for gameplay
+        } catch (error) {
+          console.error('Error locking pointer for player:', error);
+        }
+      });
+    }
     
     // Set state to MATCH_START to lock movement during reset
     this._state = HockeyGameState.MATCH_START;
@@ -464,12 +621,22 @@ export class HockeyGameManager {
     
     let countdown = 3;
     
+    // Track countdown state for new players
+    this._countdownState = {
+      isActive: true,
+      countdown: countdown,
+      subtitle: 'Game Starting'
+    };
+    
     const countdownInterval = setInterval(() => {
       if (countdown > 0) {
         // Play countdown sound effect only once at the start (when countdown is 3)
         if (countdown === 3) {
           this.playCountdownSound();
         }
+        
+        // Update countdown state
+        this._countdownState.countdown = countdown;
         
         // Send countdown update to UI with game start subtitle
         this.broadcastToAllPlayers({
@@ -487,6 +654,9 @@ export class HockeyGameManager {
       } else {
         clearInterval(countdownInterval);
         
+        // Clear countdown state (countdown is over)
+        this._countdownState.isActive = false;
+        
         // Send "GO!" to UI
         this.broadcastToAllPlayers({
           type: 'countdown-go'
@@ -497,6 +667,10 @@ export class HockeyGameManager {
         
         // Transition to IN_PERIOD state (this unlocks movement)
         this._state = HockeyGameState.IN_PERIOD;
+        
+        // Start tracking period time for stats
+        PlayerStatsManager.instance.startPeriodTime();
+        
         this._world!.chatManager.sendBroadcastMessage(
           'Game started! GO!',
           '00FF00'
@@ -511,7 +685,8 @@ export class HockeyGameManager {
           type: 'game-start',
           redScore: 0,
           blueScore: 0,
-          period: 1
+          period: 1,
+          periodStartTime: Date.now() // Send exact start time for synchronization
         });
         
         // Hide countdown overlay after a brief delay
@@ -669,6 +844,10 @@ export class HockeyGameManager {
         
         // Transition to IN_PERIOD state (this unlocks movement)
         this._state = HockeyGameState.IN_PERIOD;
+        
+        // Start tracking period time for stats
+        PlayerStatsManager.instance.startPeriodTime();
+        
         this._world!.chatManager.sendBroadcastMessage(
           `${this.getPeriodName(this._period)} started! GO!`,
           '00FF00'
@@ -690,9 +869,10 @@ export class HockeyGameManager {
           period: this._period
         });
         
-        // Tell UI to restart its timer
+        // Tell UI to restart its timer with exact start time
         this.broadcastToAllPlayers({
-          type: 'timer-restart'
+          type: 'timer-restart',
+          periodStartTime: Date.now() // Send exact start time for synchronization
         });
         
         // Hide countdown overlay after a brief delay
@@ -769,6 +949,17 @@ export class HockeyGameManager {
     
     // Set state to lobby
     this._state = HockeyGameState.LOBBY;
+    
+    // Unlock pointer for returning to lobby/team selection
+    if (this._world) {
+      this._playerIdToPlayer.forEach((player) => {
+        try {
+          player.ui.lockPointer(false); // Unlock pointer for lobby/team selection
+        } catch (error) {
+          console.error('Error unlocking pointer for player during lobby reset:', error);
+        }
+      });
+    }
     
     // Set state to waiting for players
     this.startWaitingForPlayers();
@@ -1051,6 +1242,24 @@ export class HockeyGameManager {
 
   public get scores(): Record<HockeyTeam, number> {
     return this._scores;
+  }
+
+  public get period(): number {
+    return this._period;
+  }
+
+  /**
+   * Get current period start time for synchronizing new players
+   */
+  public getCurrentPeriodStartTime(): number | null {
+    return PlayerStatsManager.instance.getPeriodStartTime();
+  }
+
+  /**
+   * Get the paused timer value (when goal was scored)
+   */
+  public getPausedTimerValue(): number | null {
+    return this._pausedTimerValue;
   }
 
   // --- Movement Lock System Removed ---

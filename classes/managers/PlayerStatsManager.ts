@@ -348,11 +348,38 @@ export class PlayerStatsManager {
   }
 
   /**
-   * Get current period time in seconds
+   * Adjust period start time to account for pauses (like goal celebrations)
+   */
+  public adjustPeriodStartTime(pauseDurationMs: number): void {
+    if (this._periodStartTime > 0) {
+      this._periodStartTime += pauseDurationMs;
+      console.log(`[PlayerStatsManager] Adjusted period start time by ${pauseDurationMs}ms to account for pause`);
+    }
+  }
+
+  /**
+   * Get current period start time for synchronizing new players
+   */
+  public getPeriodStartTime(): number | null {
+    return this._periodStartTime > 0 ? this._periodStartTime : null;
+  }
+
+  /**
+   * Get current period time remaining on clock (public accessor)
+   */
+  public getCurrentPeriodTimeRemaining(): number {
+    return this.getCurrentPeriodTime();
+  }
+
+  /**
+   * Get current period time remaining on clock in seconds (countdown format)
    */
   private getCurrentPeriodTime(): number {
     if (this._periodStartTime === 0) return 0;
-    return Math.floor((Date.now() - this._periodStartTime) / 1000);
+    const elapsedSeconds = Math.floor((Date.now() - this._periodStartTime) / 1000);
+    const periodDurationSeconds = 2 * 60; // 2 minutes (matches UI timer)
+    const remainingSeconds = Math.max(0, periodDurationSeconds - elapsedSeconds);
+    return remainingSeconds;
   }
 
   /**

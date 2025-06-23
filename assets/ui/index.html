@@ -86,6 +86,287 @@ and also configure additional buttons for mobile compatibility.
     }
   });
 
+  // Live Stats Overlay functionality
+  let isStatsOverlayVisible = false;
+
+  function getCurrentPeriod() {
+    const periodElement = document.querySelector('.period');
+    if (periodElement) {
+      const periodText = periodElement.textContent;
+      if (periodText.includes('1st')) return 1;
+      if (periodText.includes('2nd')) return 2;
+      if (periodText.includes('3rd')) return 3;
+    }
+    return 1; // Default to 1st period
+  }
+
+  function toggleStatsOverlay() {
+    const statsOverlay = document.getElementById('live-stats-overlay');
+    if (isStatsOverlayVisible) {
+      statsOverlay.style.display = 'none';
+      isStatsOverlayVisible = false;
+    } else {
+      statsOverlay.style.display = 'flex';
+      isStatsOverlayVisible = true;
+      // Request fresh stats data when opening
+      hytopia.sendData({ type: 'request-live-stats' });
+    }
+  }
+
+  function updateLiveStats(statsData) {
+    // Update scores
+    document.getElementById('live-red-score').textContent = statsData.redScore || 0;
+    document.getElementById('live-blue-score').textContent = statsData.blueScore || 0;
+    
+    // Update period
+    if (statsData.period) {
+      const periodText = statsData.period === 1 ? '1st Period' : 
+                        statsData.period === 2 ? '2nd Period' : '3rd Period';
+      document.getElementById('live-period').textContent = periodText;
+    }
+
+    // Update box score if available
+    if (statsData.boxScore && statsData.boxScore.periodScores) {
+      const periodScores = statsData.boxScore.periodScores;
+      
+      // Update period scores for RED team
+      document.getElementById('live-red-p1').textContent = periodScores[0]?.red || 0;
+      document.getElementById('live-red-p2').textContent = periodScores[1]?.red || 0;
+      document.getElementById('live-red-p3').textContent = periodScores[2]?.red || 0;
+      document.getElementById('live-red-total').textContent = statsData.redScore || 0;
+      
+      // Update period scores for BLUE team
+      document.getElementById('live-blue-p1').textContent = periodScores[0]?.blue || 0;
+      document.getElementById('live-blue-p2').textContent = periodScores[1]?.blue || 0;
+      document.getElementById('live-blue-p3').textContent = periodScores[2]?.blue || 0;
+      document.getElementById('live-blue-total').textContent = statsData.blueScore || 0;
+    } else {
+      // Fallback: just show current totals in all periods
+      document.getElementById('live-red-p1').textContent = '0';
+      document.getElementById('live-red-p2').textContent = '0';
+      document.getElementById('live-red-p3').textContent = '0';
+      document.getElementById('live-red-total').textContent = statsData.redScore || 0;
+      
+      document.getElementById('live-blue-p1').textContent = '0';
+      document.getElementById('live-blue-p2').textContent = '0';
+      document.getElementById('live-blue-p3').textContent = '0';
+      document.getElementById('live-blue-total').textContent = statsData.blueScore || 0;
+    }
+
+    // Update top performers
+    const topScorer = statsData.topScorer;
+    const mostGoals = statsData.mostGoals;
+    const mostSaves = statsData.mostSaves;
+
+    document.getElementById('live-top-scorer').textContent = 
+      topScorer ? `${topScorer.name} (${topScorer.points}pts)` : '--';
+    document.getElementById('live-most-goals').textContent = 
+      mostGoals ? `${mostGoals.name} (${mostGoals.goals}g)` : '--';
+    document.getElementById('live-most-saves').textContent = 
+      mostSaves ? `${mostSaves.name} (${mostSaves.saves}sv)` : '--';
+
+    // Update player stats table
+    const tableBody = document.getElementById('live-stats-table-body');
+    tableBody.innerHTML = '';
+
+    if (statsData.playerStats && statsData.playerStats.length > 0) {
+      // Sort players by points (goals + assists)
+      const sortedPlayers = [...statsData.playerStats].sort((a, b) => {
+        const aPoints = (a.goals || 0) + (a.assists || 0);
+        const bPoints = (b.goals || 0) + (b.assists || 0);
+        return bPoints - aPoints;
+      });
+
+      sortedPlayers.forEach(player => {
+        const row = document.createElement('div');
+        row.className = `live-player-stat-row ${player.team === 'RED' ? 'red-player' : 'blue-player'}`;
+        
+        const points = (player.goals || 0) + (player.assists || 0);
+        
+        row.innerHTML = `
+          <div class="live-stat-col player-col">${player.playerName || player.playerId}</div>
+          <div class="live-stat-col">${player.goals || 0}</div>
+          <div class="live-stat-col">${player.assists || 0}</div>
+          <div class="live-stat-col">${points}</div>
+          <div class="live-stat-col">${player.shotsOnGoal || 0}</div>
+          <div class="live-stat-col">${player.saves || 0}</div>
+          <div class="live-stat-col">${player.plusMinus >= 0 ? '+' : ''}${player.plusMinus || 0}</div>
+        `;
+        
+        tableBody.appendChild(row);
+      });
+    } else {
+      const noDataRow = document.createElement('div');
+      noDataRow.className = 'live-player-stat-row';
+      noDataRow.innerHTML = '<div class="live-stat-col player-col" style="grid-column: 1 / -1; text-align: center; color: #999;">No player stats available</div>';
+      tableBody.appendChild(noDataRow);
+    }
+
+    // Update recent goals
+    const recentGoalsContainer = document.getElementById('live-recent-goals');
+    recentGoalsContainer.innerHTML = '';
+
+    if (statsData.goalHistory && statsData.goalHistory.length > 0) {
+      // Show last 4 goals (reduced for compactness)
+      const recentGoals = statsData.goalHistory.slice(-4).reverse();
+      
+      recentGoals.forEach(goal => {
+        const goalItem = document.createElement('div');
+        goalItem.className = 'live-goal-item';
+        
+        // Format time as M:SS (e.g., "1:36")
+        const timeInPeriod = goal.timeInPeriod || 0;
+        const minutes = Math.floor(timeInPeriod / 60);
+        const seconds = timeInPeriod % 60;
+        const timeText = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+        const periodTimeText = `P${goal.period} ${timeText}`;
+        
+        const scorerText = goal.scorerName || 'Unknown';
+        const assistText = goal.assistName ? ` (${goal.assistName})` : '';
+        const teamClass = goal.team === 'RED' ? 'red' : 'blue';
+        
+        goalItem.innerHTML = `
+          <div class="live-goal-info">
+            <div class="live-goal-time">${periodTimeText}</div>
+            <div class="live-goal-scorer">${scorerText}</div>
+            ${assistText ? `<div class="live-goal-assist">${assistText}</div>` : ''}
+          </div>
+          <div class="live-goal-team ${teamClass}">${goal.team}</div>
+        `;
+        
+        recentGoalsContainer.appendChild(goalItem);
+      });
+      
+      // Auto-scroll to show the most recent goals (at the top)
+      // Small delay to ensure DOM is updated
+      setTimeout(() => {
+        recentGoalsContainer.scrollTop = 0;
+        
+        // Debug: Check if content is scrollable
+        const isScrollable = recentGoalsContainer.scrollHeight > recentGoalsContainer.clientHeight;
+        console.log('Recent Goals scrollable:', isScrollable);
+        console.log('Scroll height:', recentGoalsContainer.scrollHeight, 'Client height:', recentGoalsContainer.clientHeight);
+      }, 50);
+    } else {
+      // No goals to display
+      const noGoalsMessage = document.createElement('div');
+      noGoalsMessage.style.textAlign = 'center';
+      noGoalsMessage.style.color = '#999';
+      noGoalsMessage.style.fontStyle = 'italic';
+      noGoalsMessage.style.padding = '20px';
+      noGoalsMessage.textContent = 'No goals scored yet';
+      recentGoalsContainer.appendChild(noGoalsMessage);
+    }
+  }
+
+  // Event listeners for stats overlay
+  document.getElementById('stats-toggle').addEventListener('click', enhancedToggleStatsOverlay);
+  document.getElementById('live-stats-close').addEventListener('click', enhancedToggleStatsOverlay);
+
+  // Setup seamless scrolling for the stats content area
+  function setupStatsOverlayScrolling() {
+    const overlay = document.getElementById('live-stats-overlay');
+    const content = document.querySelector('.live-stats-content');
+    
+    if (overlay && content) {
+      console.log('Setting up stats content scrolling');
+      
+      // Mark as set up to avoid duplicate setup
+      if (overlay.hasAttribute('data-scroll-setup')) {
+        console.log('Stats overlay scrolling already set up');
+        return;
+      }
+      overlay.setAttribute('data-scroll-setup', 'true');
+      
+      // Prevent all mouse events on overlay from propagating to the game
+      overlay.addEventListener('wheel', function(event) {
+        event.stopPropagation(); // Prevent game from receiving the event
+        // Let the content area handle scrolling naturally
+      }, { passive: false });
+
+      overlay.addEventListener('mousedown', function(event) {
+        event.stopPropagation();
+      });
+
+      overlay.addEventListener('mouseup', function(event) {
+        event.stopPropagation();
+      });
+
+      overlay.addEventListener('mousemove', function(event) {
+        event.stopPropagation();
+      });
+
+      overlay.addEventListener('click', function(event) {
+        event.stopPropagation();
+      });
+
+      // Debug: Log when scrolling happens in content area
+      content.addEventListener('scroll', function(event) {
+        console.log('Stats content scrolled to:', content.scrollTop, 'of', content.scrollHeight);
+      });
+      
+      console.log('Stats content scrolling setup complete');
+    } else {
+      console.error('Stats overlay or content not found!');
+    }
+  }
+
+  // Setup scrolling when the overlay is shown
+  function enhancedToggleStatsOverlay() {
+    toggleStatsOverlay();
+    if (isStatsOverlayVisible) {
+      // Small delay to ensure DOM is ready
+      setTimeout(() => {
+        setupStatsOverlayScrolling();
+        // Note: setupStatsOverlayEventPrevention is now handled within setupStatsOverlayScrolling
+      }, 100);
+    }
+  }
+
+  // Prevent all game events when stats overlay is visible
+  function setupStatsOverlayEventPrevention() {
+    const statsOverlay = document.getElementById('live-stats-overlay');
+    if (statsOverlay) {
+      // Prevent all mouse events from propagating to the game
+      statsOverlay.addEventListener('wheel', function(event) {
+        event.stopPropagation();
+      }, { passive: false });
+
+      statsOverlay.addEventListener('mousedown', function(event) {
+        event.stopPropagation();
+      });
+
+      statsOverlay.addEventListener('mouseup', function(event) {
+        event.stopPropagation();
+      });
+
+      statsOverlay.addEventListener('mousemove', function(event) {
+        event.stopPropagation();
+      });
+
+      statsOverlay.addEventListener('click', function(event) {
+        event.stopPropagation();
+      });
+
+      // Prevent context menu
+      statsOverlay.addEventListener('contextmenu', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+    }
+  }
+
+  // Keyboard shortcut for 'K' key
+  document.addEventListener('keydown', function(event) {
+    // Only trigger if not typing in an input field
+    if (event.target.tagName !== 'INPUT' && event.target.tagName !== 'TEXTAREA') {
+      if (event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        enhancedToggleStatsOverlay();
+      }
+    }
+  });
+
   // Handle server messages for team/position selection
   hytopia.onData(data => {
     if (data.type === 'team-positions-update') {
@@ -183,8 +464,27 @@ and also configure additional buttons for mobile compatibility.
         document.querySelector('.period').textContent = `${periodText} Period`;
       }
       
-      // Start game timer
-      startGameTimer();
+      // Start game timer with backend sync, but pause if indicated
+      if (data.timerPaused) {
+        // Set up timer with correct time but don't start it (paused for goal celebration)
+        if (data.pausedTimerValue !== undefined && data.pausedTimerValue !== null) {
+          // Use the exact paused timer value from when goal was scored
+          timeRemaining = data.pausedTimerValue;
+          periodStartTime = data.periodStartTime; // Still need this for resume calculations
+          updateTimerDisplay();
+          console.log('UI: Timer set up but paused for goal celebration, using paused value:', timeRemaining);
+        } else if (data.periodStartTime && data.periodStartTime > 0) {
+          // Fallback to calculating from period start time
+          periodStartTime = data.periodStartTime;
+          const elapsedSeconds = Math.floor((Date.now() - periodStartTime) / 1000);
+          timeRemaining = Math.max(0, 120 - elapsedSeconds);
+          updateTimerDisplay();
+          console.log('UI: Timer set up but paused for goal celebration, calculated time:', timeRemaining);
+        }
+      } else {
+        // Normal timer start
+        startGameTimer(data.periodStartTime);
+      }
     }
     if (data.type === 'game-waiting') {
       // Show waiting state in scoreboard
@@ -285,9 +585,9 @@ and also configure additional buttons for mobile compatibility.
       document.querySelector('.period').textContent = `${periodText} Period`;
     }
     if (data.type === 'timer-restart') {
-      // Restart the game timer for new period
+      // Restart the game timer for new period with backend sync
       console.log('UI: Restarting timer for new period');
-      startGameTimer();
+      startGameTimer(data.periodStartTime);
     }
     if (data.type === 'timer-stop') {
       // Stop the game timer completely
@@ -338,6 +638,45 @@ and also configure additional buttons for mobile compatibility.
       updateStatsData(data.statsData);
       updatePlayerStatsTable(data.playerStats);
       updateGoalHistory(data.goalHistory);
+      
+      // If stats overlay is open, update it with latest data
+      if (isStatsOverlayVisible) {
+        updateLiveStats({
+          redScore: data.statsData?.teamStats?.red?.goals || 0,
+          blueScore: data.statsData?.teamStats?.blue?.goals || 0,
+          period: getCurrentPeriod(),
+          topScorer: data.statsData?.topScorer,
+          mostGoals: data.statsData?.mostGoals,
+          mostSaves: data.statsData?.mostSaves,
+          playerStats: data.playerStats || [],
+          goalHistory: data.goalHistory || [],
+          boxScore: data.boxScore // Include box score if available
+        });
+      }
+    }
+    if (data.type === 'live-stats-response') {
+      // Handle live stats response from server
+      updateLiveStats(data);
+    }
+    if (data.type === 'period-time-adjusted') {
+      // Adjust period start time to account for goal celebration pause
+      if (periodStartTime) {
+        periodStartTime += data.pauseDurationMs;
+        console.log('UI: Adjusted period start time by', data.pauseDurationMs, 'ms for goal pause');
+      }
+    }
+    if (data.type === 'timer-pause') {
+      // Pause timer at the exact time when goal was scored
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      if (data.pausedTime !== undefined && data.pausedTime !== null) {
+        timeRemaining = data.pausedTime;
+        timeWhenGoalScored = data.pausedTime; // Store for resume
+        updateTimerDisplay();
+        console.log('UI: Timer paused at exact goal time:', data.pausedTime);
+      }
     }
   });
 
@@ -534,21 +873,35 @@ and also configure additional buttons for mobile compatibility.
   let timerInterval = null;
   let timeRemaining = 120; // 2 minutes in seconds
   let timeWhenGoalScored = null; // Track time when goal was scored for proper resumption
+  let periodStartTime = null; // Backend period start time for synchronization
 
-  function startGameTimer() {
+  function startGameTimer(backendStartTime = null) {
     // Clear any existing timer
     if (timerInterval) {
       clearInterval(timerInterval);
     }
     
-    // Reset time to 2 minutes
-    timeRemaining = 120;
+    // Use backend start time if provided for synchronization
+    periodStartTime = backendStartTime || Date.now();
     timeWhenGoalScored = null; // Clear saved time when starting new timer
+    
+    // Calculate initial time remaining based on backend start time
+    if (backendStartTime) {
+      const elapsedMs = Date.now() - backendStartTime;
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      timeRemaining = Math.max(0, 120 - elapsedSeconds);
+    } else {
+      timeRemaining = 120;
+    }
+    
     updateTimerDisplay();
     
-    // Start countdown
+    // Start countdown using backend sync
     timerInterval = setInterval(() => {
-      timeRemaining--;
+      // Calculate time remaining based on backend start time for accuracy
+      const elapsedMs = Date.now() - periodStartTime;
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      timeRemaining = Math.max(0, 120 - elapsedSeconds);
       updateTimerDisplay();
       
       if (timeRemaining <= 0) {
@@ -565,21 +918,28 @@ and also configure additional buttons for mobile compatibility.
       clearInterval(timerInterval);
     }
     
-    // Resume from saved time if available, otherwise start from 2 minutes
-    if (timeWhenGoalScored !== null) {
-      timeRemaining = timeWhenGoalScored;
-      timeWhenGoalScored = null; // Clear saved time after resuming
-      console.log('UI: Resuming timer from saved time:', timeRemaining);
+    // Clear saved time - we'll use backend sync instead
+    timeWhenGoalScored = null;
+    
+    // Calculate current time based on backend period start time
+    if (periodStartTime) {
+      const elapsedMs = Date.now() - periodStartTime;
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      timeRemaining = Math.max(0, 120 - elapsedSeconds);
+      console.log('UI: Resuming timer with backend sync, time remaining:', timeRemaining);
     } else {
       timeRemaining = 120;
-      console.log('UI: No saved time found, starting timer from 2 minutes');
+      console.log('UI: No backend start time found, starting timer from 2 minutes');
     }
     
     updateTimerDisplay();
     
-    // Start countdown
+    // Start countdown using backend sync (same as startGameTimer)
     timerInterval = setInterval(() => {
-      timeRemaining--;
+      // Calculate time remaining based on backend start time for accuracy
+      const elapsedMs = Date.now() - periodStartTime;
+      const elapsedSeconds = Math.floor(elapsedMs / 1000);
+      timeRemaining = Math.max(0, 120 - elapsedSeconds);
       updateTimerDisplay();
       
       if (timeRemaining <= 0) {
@@ -1574,6 +1934,123 @@ and also configure additional buttons for mobile compatibility.
   <div id="stats-toggle" class="stats-toggle">
     <div class="stats-icon">📊</div>
     <div class="stats-label">STATS</div>
+  </div>
+
+  <!-- Live Stats Overlay -->
+  <div id="live-stats-overlay" class="live-stats-overlay" style="display: none;">
+    <div class="live-stats-container">
+      <div class="live-stats-header">
+        <div class="live-stats-title">Live Stats</div>
+        <div class="live-stats-close" id="live-stats-close">✕</div>
+      </div>
+      
+      <div class="live-stats-content">
+        <!-- Team Scores Section -->
+        <div class="live-stats-scores">
+          <div class="live-stats-team red">
+            <div class="live-stats-team-name">RED</div>
+            <div class="live-stats-team-score" id="live-red-score">0</div>
+          </div>
+          <div class="live-stats-period">
+            <div class="live-stats-period-text" id="live-period">1st Period</div>
+          </div>
+          <div class="live-stats-team blue">
+            <div class="live-stats-team-name">BLUE</div>
+            <div class="live-stats-team-score" id="live-blue-score">0</div>
+          </div>
+        </div>
+
+        <!-- Compact Grid Layout -->
+        <div class="live-stats-grid">
+          <!-- Left Column -->
+          <div class="live-stats-left-column">
+            <!-- Box Score Section -->
+            <div class="live-stats-section compact">
+              <div class="live-stats-section-title">Box Score</div>
+              <div class="live-box-score-table">
+                <div class="live-box-score-header">
+                  <div class="live-team-header">Team</div>
+                  <div class="live-period-header">1st</div>
+                  <div class="live-period-header">2nd</div>
+                  <div class="live-period-header">3rd</div>
+                  <div class="live-total-header">Total</div>
+                </div>
+                <div class="live-box-score-row red-row">
+                  <div class="live-team-name">RED</div>
+                  <div class="live-period-score" id="live-red-p1">0</div>
+                  <div class="live-period-score" id="live-red-p2">0</div>
+                  <div class="live-period-score" id="live-red-p3">0</div>
+                  <div class="live-total-score red-total" id="live-red-total">0</div>
+                </div>
+                <div class="live-box-score-row blue-row">
+                  <div class="live-team-name">BLUE</div>
+                  <div class="live-period-score" id="live-blue-p1">0</div>
+                  <div class="live-period-score" id="live-blue-p2">0</div>
+                  <div class="live-period-score" id="live-blue-p3">0</div>
+                  <div class="live-total-score blue-total" id="live-blue-total">0</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Top Performers Section -->
+            <div class="live-stats-section compact">
+              <div class="live-stats-section-title">Top Performers</div>
+              <div class="live-top-performers compact">
+                <div class="live-performer">
+                  <div class="live-performer-label">Leading Scorer</div>
+                  <div class="live-performer-value" id="live-top-scorer">--</div>
+                </div>
+                <div class="live-performer">
+                  <div class="live-performer-label">Most Goals</div>
+                  <div class="live-performer-value" id="live-most-goals">--</div>
+                </div>
+                <div class="live-performer">
+                  <div class="live-performer-label">Most Saves</div>
+                  <div class="live-performer-value" id="live-most-saves">--</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Column -->
+          <div class="live-stats-right-column">
+            <!-- Player Stats Table -->
+            <div class="live-stats-section compact full-height">
+              <div class="live-stats-section-title">Player Statistics</div>
+              <div class="live-stats-table">
+                <div class="live-stats-table-header">
+                  <div class="live-stat-col player-col">Player</div>
+                  <div class="live-stat-col">G</div>
+                  <div class="live-stat-col">A</div>
+                  <div class="live-stat-col">P</div>
+                  <div class="live-stat-col">SOG</div>
+                  <div class="live-stat-col">SV</div>
+                  <div class="live-stat-col">+/-</div>
+                </div>
+                <div class="live-stats-table-body compact" id="live-stats-table-body">
+                  <!-- Player stats will be populated here -->
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Bottom Section -->
+          <div class="live-stats-bottom-section">
+            <!-- Recent Goals Section -->
+            <div class="live-stats-section compact">
+              <div class="live-stats-section-title">Recent Goals</div>
+              <div class="live-recent-goals compact" id="live-recent-goals">
+                <!-- Recent goals will be populated here -->
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="live-stats-footer">
+        <div class="live-stats-shortcut">Press K to toggle stats</div>
+      </div>
+    </div>
   </div>
 
   <!-- Pass/Shot Icons Overlay -->
@@ -3389,6 +3866,502 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  /* Live Stats Overlay */
+  .live-stats-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 2000;
+    display: flex;
+    align-items: center; /* Back to center */
+    justify-content: center;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s ease-out;
+    overflow: hidden; /* No scrolling on overlay itself */
+    padding: 20px; /* Standard padding */
+  }
+
+  .live-stats-container {
+    background: linear-gradient(135deg, rgba(20, 20, 30, 0.95), rgba(10, 10, 20, 0.95));
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    width: 90%;
+    max-width: 900px;
+    max-height: 90vh; /* Constrain height to viewport */
+    overflow-y: auto; /* Make container scrollable */
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+    animation: slideIn 0.3s ease-out;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .live-stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 30px;
+    background: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0; /* Keep header fixed size */
+  }
+
+  .live-stats-title {
+    color: #fff;
+    font-size: 1.8rem;
+    font-weight: 700;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    letter-spacing: 2px;
+  }
+
+  .live-stats-close {
+    color: #ccc;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+    user-select: none;
+  }
+
+  .live-stats-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+  }
+
+  .live-stats-content {
+    padding: 20px;
+    flex: 1; /* Take remaining space */
+    overflow-y: auto; /* Make content scrollable */
+    overflow-x: hidden;
+  }
+
+  .live-stats-scores {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 40px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 15px;
+  }
+
+  .live-stats-team {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .live-stats-team-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+  }
+
+  .live-stats-team.red .live-stats-team-name {
+    color: #ff4444;
+  }
+
+  .live-stats-team.blue .live-stats-team-name {
+    color: #44aaff;
+  }
+
+  .live-stats-team-score {
+    font-size: 3rem;
+    font-weight: 900;
+    color: #fff;
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
+  .live-stats-period {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .live-stats-period-text {
+    color: #ccc;
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+  }
+
+  .live-stats-section {
+    margin-bottom: 30px;
+  }
+
+  .live-stats-section.compact {
+    margin-bottom: 15px;
+  }
+
+  /* Grid Layout for Compact Design */
+  .live-stats-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    gap: 20px;
+    /* Remove fixed height to allow natural expansion */
+  }
+
+  .live-stats-left-column {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .live-stats-right-column {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .live-stats-bottom-section {
+    grid-column: 1 / -1;
+  }
+
+  .live-stats-section.full-height {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .live-stats-section.full-height .live-stats-table {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .live-stats-section.full-height .live-stats-table-body {
+    flex: 1;
+  }
+
+  .live-stats-section-title {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+    font-family: 'Inter', Arial, sans-serif;
+  }
+
+  .live-top-performers {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+
+  .live-top-performers.compact {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .live-performer {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 15px 20px;
+    flex: 1;
+    min-width: 200px;
+    text-align: center;
+  }
+
+  .live-top-performers.compact .live-performer {
+    padding: 10px 15px;
+    min-width: auto;
+  }
+
+  .live-performer-label {
+    color: #ccc;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .live-performer-value {
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+
+  .live-stats-table {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .live-stats-table-header {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    padding: 15px 20px;
+    background: rgba(255, 255, 255, 0.1);
+    font-weight: 700;
+    color: #fff;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+
+  .live-stats-table-body {
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .live-stats-table-body.compact {
+    max-height: 200px;
+  }
+
+  .live-player-stat-row {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    gap: 10px;
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease;
+  }
+
+  .live-player-stat-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .live-player-stat-row.red-player {
+    border-left: 3px solid #ff4444;
+  }
+
+  .live-player-stat-row.blue-player {
+    border-left: 3px solid #44aaff;
+  }
+
+  .live-stat-col {
+    color: #fff;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  .live-stat-col.player-col {
+    text-align: left;
+    font-weight: 600;
+  }
+
+  .live-recent-goals {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    padding: 20px;
+    max-height: 200px;
+    overflow-y: auto;
+    scroll-behavior: smooth;
+  }
+
+  /* Custom scrollbar styling for the content area */
+  .live-stats-content::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .live-stats-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+  }
+
+  .live-stats-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .live-stats-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+    background-clip: content-box;
+  }
+
+  .live-recent-goals.compact {
+    padding: 15px;
+    /* Remove height restrictions - let content expand naturally */
+    overflow: visible;
+    display: block;
+    box-sizing: border-box;
+  }
+
+  .live-goal-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .live-goal-item:last-child {
+    border-bottom: none;
+  }
+
+  .live-goal-info {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .live-goal-time {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 4px 8px;
+    border-radius: 5px;
+    font-size: 0.75rem;
+    color: #ccc;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    min-width: 60px;
+    text-align: center;
+  }
+
+  .live-goal-scorer {
+    color: #fff;
+    font-weight: 700;
+    font-size: 1rem;
+  }
+
+  .live-goal-assist {
+    color: #ccc;
+    font-size: 0.85rem;
+  }
+
+  .live-goal-team {
+    padding: 4px 10px;
+    border-radius: 5px;
+    font-weight: 700;
+    font-size: 0.8rem;
+    letter-spacing: 1px;
+  }
+
+  .live-goal-team.red {
+    background: rgba(255, 68, 68, 0.2);
+    color: #ff4444;
+    border: 1px solid #ff4444;
+  }
+
+  .live-goal-team.blue {
+    background: rgba(68, 170, 255, 0.2);
+    color: #44aaff;
+    border: 1px solid #44aaff;
+  }
+
+  .live-stats-footer {
+    padding: 15px 30px;
+    background: rgba(255, 255, 255, 0.03);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    text-align: center;
+    flex-shrink: 0; /* Keep footer fixed size */
+  }
+
+  .live-stats-shortcut {
+    color: #999;
+    font-size: 0.9rem;
+    font-weight: 500;
+  }
+
+  /* Live Box Score Table */
+  .live-box-score-table {
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .live-box-score-header,
+  .live-box-score-row {
+    display: grid;
+    grid-template-columns: 1fr repeat(4, 80px);
+    align-items: center;
+    padding: 15px;
+    font-weight: 600;
+  }
+
+  .live-box-score-header {
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+    font-size: 1rem;
+    text-align: center;
+  }
+
+  .live-box-score-row {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+
+  .live-box-score-row:last-child {
+    border-bottom: none;
+  }
+
+  .live-box-score-row.red-row {
+    color: #ff4444;
+  }
+
+  .live-box-score-row.blue-row {
+    color: #44aaff;
+  }
+
+  .live-team-name {
+    text-align: left;
+    font-size: 1.2rem;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 700;
+    letter-spacing: 1px;
+    line-height: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .live-period-score,
+  .live-total-score {
+    text-align: center;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 1.2rem;
+    line-height: 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .live-total-score {
+    font-size: 1.4rem;
+    font-weight: 900;
+    text-shadow: 0 0 10px currentColor;
+  }
+
+  .live-total-score.red-total {
+    color: #ff4444;
+  }
+
+  .live-total-score.blue-total {
+    color: #44aaff;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from { 
+      opacity: 0;
+      transform: scale(0.9) translateY(-20px);
+    }
+    to { 
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
   /* Responsive Design */
   @media (max-width: 768px) {
     .stats-scoreboard {
@@ -3418,6 +4391,85 @@ and also configure additional buttons for mobile compatibility.
       top: 10px;
       right: 10px;
       padding: 8px 12px;
+    }
+
+    .live-stats-container {
+      width: 95%;
+      max-height: 95vh;
+    }
+
+    .live-stats-content {
+      padding: 15px;
+    }
+
+    .live-stats-scores {
+      gap: 20px;
+      flex-direction: column;
+    }
+
+    .live-stats-team-score {
+      font-size: 2.5rem;
+    }
+
+    /* Mobile: Stack everything vertically */
+    .live-stats-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      height: auto;
+    }
+
+    .live-stats-left-column,
+    .live-stats-right-column {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    .live-top-performers,
+    .live-top-performers.compact {
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .live-stats-table-header,
+    .live-player-stat-row {
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      font-size: 0.8rem;
+    }
+
+    .live-box-score-header,
+    .live-box-score-row {
+      grid-template-columns: 1fr repeat(4, 50px);
+      padding: 8px;
+      font-size: 0.8rem;
+    }
+
+    .live-period-score,
+    .live-total-score {
+      font-size: 0.9rem;
+    }
+
+    .live-total-score {
+      font-size: 1.1rem;
+    }
+
+    .live-stats-table-body.compact {
+      max-height: 150px;
+    }
+
+    .live-recent-goals.compact {
+      max-height: 120px;
+      padding: 10px;
+      overflow-y: auto;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+    }
+
+    .live-goal-time {
+      font-size: 0.7rem;
+      min-width: 50px;
+      padding: 3px 6px;
     }
   }
 </style>
