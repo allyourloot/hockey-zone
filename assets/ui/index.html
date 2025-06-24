@@ -275,6 +275,9 @@ and also configure additional buttons for mobile compatibility.
   }
 
   // Event listeners for stats overlay
+  // Set up controls toggle button click handler
+  document.getElementById('controls-toggle').addEventListener('click', toggleControlsOverlay);
+  
   document.getElementById('stats-toggle').addEventListener('click', enhancedToggleStatsOverlay);
   document.getElementById('live-stats-close').addEventListener('click', enhancedToggleStatsOverlay);
 
@@ -379,6 +382,87 @@ and also configure additional buttons for mobile compatibility.
         event.preventDefault();
         enhancedToggleStatsOverlay();
       }
+      
+      // Add 'C' key handler for controls overlay
+      if (event.key.toLowerCase() === 'c') {
+        event.preventDefault();
+        toggleControlsOverlay();
+      }
+    }
+  });
+
+  // Controls Overlay functionality
+  let isControlsOverlayVisible = false;
+
+  function toggleControlsOverlay() {
+    const controlsOverlay = document.getElementById('controls-overlay');
+    if (isControlsOverlayVisible) {
+      controlsOverlay.style.display = 'none';
+      isControlsOverlayVisible = false;
+      // Re-lock pointer when closing controls overlay
+      setTimeout(() => {
+        if (document.pointerLockElement === null) {
+          document.body.requestPointerLock?.();
+        }
+      }, 100);
+    } else {
+      controlsOverlay.style.display = 'flex';
+      isControlsOverlayVisible = true;
+      // Unlock pointer to allow interaction with controls
+      if (document.pointerLockElement) {
+        document.exitPointerLock?.();
+      }
+      setupControlsOverlayEventPrevention();
+    }
+  }
+
+  function setupControlsOverlayEventPrevention() {
+    const controlsOverlay = document.getElementById('controls-overlay');
+    if (controlsOverlay) {
+      // Prevent all mouse events from propagating to the game
+      controlsOverlay.addEventListener('wheel', function(event) {
+        event.stopPropagation();
+      }, { passive: false });
+
+      controlsOverlay.addEventListener('mousedown', function(event) {
+        event.stopPropagation();
+      });
+
+      controlsOverlay.addEventListener('mouseup', function(event) {
+        event.stopPropagation();
+      });
+
+      controlsOverlay.addEventListener('mousemove', function(event) {
+        event.stopPropagation();
+      });
+
+      controlsOverlay.addEventListener('click', function(event) {
+        event.stopPropagation();
+      });
+
+      controlsOverlay.addEventListener('contextmenu', function(event) {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+    }
+
+    // Set up close button if not already set up
+    const controlsClose = document.getElementById('controls-close');
+    if (controlsClose && !controlsClose.hasAttribute('data-listener-setup')) {
+      controlsClose.addEventListener('click', () => {
+        toggleControlsOverlay();
+      });
+      controlsClose.setAttribute('data-listener-setup', 'true');
+    }
+  }
+
+  // Event listeners for controls overlay
+  document.addEventListener('DOMContentLoaded', () => {
+    const controlsClose = document.getElementById('controls-close');
+    if (controlsClose) {
+      controlsClose.addEventListener('click', () => {
+        toggleControlsOverlay();
+      });
     }
   });
 
@@ -1720,6 +1804,158 @@ and also configure additional buttons for mobile compatibility.
     </a>
   </div>
 
+  <!-- Controls Help Overlay -->
+  <div id="controls-overlay" class="controls-overlay">
+    <div class="controls-container">
+      <button id="controls-close" class="controls-close">×</button>
+      
+      <div class="controls-header">
+        <div class="controls-title">Game Controls</div>
+        <div class="controls-subtitle">Press 'C' to toggle this help overlay</div>
+      </div>
+
+      <div class="controls-content">
+        <div class="controls-content-grid">
+          <!-- Offense Controls -->
+        <div class="controls-section offense">
+          <div class="controls-section-title">Offense</div>
+          
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Pass <span class="control-key">LMB</span></div>
+              <div class="control-description">Hold for power, release to pass</div>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Shot" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Shoot <span class="control-key">RMB</span></div>
+              <div class="control-description">Hold for power, release to shoot</div>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/spin-icon.png" alt="Spin Move" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Spin Move <span class="control-key">R</span></div>
+              <div class="control-description">While controlling puck</div>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/target.png" alt="Dangle" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Dangle <span class="control-key">A / D</span></div>
+              <div class="control-description">While controlling puck</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Defense Controls -->
+        <div class="controls-section defense">
+          <div class="controls-section-title">Defense</div>
+          
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/stick-check-icon.png" alt="Stick Check" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Stick Check <span class="control-key">RMB</span></div>
+              <div class="control-description">When off the puck</div>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/body-check-icon.png" alt="Body Check" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Body Check <span class="control-key">LMB</span></div>
+              <div class="control-description">As Defender only</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Neutral Controls -->
+        <div class="controls-section neutral">
+          <div class="controls-section-title">Movement</div>
+          
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Hockey Stop" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Hockey Stop <span class="control-key">SPACE</span></div>
+              <div class="control-description">Quick stop and change direction</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Interface Controls -->
+        <div class="controls-section interface">
+          <div class="controls-section-title">Interface</div>
+          
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/stats-icon.svg" alt="Live Stats" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Live Stats <span class="control-key">K</span></div>
+              <div class="control-description">Toggle statistics overlay</div>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/target.png" alt="Controls" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Controls Help <span class="control-key">C</span></div>
+              <div class="control-description">Toggle this help overlay</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Commands Section -->
+        <div class="controls-section commands">
+          <div class="controls-section-title">Chat Commands</div>
+          
+          <div class="command-item">
+            <div style="flex: 1;">
+              <div class="command-text">/spawnpuck</div>
+              <div class="command-description">Spawn a new puck if missing</div>
+            </div>
+          </div>
+
+          <div class="command-item">
+            <div style="flex: 1;">
+              <div class="command-text">/startmatch</div>
+              <div class="command-description">Manually start a game</div>
+            </div>
+          </div>
+
+          <div class="command-item">
+            <div style="flex: 1;">
+              <div class="command-text">/togglemessages</div>
+              <div class="command-description">Enable/Disable gameplay messages</div>
+            </div>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Team Selection UI -->
   <div id="team-selection-overlay" class="team-selection-overlay">
     <div class="team-selection-title">Select Your Team & Position</div>
@@ -2011,9 +2247,19 @@ and also configure additional buttons for mobile compatibility.
     </div>
   </div>
 
+  <!-- Controls Toggle Button -->
+  <div id="controls-toggle" class="controls-toggle">
+    <div class="controls-icon">
+      <img src="{{CDN_ASSETS_URL}}/icons/controls-icon.svg" alt="Controls" />
+    </div>
+    <div class="controls-label">CONTROLS <span class="controls-label-text">(C)</span></div>
+  </div>
+
   <!-- Stats Toggle Button -->
   <div id="stats-toggle" class="stats-toggle">
-    <div class="stats-icon">📊</div>
+    <div class="stats-icon">
+      <img src="{{CDN_ASSETS_URL}}/icons/stats-icon.svg" alt="Stats" />
+    </div>
     <div class="stats-label">STATS <span class="stats-label-text">(K)</span></div>
   </div>
 
@@ -3121,6 +3367,353 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  /* Controls Overlay */
+  .controls-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.90);
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1100; /* High priority overlay */
+    animation: controlsOverlayFadeIn 0.3s ease-out;
+    overflow-y: auto;
+    padding: 40px 20px;
+    box-sizing: border-box;
+    min-height: 100vh;
+  }
+
+  .controls-container {
+    width: 90%;
+    max-width: 800px;
+    max-height: 85vh;
+    background: rgba(30, 30, 30, 0.95);
+    border-radius: 15px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .controls-header {
+    text-align: center;
+    margin-bottom: 25px;
+    padding: 25px 25px 0 25px;
+    flex-shrink: 0;
+  }
+
+  .controls-content {
+    padding: 0 25px 25px 25px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .controls-title {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: #fff;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.5);
+    margin-bottom: 8px;
+    letter-spacing: 2px;
+  }
+
+  .controls-subtitle {
+    font-size: 1rem;
+    color: #ccc;
+    font-weight: 400;
+    margin-bottom: 15px;
+  }
+
+  .controls-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    transition: all 0.2s ease;
+  }
+
+  .controls-close:hover {
+    background: rgba(255, 68, 68, 0.8);
+    transform: scale(1.1);
+  }
+
+  .controls-content-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  .controls-section {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .controls-section-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #fff;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    margin-bottom: 15px;
+    text-align: center;
+    text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+  }
+
+  .controls-section.offense .controls-section-title {
+    color: #4CAF50;
+    text-shadow: 0 0 15px rgba(76, 175, 80, 0.5);
+  }
+
+  .controls-section.defense .controls-section-title {
+    color: #ff4444;
+    text-shadow: 0 0 15px rgba(255, 68, 68, 0.5);
+  }
+
+  .controls-section.neutral .controls-section-title {
+    color: #44aaff;
+    text-shadow: 0 0 15px rgba(68, 170, 255, 0.5);
+  }
+
+  .controls-section.interface .controls-section-title {
+    color: #FFC107;
+    text-shadow: 0 0 15px rgba(255, 193, 7, 0.5);
+  }
+
+  .controls-section.commands {
+    grid-column: 1 / -1;
+  }
+
+  .controls-section.commands .controls-section-title {
+    color: #9C27B0;
+    text-shadow: 0 0 15px rgba(156, 39, 176, 0.5);
+  }
+
+  .control-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .control-item:hover {
+    background: rgba(255, 255, 255, 0.08);
+    transform: translateX(3px);
+  }
+
+  .control-icon {
+    width: 32px;
+    height: 32px;
+    margin-right: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .control-icon img {
+    width: 20px;
+    height: 20px;
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  }
+
+  /* Style for emoji icons in controls */
+  .control-icon:not(:has(img)) {
+    font-size: 18px;
+    color: #fff;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  }
+
+  .control-info {
+    flex: 1;
+  }
+
+  .control-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 2px;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  }
+
+  .control-key {
+    font-size: 0.8rem;
+    color: #ccc;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 3px 6px;
+    border-radius: 3px;
+    display: inline-block;
+    margin-left: 8px;
+    font-family: 'Courier New', monospace;
+  }
+
+  .control-description {
+    font-size: 0.75rem;
+    color: #aaa;
+    margin-top: 1px;
+  }
+
+  .command-item {
+    display: flex;
+    align-items: flex-start;
+    margin-bottom: 8px;
+    padding: 8px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 6px;
+  }
+
+  .command-text {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: #4CAF50;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .command-description {
+    font-size: 0.75rem;
+    color: #ccc;
+  }
+
+  /* Custom scrollbar styling for controls content (same as Live Stats) */
+  .controls-content::-webkit-scrollbar {
+    width: 12px;
+  }
+
+  .controls-content::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 6px;
+  }
+
+  .controls-content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  .controls-content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.5);
+    background-clip: content-box;
+  }
+
+  @keyframes controlsOverlayFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(8px);
+    }
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 900px) {
+    .controls-content-grid {
+      grid-template-columns: 1fr;
+      gap: 15px;
+    }
+    
+    .controls-container {
+      width: 95%;
+      max-width: 600px;
+      padding: 20px;
+      max-height: 90vh;
+    }
+    
+    .controls-title {
+      font-size: 1.8rem;
+    }
+    
+    .controls-section {
+      padding: 15px;
+    }
+  }
+  
+  @media (max-width: 600px) {
+    .controls-container {
+      width: 95%;
+      padding: 15px;
+      max-height: 90vh;
+    }
+    
+    .controls-title {
+      font-size: 1.5rem;
+    }
+    
+    .controls-subtitle {
+      font-size: 0.9rem;
+    }
+    
+    .controls-section {
+      padding: 12px;
+    }
+    
+    .control-item {
+      padding: 6px;
+      margin-bottom: 8px;
+    }
+    
+    .control-icon {
+      width: 28px;
+      height: 28px;
+      margin-right: 10px;
+    }
+    
+    .control-icon img {
+      width: 16px;
+      height: 16px;
+    }
+    
+    .control-name {
+      font-size: 0.85rem;
+    }
+    
+    .control-key {
+      font-size: 0.7rem;
+      padding: 2px 4px;
+    }
+    
+    .control-description {
+      font-size: 0.7rem;
+    }
+    
+    /* Button layout responsive adjustments */
+    .controls-toggle {
+      right: 20px;
+      top: 70px; /* Stack below stats button on small screens */
+    }
+    
+    .stats-toggle {
+      right: 20px;
+      top: 20px;
+    }
+  }
+
   /* Enhanced Game Over Overlay with Box Score */
   .game-over-overlay {
     position: fixed;
@@ -3902,6 +4495,54 @@ and also configure additional buttons for mobile compatibility.
     border: 1px solid #44aaff;
   }
 
+  /* Controls Toggle Button */
+  .controls-toggle {
+    position: fixed;
+    top: 20px;
+    right: 200px; /* Positioned to the left of Stats button with more spacing */
+    background: rgba(0, 0, 0, 0.7);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    padding: 12px 16px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .controls-toggle:hover {
+    background: rgba(0, 0, 0, 0.9);
+    border-color: rgba(255, 255, 255, 0.4);
+    transform: translateY(-2px);
+  }
+
+  .controls-icon {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .controls-icon img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) invert(1);
+  }
+
+  .controls-label {
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 1px;
+  }
+
+  .controls-label-text {
+    opacity: 0.7;
+  }
+
   /* Stats Toggle Button */
   .stats-toggle {
     position: fixed;
@@ -3926,7 +4567,17 @@ and also configure additional buttons for mobile compatibility.
   }
 
   .stats-icon {
-    font-size: 1.2rem;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .stats-icon img {
+    width: 20px;
+    height: 20px;
+    filter: brightness(0) invert(1);
   }
 
   .stats-label {
