@@ -39,7 +39,7 @@ and also configure additional buttons for mobile compatibility.
       audioContextActivated = true;
       // Send a signal to the server to trigger background music
       hytopia.sendData({ type: 'activate-audio' });
-      console.log('UI: Sent audio activation signal to server');
+      // Audio activation signal sent to server
     }
   }
 
@@ -61,6 +61,21 @@ and also configure additional buttons for mobile compatibility.
     btn.addEventListener('click', () => {
       // Try to activate audio on first user interaction
       tryActivateAudio();
+      
+      // Explicitly unlock pointer after audio activation to prevent lock after position selection
+      // This ensures cursor remains visible for Lock In button
+      setTimeout(() => {
+        if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+          if (document.exitPointerLock) {
+            document.exitPointerLock();
+          } else if (document.mozExitPointerLock) {
+            document.mozExitPointerLock();
+          } else if (document.webkitExitPointerLock) {
+            document.webkitExitPointerLock();
+          }
+          // Unlock pointer after position selection to keep cursor visible for Lock In
+        }
+      }, 50); // Small delay to ensure audio activation completes first
       
       // Highlight selected
       if (selectedBtn) selectedBtn.classList.remove('selected');
@@ -372,7 +387,7 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'team-positions-update') {
       // Disable taken positions (only positions with locked-in players)
       const teams = data.teams;
-      console.log('UI: Received team-positions-update:', teams);
+      // Received team-positions-update
       
       positionButtons.forEach(btn => {
         const team = btn.getAttribute('data-team');
@@ -391,7 +406,7 @@ and also configure additional buttons for mobile compatibility.
         }
         
         if (taken) {
-          console.log(`UI: Position ${team}-${position} is taken by player ${positionData.playerName} (${positionData.playerId})`);
+                      // Position is taken by locked-in player
           btn.disabled = true;
           btn.classList.remove('selected');
           
@@ -408,7 +423,7 @@ and also configure additional buttons for mobile compatibility.
             selectedPosition = null;
             lockInBtn.disabled = true;
             selectedMsg.textContent = '';
-            console.log(`UI: Cleared selection because position ${team}-${position} was taken`);
+                          // Clear selection because position was taken
           }
         }
       });
@@ -417,6 +432,26 @@ and also configure additional buttons for mobile compatibility.
       // Hide team selection overlay immediately when position is confirmed
       teamSelectionOverlay.style.display = 'none';
       selectedMsg.textContent = '';
+      
+      // Clear the periodic pointer unlock interval since team selection is done
+      if (window.teamSelectionPointerUnlockInterval) {
+        clearInterval(window.teamSelectionPointerUnlockInterval);
+        window.teamSelectionPointerUnlockInterval = null;
+        // Cleared team selection pointer unlock interval
+      }
+      
+      // Explicitly exit pointer lock when spawning into game world
+      // This ensures cursor is unlocked for proper gameplay
+      if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+        if (document.exitPointerLock) {
+          document.exitPointerLock();
+        } else if (document.mozExitPointerLock) {
+          document.mozExitPointerLock();
+        } else if (document.webkitExitPointerLock) {
+          document.webkitExitPointerLock();
+        }
+        // Exited pointer lock when player spawned into game world
+      }
       
       // Show Body Check button for Defenders
       if (selectedPosition === 'DEFENDER1' || selectedPosition === 'DEFENDER2') {
@@ -430,6 +465,13 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'show-waiting-overlay') {
       // Hide team selection overlay if it's still visible
       teamSelectionOverlay.style.display = 'none';
+      
+      // Clear the periodic pointer unlock interval since team selection is hidden
+      if (window.teamSelectionPointerUnlockInterval) {
+        clearInterval(window.teamSelectionPointerUnlockInterval);
+        window.teamSelectionPointerUnlockInterval = null;
+        // Cleared team selection pointer unlock interval when showing waiting overlay
+      }
       // Show waiting overlay as a top notification bar
       document.getElementById('waiting-overlay').style.display = 'flex';
       if (data.message) {
@@ -472,14 +514,14 @@ and also configure additional buttons for mobile compatibility.
           timeRemaining = data.pausedTimerValue;
           periodStartTime = data.periodStartTime; // Still need this for resume calculations
           updateTimerDisplay();
-          console.log('UI: Timer set up but paused for goal celebration, using paused value:', timeRemaining);
+          // Timer set up but paused for goal celebration
         } else if (data.periodStartTime && data.periodStartTime > 0) {
           // Fallback to calculating from period start time
           periodStartTime = data.periodStartTime;
           const elapsedSeconds = Math.floor((Date.now() - periodStartTime) / 1000);
           timeRemaining = Math.max(0, 120 - elapsedSeconds);
           updateTimerDisplay();
-          console.log('UI: Timer set up but paused for goal celebration, calculated time:', timeRemaining);
+                      // Timer set up but paused for goal celebration, calculated time
         }
       } else {
         // Normal timer start
@@ -520,7 +562,7 @@ and also configure additional buttons for mobile compatibility.
     }
     if (data.type === 'show-team-selection') {
       // Show team selection overlay
-      console.log('UI: Received show-team-selection event');
+      // Received show-team-selection event
       showTeamSelection();
     }
     if (data.type === 'score-update') {
@@ -537,7 +579,7 @@ and also configure additional buttons for mobile compatibility.
         clearInterval(timerInterval);
         timerInterval = null;
         timeWhenGoalScored = timeRemaining; // Store current time for resumption
-        console.log('UI: Timer stopped after goal scored, time saved:', timeWhenGoalScored);
+        // Timer stopped after goal scored
       }
       
       // Log enhanced goal message if we have scorer info
@@ -562,9 +604,12 @@ and also configure additional buttons for mobile compatibility.
       showCountdownGo();
       
       // Resume the timer immediately when "GO!" appears
-      if (timeWhenGoalScored !== null) {
+      // Check for periodStartTime instead of timeWhenGoalScored to ensure all players resume
+      if (periodStartTime !== null || timeWhenGoalScored !== null) {
         resumeGameTimer();
-        console.log('UI: Timer resumed when GO! appeared');
+                  // Timer resumed when GO! appeared
+      } else {
+        console.warn('UI: Cannot resume timer - no period start time available');
       }
     }
     if (data.type === 'countdown-end') {
@@ -586,12 +631,12 @@ and also configure additional buttons for mobile compatibility.
     }
     if (data.type === 'timer-restart') {
       // Restart the game timer for new period with backend sync
-      console.log('UI: Restarting timer for new period');
+              // Restarting timer for new period
       startGameTimer(data.periodStartTime);
     }
     if (data.type === 'timer-stop') {
       // Stop the game timer completely
-      console.log('UI: Stopping timer (reset to lobby)');
+              // Stopping timer (reset to lobby)
       if (timerInterval) {
         clearInterval(timerInterval);
         timerInterval = null;
@@ -617,7 +662,7 @@ and also configure additional buttons for mobile compatibility.
       // Clear any saved goal time
       timeWhenGoalScored = null;
       document.querySelector('.timer').textContent = '--:--';
-      console.log('UI: Timer stopped after game over hide');
+              // Timer stopped after game over hide
     }
     if (data.type === 'puck-control') {
       hasPuck = !!data.hasPuck;
@@ -662,7 +707,7 @@ and also configure additional buttons for mobile compatibility.
       // Adjust period start time to account for goal celebration pause
       if (periodStartTime) {
         periodStartTime += data.pauseDurationMs;
-        console.log('UI: Adjusted period start time by', data.pauseDurationMs, 'ms for goal pause');
+        // Adjusted period start time for goal pause
       }
     }
     if (data.type === 'timer-pause') {
@@ -675,7 +720,7 @@ and also configure additional buttons for mobile compatibility.
         timeRemaining = data.pausedTime;
         timeWhenGoalScored = data.pausedTime; // Store for resume
         updateTimerDisplay();
-        console.log('UI: Timer paused at exact goal time:', data.pausedTime);
+        // Timer paused at exact goal time
       }
     }
   });
@@ -926,10 +971,10 @@ and also configure additional buttons for mobile compatibility.
       const elapsedMs = Date.now() - periodStartTime;
       const elapsedSeconds = Math.floor(elapsedMs / 1000);
       timeRemaining = Math.max(0, 120 - elapsedSeconds);
-      console.log('UI: Resuming timer with backend sync, time remaining:', timeRemaining);
+                // Resuming timer with backend sync
     } else {
       timeRemaining = 120;
-      console.log('UI: No backend start time found, starting timer from 2 minutes');
+              // No backend start time found, starting timer from 2 minutes
     }
     
     updateTimerDisplay();
@@ -1230,14 +1275,14 @@ and also configure additional buttons for mobile compatibility.
     // Show overlay
     overlay.style.display = 'flex';
     
-    console.log(`UI: Showing period break overlay for end of ${periodName}, RED: ${redScore}, BLUE: ${blueScore}`);
+            // Showing period break overlay
   }
 
   function hidePeriodBreakOverlay() {
     const overlay = document.getElementById('period-break-overlay');
     overlay.style.display = 'none';
     
-    console.log('UI: Hiding period break overlay');
+          // Hiding period break overlay
   }
 
   // Enhanced game over overlay functionality with box score
@@ -1274,7 +1319,7 @@ and also configure additional buttons for mobile compatibility.
     // Show overlay
     overlay.style.display = 'flex';
     
-    console.log(`UI: Showing enhanced game over overlay with box score - Winner: ${winner}, Final Score: RED: ${redScore}, BLUE: ${blueScore}`);
+          // Showing enhanced game over overlay with box score
   }
 
   function populateBoxScore(boxScore) {
@@ -1340,7 +1385,7 @@ and also configure additional buttons for mobile compatibility.
       playerStatsBody.appendChild(row);
     });
     
-    console.log('UI: Box score populated with period scores, top performers, and player stats');
+          // Box score populated with period scores, top performers, and player stats
   }
 
   function startReturnCountdown() {
@@ -1361,10 +1406,41 @@ and also configure additional buttons for mobile compatibility.
     const overlay = document.getElementById('game-over-overlay');
     overlay.style.display = 'none';
     
-    console.log('UI: Hiding game over overlay');
+          // Hiding game over overlay
   }
 
   function showTeamSelection() {
+    // Explicitly exit pointer lock when showing team selection
+    // This ensures cursor is unlocked for team selection UI interaction
+    if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+      if (document.exitPointerLock) {
+        document.exitPointerLock();
+      } else if (document.mozExitPointerLock) {
+        document.mozExitPointerLock();
+      } else if (document.webkitExitPointerLock) {
+        document.webkitExitPointerLock();
+      }
+              // Exited pointer lock when showing team selection
+    }
+    
+    // Set up periodic pointer unlock checks to ensure cursor stays visible during team selection
+    // This handles cases where pointer might get locked during team selection interactions
+    const pointerUnlockInterval = setInterval(() => {
+      if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+        if (document.exitPointerLock) {
+          document.exitPointerLock();
+        } else if (document.mozExitPointerLock) {
+          document.mozExitPointerLock();
+        } else if (document.webkitExitPointerLock) {
+          document.webkitExitPointerLock();
+        }
+        // Periodically unlocked pointer during team selection
+      }
+    }, 100); // Check every 100ms
+    
+    // Store interval reference to clear it later
+    window.teamSelectionPointerUnlockInterval = pointerUnlockInterval;
+    
     // Show team selection overlay
     const teamSelectionOverlay = document.getElementById('team-selection-overlay');
     if (teamSelectionOverlay) {
@@ -1404,6 +1480,13 @@ and also configure additional buttons for mobile compatibility.
       timerInterval = null;
     }
     
+    // Clear the periodic pointer unlock interval
+    if (window.teamSelectionPointerUnlockInterval) {
+      clearInterval(window.teamSelectionPointerUnlockInterval);
+      window.teamSelectionPointerUnlockInterval = null;
+              // Cleared team selection pointer unlock interval during showTeamSelection reset
+    }
+    
     // Reset team selection state
     if (selectedBtn) {
       selectedBtn.classList.remove('selected');
@@ -1436,9 +1519,7 @@ and also configure additional buttons for mobile compatibility.
       }
     });
     
-    console.log('UI: Showing team selection overlay with reset state');
-    console.log('UI: Team selection overlay display:', teamSelectionOverlay ? teamSelectionOverlay.style.display : 'not found');
-    console.log('UI: Scoreboard display:', scoreboard ? scoreboard.style.display : 'not found');
+          // Showing team selection overlay with reset state
   }
 
   // Enhanced Statistics Scoreboard functionality
@@ -1446,14 +1527,14 @@ and also configure additional buttons for mobile compatibility.
     const scoreboard = document.getElementById('stats-scoreboard');
     scoreboard.style.display = 'block';
     
-    console.log('UI: Showing statistics scoreboard');
+          // Showing statistics scoreboard
   }
 
   function hideStatsScoreboard() {
     const scoreboard = document.getElementById('stats-scoreboard');
     scoreboard.style.display = 'none';
     
-    console.log('UI: Hiding statistics scoreboard');
+          // Hiding statistics scoreboard
   }
 
   function updateStatsData(statsData) {
@@ -1491,7 +1572,7 @@ and also configure additional buttons for mobile compatibility.
       document.getElementById('most-saves-count').textContent = '0 saves';
     }
 
-    console.log('UI: Updated stats data', statsData);
+          // Updated stats data
   }
 
   function updatePlayerStatsTable(playerStats) {
@@ -1526,7 +1607,7 @@ and also configure additional buttons for mobile compatibility.
       tableBody.appendChild(row);
     });
 
-    console.log('UI: Updated player stats table with', playerStats.length, 'players');
+          // Updated player stats table
   }
 
   function updateGoalHistory(goals) {
@@ -1560,7 +1641,7 @@ and also configure additional buttons for mobile compatibility.
       goalsList.appendChild(goalItem);
     });
 
-    console.log('UI: Updated goal history with', goals.length, 'goals');
+          // Updated goal history
   }
 
   // Event listeners for stats scoreboard
@@ -1933,7 +2014,7 @@ and also configure additional buttons for mobile compatibility.
   <!-- Stats Toggle Button -->
   <div id="stats-toggle" class="stats-toggle">
     <div class="stats-icon">📊</div>
-    <div class="stats-label">STATS</div>
+    <div class="stats-label">STATS <span class="stats-label-text">(K)</span></div>
   </div>
 
   <!-- Live Stats Overlay -->

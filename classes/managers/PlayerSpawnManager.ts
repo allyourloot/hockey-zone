@@ -1,5 +1,6 @@
 import { World, Player, type Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
+import * as CONSTANTS from '../utils/constants';
 
 interface SpawnData {
   position: Vector3Like;
@@ -85,7 +86,7 @@ export class PlayerSpawnManager {
    */
   public initialize(world: World): void {
     this._world = world;
-    console.log('[PlayerSpawnManager] Initialized with spawn positions');
+    CONSTANTS.debugLog('Initialized with spawn positions', 'PlayerSpawnManager');
   }
 
   /**
@@ -138,7 +139,7 @@ export class PlayerSpawnManager {
         entity.setLinearVelocity({ x: 0, y: 0, z: 0 });
         entity.setAngularVelocity({ x: 0, y: 0, z: 0 });
         
-        console.log(`[PlayerSpawnManager] Teleported ${player.id} (entity ${index}) to ${team} ${position} at:`, spawnData.position, `with rotation: ${spawnData.yaw} radians`);
+        CONSTANTS.debugLog(`Teleported ${player.id} (entity ${index}) to ${team} ${position} at: ${JSON.stringify(spawnData.position)} with rotation: ${spawnData.yaw} radians`, 'PlayerSpawnManager');
         teleported = true;
       } catch (error) {
         console.error(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error);
@@ -179,7 +180,7 @@ export class PlayerSpawnManager {
       }
     }
 
-    console.log(`[PlayerSpawnManager] Teleported ${totalTeleported} players to their spawn positions`);
+    CONSTANTS.debugLog(`Teleported ${totalTeleported} players to their spawn positions`, 'PlayerSpawnManager');
 
     // Announce the reset
     if (this._world && totalTeleported > 0) {
@@ -217,7 +218,7 @@ export class PlayerSpawnManager {
       const { GoalDetectionService } = require('../services/GoalDetectionService');
       GoalDetectionService.instance.reset();
       
-      console.log('[PlayerSpawnManager] Puck detached and reset to center ice at:', centerIcePosition);
+      CONSTANTS.debugLog(`Puck detached and reset to center ice at: ${JSON.stringify(centerIcePosition)}`, 'PlayerSpawnManager');
       return true;
     } catch (error) {
       console.error('[PlayerSpawnManager] Error resetting puck:', error);
@@ -236,7 +237,7 @@ export class PlayerSpawnManager {
       // Check if any player is currently controlling the puck
       if (IceSkatingController._globalPuckController) {
         const controller = IceSkatingController._globalPuckController;
-        console.log('[PlayerSpawnManager] Detaching puck from current controller');
+        CONSTANTS.debugLog('Detaching puck from current controller', 'PlayerSpawnManager');
         
         // Release the puck (this also updates the player's UI)
         controller.releasePuck();
@@ -244,9 +245,9 @@ export class PlayerSpawnManager {
         // Additional safety: ensure the global controller is cleared
         IceSkatingController._globalPuckController = null;
         
-        console.log('[PlayerSpawnManager] Puck successfully detached and global controller cleared');
+        CONSTANTS.debugLog('Puck successfully detached and global controller cleared', 'PlayerSpawnManager');
       } else {
-        console.log('[PlayerSpawnManager] No player currently controlling puck');
+        CONSTANTS.debugLog('No player currently controlling puck', 'PlayerSpawnManager');
       }
     } catch (error) {
       console.error('[PlayerSpawnManager] Error detaching puck from players:', error);
@@ -269,7 +270,7 @@ export class PlayerSpawnManager {
     playerIdToPlayer: Map<string, Player>,
     puckEntity: any
   ): void {
-    console.log('[PlayerSpawnManager] Performing complete reset...');
+    CONSTANTS.debugLog('Performing complete reset...', 'PlayerSpawnManager');
     
     // Reset all players to their spawn positions
     this.teleportAllPlayersToSpawn(teams, playerIdToPlayer);
@@ -277,7 +278,7 @@ export class PlayerSpawnManager {
     // Detach puck from any player and reset to center ice
     this.resetPuckToCenterIce(puckEntity);
     
-    console.log('[PlayerSpawnManager] Complete reset finished - all players and puck reset');
+    CONSTANTS.debugLog('Complete reset finished - all players and puck reset', 'PlayerSpawnManager');
   }
 
   /**
@@ -314,7 +315,7 @@ export class PlayerSpawnManager {
         }
       }
     }
-    console.log('[PlayerSpawnManager] All spawn positions validated successfully');
+          CONSTANTS.debugLog('All spawn positions validated successfully', 'PlayerSpawnManager');
     return true;
   }
 } 

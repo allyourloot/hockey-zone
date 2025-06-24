@@ -1,6 +1,7 @@
 import { Entity } from 'hytopia';
 import type { World } from 'hytopia';
 import { PuckTrailEffect } from '../entities/PuckTrailEffect';
+import * as CONSTANTS from '../utils/constants';
 
 export class PuckTrailManager {
   private static _instance: PuckTrailManager | null = null;
@@ -32,14 +33,14 @@ export class PuckTrailManager {
 
     // Create new trail effect for this puck
     this.currentTrailEffect = new PuckTrailEffect(puck, this.world);
-    console.log('Puck trail effect attached');
+    CONSTANTS.debugLog('Puck trail effect attached', 'PuckTrailManager');
   }
 
   public removeTrail(): void {
     if (this.currentTrailEffect) {
       this.currentTrailEffect.cleanup();
       this.currentTrailEffect = null;
-      console.log('Puck trail effect removed');
+      CONSTANTS.debugLog('Puck trail effect removed', 'PuckTrailManager');
     }
   }
 

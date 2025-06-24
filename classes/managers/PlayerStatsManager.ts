@@ -1,5 +1,6 @@
 import { Player } from 'hytopia';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
+import * as CONSTANTS from '../utils/constants';
 
 export interface PlayerStats {
   playerId: string;
@@ -91,7 +92,7 @@ export class PlayerStatsManager {
     };
 
     this._playerStats.set(player.id, stats);
-    console.log(`[PlayerStatsManager] Initialized stats for ${player.username} (${team} ${position})`);
+    CONSTANTS.debugLog(`Initialized stats for ${player.username} (${team} ${position})`, 'PlayerStatsManager');
   }
 
   /**
@@ -99,7 +100,7 @@ export class PlayerStatsManager {
    */
   public removePlayer(playerId: string): void {
     this._playerStats.delete(playerId);
-    console.log(`[PlayerStatsManager] Removed stats for player ${playerId}`);
+    CONSTANTS.debugLog(`Removed stats for player ${playerId}`, 'PlayerStatsManager');
   }
 
   /**
@@ -142,10 +143,10 @@ export class PlayerStatsManager {
 
     this._goals.push(goalInfo);
     
-    console.log(`[PlayerStatsManager] Recorded goal: ${scorerStats?.playerName} (${isOwnGoal ? 'OWN GOAL' : 'GOAL'})`);
+    CONSTANTS.debugLog(`Recorded goal: ${scorerStats?.playerName} (${isOwnGoal ? 'OWN GOAL' : 'GOAL'})`, 'PlayerStatsManager');
     if (assistId && assistId !== scorerId) {
       const assistStats = this._playerStats.get(assistId);
-      console.log(`[PlayerStatsManager] Assist: ${assistStats?.playerName}`);
+      CONSTANTS.debugLog(`Assist: ${assistStats?.playerName}`, 'PlayerStatsManager');
     }
 
     return goalInfo;
@@ -176,7 +177,7 @@ export class PlayerStatsManager {
       }
     }
 
-    console.log(`[PlayerStatsManager] Recorded shot: ${shooterStats?.playerName} (${onGoal ? 'on goal' : 'off target'}${saved ? ', saved' : ''})`);
+    CONSTANTS.debugLog(`Recorded shot: ${shooterStats?.playerName} (${onGoal ? 'on goal' : 'off target'}${saved ? ', saved' : ''})`, 'PlayerStatsManager');
 
     return shotInfo;
   }
@@ -188,7 +189,7 @@ export class PlayerStatsManager {
     const hitterStats = this._playerStats.get(hitterId);
     if (hitterStats) {
       hitterStats.hits++;
-      console.log(`[PlayerStatsManager] Recorded hit by ${hitterStats.playerName} (Total: ${hitterStats.hits})`);
+      CONSTANTS.debugLog(`Recorded hit by ${hitterStats.playerName} (Total: ${hitterStats.hits})`, 'PlayerStatsManager');
     }
   }
 
@@ -327,7 +328,7 @@ export class PlayerStatsManager {
     this._goals = [];
     this._gameStartTime = 0;
     this._periodStartTime = 0;
-    console.log('[PlayerStatsManager] All stats reset for new game');
+    CONSTANTS.debugLog('All stats reset for new game', 'PlayerStatsManager');
   }
 
   /**
@@ -336,7 +337,7 @@ export class PlayerStatsManager {
   public startGameTime(): void {
     this._gameStartTime = Date.now();
     this._periodStartTime = Date.now();
-    console.log('[PlayerStatsManager] Started tracking game time');
+    CONSTANTS.debugLog('Started tracking game time', 'PlayerStatsManager');
   }
 
   /**
@@ -344,7 +345,7 @@ export class PlayerStatsManager {
    */
   public startPeriodTime(): void {
     this._periodStartTime = Date.now();
-    console.log('[PlayerStatsManager] Started tracking new period time');
+    CONSTANTS.debugLog('Started tracking new period time', 'PlayerStatsManager');
   }
 
   /**
@@ -353,7 +354,7 @@ export class PlayerStatsManager {
   public adjustPeriodStartTime(pauseDurationMs: number): void {
     if (this._periodStartTime > 0) {
       this._periodStartTime += pauseDurationMs;
-      console.log(`[PlayerStatsManager] Adjusted period start time by ${pauseDurationMs}ms to account for pause`);
+      CONSTANTS.debugLog(`Adjusted period start time by ${pauseDurationMs}ms to account for pause`, 'PlayerStatsManager');
     }
   }
 

@@ -16,9 +16,9 @@
     },
     {
       "id": 70,
-      "name": "snow",
-      "textureUri": "blocks/snow.png",
-      "isCustom": false,
+      "name": "White Ice",
+      "textureUri": "blocks/white-ice.png",
+      "isCustom": true,
       "isMultiTexture": false
     },
     {

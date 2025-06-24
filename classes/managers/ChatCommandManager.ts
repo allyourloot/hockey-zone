@@ -78,6 +78,7 @@ export class ChatCommandManager {
     this.registerStatsTestCommands();
     this.registerPlayerBarrierCommands();
     this.registerTestCommands();
+    this.registerGameplayMessageCommands();
   }
   
   /**
@@ -877,6 +878,26 @@ export class ChatCommandManager {
         );
         console.error('Error getting node names:', error);
       }
+    });
+  }
+
+  /**
+   * Register commands for toggling gameplay messages
+   */
+  private registerGameplayMessageCommands(): void {
+    if (!this.world) return;
+
+    this.world.chatManager.registerCommand('/togglemessages', (player) => {
+      const { IceSkatingController } = require('../controllers/IceSkatingController');
+      IceSkatingController._showGameplayMessages = !IceSkatingController._showGameplayMessages;
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Gameplay messages ${IceSkatingController._showGameplayMessages ? 'enabled' : 'disabled'}!`,
+        IceSkatingController._showGameplayMessages ? '00FF00' : 'FF0000'
+      );
+      
+      console.log(`[ChatCommand] Gameplay messages ${IceSkatingController._showGameplayMessages ? 'enabled' : 'disabled'} by`, player.id);
     });
   }
 } 
