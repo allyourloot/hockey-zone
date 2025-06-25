@@ -56,7 +56,7 @@ export class PuckTrailEffect {
   private spawnTrailParticle(position: { x: number, y: number, z: number }): void {
     // Create a trail particle using the custom puck trail model (white-to-gray gradient plane)
     const particle = new Entity({
-      modelUri: 'models/particles/puck-trail.gltf',
+      modelUri: 'models/particles/puck-trail-red.gltf',
       modelScale: CONSTANTS.PUCK_TRAIL.PARTICLE_SCALE
     });
 

@@ -83,6 +83,7 @@ export class ChatCommandManager {
     this.registerTestCommands();
     this.registerGameplayMessageCommands();
     this.registerAudioDebugCommands();
+    this.registerPuckIndicatorTestCommand();
   }
   
   /**
@@ -385,62 +386,26 @@ export class ChatCommandManager {
 
     // /testmusic - Test background music
     this.world.chatManager.registerCommand('/testmusic', (player) => {
-      const { AudioManager } = require('./AudioManager');
-      const music = AudioManager.instance.getBackgroundMusic();
-      if (music) {
-        this.world!.chatManager.sendPlayerMessage(player, 'Background music exists - trying to restart...', '00FF00');
-        try {
-          music.play(this.world!);
-          console.log('[ChatCommand] Attempted to restart background music');
-        } catch (error) {
-          console.error('[ChatCommand] Error restarting music:', error);
-        }
-      } else {
-        this.world!.chatManager.sendPlayerMessage(player, 'No background music found!', 'FF0000');
-        console.log('[ChatCommand] No background music instance found');
-      }
+      if (!this.world) return;
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'Background music is now handled globally with simple Hytopia approach', '00FF00');
+      console.log('[ChatCommand] Background music handled globally');
     });
 
-    // /stopmusic - Stop background music
+    // /stopmusic - Stop background music (no longer available)
     this.world.chatManager.registerCommand('/stopmusic', (player) => {
-      const { AudioManager } = require('./AudioManager');
-      try {
-        AudioManager.instance.stop();
-        this.world!.chatManager.sendPlayerMessage(player, 'Background music stopped', '00FF00');
-        console.log('[ChatCommand] Background music stopped');
-      } catch (error) {
-        console.error('[ChatCommand] Error stopping music:', error);
-        this.world!.chatManager.sendPlayerMessage(player, 'Error stopping music', 'FF0000');
-      }
+      if (!this.world) return;
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'Background music cannot be stopped individually - handled globally', 'FFAA00');
+      console.log('[ChatCommand] Background music stop not available with global approach');
     });
 
-    // /restartmusic - Restart background music cleanly
+    // /restartmusic - Background music info (no longer restartable)
     this.world.chatManager.registerCommand('/restartmusic', (player) => {
-      const { AudioManager } = require('./AudioManager');
-      const CONSTANTS = require('../utils/constants');
-      try {
-        // Stop existing music
-        AudioManager.instance.stop();
-        
-        // Create new background music without re-initializing entire AudioManager
-        // (this avoids duplicate ambient sound timers)
-        const gameMusic = AudioManager.instance.createManagedAudio({
-          uri: 'audio/music/ready-for-this.mp3',
-          loop: true,
-          volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
-        }, 'music');
-        
-        if (gameMusic && this.world) {
-          gameMusic.play(this.world);
-          (this.world as any)._gameMusic = gameMusic; // Store reference
-        }
-        
-        this.world!.chatManager.sendPlayerMessage(player, 'Background music restarted cleanly (no ambient duplication)', '00FF00');
-        console.log('[ChatCommand] Background music restarted cleanly without re-initializing ambient sounds');
-      } catch (error) {
-        console.error('[ChatCommand] Error restarting music:', error);
-        this.world!.chatManager.sendPlayerMessage(player, 'Error restarting music', 'FF0000');
-      }
+      if (!this.world) return;
+      
+      this.world!.chatManager.sendPlayerMessage(player, 'Background music is handled globally and cannot be restarted individually', 'FFAA00');
+      console.log('[ChatCommand] Background music restart not available with global approach');
     });
 
     // /testlock - Test movement lock system
@@ -1144,6 +1109,40 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, 'Ambient sound timers stopped to prevent duplication', '00FF00');
     });
 
+    // /audioon - Enable audio-only debug filter (shows only AudioManager logs)
+    this.world.chatManager.registerCommand('/audioon', (player) => {
+      const { setAudioDebugFilter } = require('../utils/constants');
+      setAudioDebugFilter(true);
+      this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO DEBUG FILTER ENABLED', '00FF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'Only AudioManager logs will show in terminal', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, 'Use /audiooff to disable', 'CCCCCC');
+    });
+
+    // /audiooff - Disable audio-only debug filter (shows all logs)
+    this.world.chatManager.registerCommand('/audiooff', (player) => {
+      const { setAudioDebugFilter } = require('../utils/constants');
+      setAudioDebugFilter(false);
+      this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO DEBUG FILTER DISABLED', 'FFFF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'All debug logs will show in terminal', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, 'Use /audioon to enable audio-only mode', 'CCCCCC');
+    });
+
+    // /audioplayercount <number> - Manually set player count for scaling testing
+    this.world.chatManager.registerCommand('/audioplayercount', (player, args) => {
+      const count = parseInt(args[0]);
+      if (isNaN(count) || count < 1 || count > 12) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /audioplayercount <1-12>', 'FF0000');
+        return;
+      }
+      
+      const oldCount = AudioManager.instance.getPlayerCount();
+      AudioManager.instance.updatePlayerCount(count);
+      
+      this.world!.chatManager.sendPlayerMessage(player, `Player count updated: ${oldCount} → ${count}`, '00FF00');
+      this.world!.chatManager.sendPlayerMessage(player, `Max instances: ${(AudioManager.instance as any).getScaledMaxInstances()}`, 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, `Cleanup threshold: ${(AudioManager.instance as any).getScaledCleanupThreshold()}`, 'FFFFFF');
+    });
+
     // /audiohelp - Shows available audio debug commands
     this.world.chatManager.registerCommand('/audiohelp', (player) => {
       this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO DEBUG COMMANDS:', '00FFFF');
@@ -1155,8 +1154,74 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, '/audioreset - Reset degradation flag', 'FFFFFF');
       this.world!.chatManager.sendPlayerMessage(player, '/audiotest - Play test sound', 'FFFFFF');
       this.world!.chatManager.sendPlayerMessage(player, '/audiostopambient - Stop ambient sound timers', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audioon - Show ONLY AudioManager logs', '00FF00');
+      this.world!.chatManager.sendPlayerMessage(player, '/audiooff - Show all debug logs', 'FFFF00');
+      this.world!.chatManager.sendPlayerMessage(player, '/audioplayercount <1-12> - Set player count for testing', 'CCCCCC');
     });
     
     console.log('Audio debugging commands registered');
+  }
+
+  /**
+   * Register puck control indicator test command
+   */
+  private registerPuckIndicatorTestCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/pucktest', (player) => {
+      try {
+        const playerEntities = this.world!.entityManager.getPlayerEntitiesByPlayer(player);
+        if (playerEntities.length > 0) {
+          const playerEntity = playerEntities[0];
+          
+          // Test if the SceneUI works by manually creating and loading it
+          const { SceneUI } = require('hytopia');
+          const testSceneUI = new SceneUI({
+            templateId: 'puck-control-indicator',
+            attachedToEntity: playerEntity,
+            state: {
+              visible: true,
+              playerName: player.username
+            },
+            offset: { x: 0, y: 1.8, z: 0 },
+          });
+          testSceneUI.load(this.world!);
+          
+          this.world!.chatManager.sendPlayerMessage(
+            player, 
+            'Puck control indicator test applied to you!', 
+            '00FF00'
+          );
+          
+          // Clear it after 5 seconds
+          setTimeout(() => {
+            try {
+              testSceneUI.unload();
+              this.world!.chatManager.sendPlayerMessage(
+                player, 
+                'Puck control indicator test cleared!', 
+                'FFFF00'
+              );
+            } catch (error) {
+              console.error('[PuckTest] Error clearing test indicator:', error);
+            }
+          }, 5000);
+          
+        } else {
+          this.world!.chatManager.sendPlayerMessage(
+            player, 
+            'No player entity found for testing!', 
+            'FF0000'
+          );
+        }
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Error testing puck indicator: ${error}`, 
+          'FF0000'
+        );
+        console.error('[PuckTest] Error:', error);
+      }
+    });
   }
 }

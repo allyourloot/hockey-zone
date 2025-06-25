@@ -43,6 +43,64 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  // Music mute functionality
+  let isMusicMuted = false;
+  const musicMuteButton = document.getElementById('music-mute-button');
+  const musicButtonIcon = document.getElementById('music-button-icon');
+  
+  function toggleBackgroundMusic() {
+    isMusicMuted = !isMusicMuted;
+    
+    // Update button appearance
+    if (isMusicMuted) {
+      musicButtonIcon.src = '{{CDN_ASSETS_URL}}/icons/bgm-muted.svg';
+      musicMuteButton.classList.add('muted');
+      musicMuteButton.title = 'Unmute Background Music';
+    } else {
+      musicButtonIcon.src = '{{CDN_ASSETS_URL}}/icons/bgm-on.svg';
+      musicMuteButton.classList.remove('muted');
+      musicMuteButton.title = 'Mute Background Music';
+    }
+    
+    // Send mute/unmute signal to server
+    hytopia.sendData({ 
+      type: 'toggle-background-music', 
+      muted: isMusicMuted 
+    });
+  }
+  
+  // Add click event listener for music button
+  musicMuteButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    musicMuteButton.classList.add('active');
+    toggleBackgroundMusic();
+    
+    // Remove active class after brief delay for visual feedback
+    setTimeout(() => {
+      musicMuteButton.classList.remove('active');
+    }, 150);
+  });
+
+  // Add keyboard shortcut 'M' for background music toggle
+  document.addEventListener('keydown', (e) => {
+    // Check if 'M' key is pressed (case insensitive)
+    if (e.key.toLowerCase() === 'm') {
+      // Prevent default behavior and don't trigger if user is typing in an input
+      if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+        e.preventDefault();
+        
+        // Add visual feedback to the button
+        musicMuteButton.classList.add('active');
+        toggleBackgroundMusic();
+        
+        // Remove active class after brief delay for visual feedback
+        setTimeout(() => {
+          musicMuteButton.classList.remove('active');
+        }, 150);
+      }
+    }
+  });
+
   // Team/Position selection logic
   const positionButtons = document.querySelectorAll('.position-btn');
   const selectedMsg = document.getElementById('selected-position-msg');
@@ -1203,6 +1261,28 @@ and also configure additional buttons for mobile compatibility.
         }
       }
     }
+    // Spin Move availability handler
+    if (data.type === 'spin-move-available') {
+      const spinMoveIndicator = document.getElementById('spin-move-indicator');
+      if (spinMoveIndicator) {
+        if (data.available) {
+          spinMoveIndicator.classList.remove('disabled');
+        } else {
+          spinMoveIndicator.classList.add('disabled');
+        }
+      }
+    }
+    // Hockey Stop availability handler
+    if (data.type === 'hockey-stop-available') {
+      const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
+      if (hockeyStopIndicator) {
+        if (data.available) {
+          hockeyStopIndicator.classList.remove('disabled');
+        } else {
+          hockeyStopIndicator.classList.add('disabled');
+        }
+      }
+    }
     // Body Check visibility handler (kept for compatibility, but now handled in team-position-confirmed)
     if (data.type === 'set-body-check-visibility') {
       const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
@@ -1229,6 +1309,7 @@ and also configure additional buttons for mobile compatibility.
     const passIconGroup = document.getElementById('pass-icon-group');
     const shotIconGroup = document.getElementById('shot-icon-group');
     const spinMoveIndicator = document.getElementById('spin-move-indicator');
+    const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
     const stickCheckIconGroup = document.getElementById('stick-check-icon-group');
     
     // Initially disable puck-dependent actions (pass, shot, spin move)
@@ -1243,6 +1324,12 @@ and also configure additional buttons for mobile compatibility.
     if (spinMoveIndicator) {
       spinMoveIndicator.classList.add('disabled');
       console.log('Spin move disabled');
+    }
+    
+    // Initially disable speed-dependent actions (hockey stop)
+    if (hockeyStopIndicator) {
+      hockeyStopIndicator.classList.add('disabled');
+      console.log('Hockey stop disabled');
     }
     
     // Initially enable stick check (since no puck)
@@ -1265,6 +1352,23 @@ and also configure additional buttons for mobile compatibility.
   hytopia.registerSceneUITemplate('blue-goal-label', (id, onState) => {
     const template = document.getElementById('blue-goal-label-template');
     return template.content.cloneNode(true);
+  });
+
+  // --- SceneUI template for PUCK CONTROL indicator ---
+  hytopia.registerSceneUITemplate('puck-control-indicator', (id, onState) => {
+    const template = document.getElementById('puck-control-indicator-template');
+    const clone = template.content.cloneNode(true);
+    const indicator = clone.querySelector('.puck-control-indicator');
+    
+    onState(state => {
+      if (state && state.visible) {
+        indicator.style.display = 'flex';
+      } else {
+        indicator.style.display = 'none';
+      }
+    });
+    
+    return clone;
   });
 
   // Goal overlay functionality
@@ -1773,7 +1877,7 @@ and also configure additional buttons for mobile compatibility.
       <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/stick-check-icon.png" alt="Stick Check" />
       <div class="pass-shot-label">RMB</div>
     </div>
-    <div class="hockey-stop-indicator" id="hockey-stop-indicator">
+    <div class="hockey-stop-indicator disabled" id="hockey-stop-indicator">
       <div class="cooldown-overlay"></div>
       <img class="hockey-stop-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Hockey Stop" />
       <div class="skill-input-label">SPACE</div>
@@ -1801,6 +1905,13 @@ and also configure additional buttons for mobile compatibility.
 
     <a id="mobile-jump-button" class="mobile-button">
       <img src="{{CDN_ASSETS_URL}}/icons/jump.png" />
+    </a>
+  </div>
+
+  <!-- Music Mute Button -->
+  <div class="music-controls">
+    <a id="music-mute-button" class="music-button" title="Mute/Unmute Background Music">
+      <img id="music-button-icon" src="{{CDN_ASSETS_URL}}/icons/bgm-on.svg" alt="Background Music" />
     </a>
   </div>
 
@@ -1924,6 +2035,17 @@ and also configure additional buttons for mobile compatibility.
               <div class="control-description">Toggle this help overlay</div>
             </div>
           </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/bgm-on.svg" alt="Background Music" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Toggle BGM <span class="control-key">M</span></div>
+              <div class="control-description">Toggle Background Music On/Off</div>
+            </div>
+          </div>
+
         </div>
 
         <!-- Commands Section -->
@@ -2411,6 +2533,12 @@ and also configure additional buttons for mobile compatibility.
   <div class="goal-label goal-label-blue">BLUE GOAL</div>
 </template>
 
+<template id="puck-control-indicator-template">
+  <div class="puck-control-indicator">
+    <div class="puck-arrow">▼</div>
+  </div>
+</template>
+
 <style>
   /* Load custom Draco font */
   @font-face {
@@ -2471,6 +2599,64 @@ and also configure additional buttons for mobile compatibility.
     transform: scale(0.92);
     background-color: rgba(0, 0, 0, 0.75);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Music Controls */
+  .music-controls {
+    display: flex;
+    position: fixed;
+    bottom: 40px;
+    left: 40px;
+    z-index: 1000;
+  }
+
+  .music-button {
+    background-color: rgba(0, 0, 0, 0.7);
+    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    display: flex;
+    width: 50px;
+    height: 50px;
+    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform, background-color;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    cursor: pointer;
+    user-select: none;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .music-button img {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) invert(1); /* Make SVG white */
+    transition: filter 0.15s ease;
+  }
+
+  .music-button:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+    transform: scale(1.05);
+    border-color: rgba(255, 255, 255, 0.4);
+  }
+
+  .music-button.active {
+    transform: scale(0.95);
+    background-color: rgba(0, 0, 0, 0.9);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .music-button.muted {
+    background-color: rgba(0, 0, 0, 0.95);
+    border-color: rgba(219, 62, 62, 0.5);
+  }
+
+  .music-button.muted img {
+    filter: brightness(0) saturate(100%) invert(27%) sepia(51%) saturate(2878%) hue-rotate(346deg) brightness(104%) contrast(97%);
+  }
+
+  .music-button.muted:hover {
+    background-color: rgba(0, 0, 0, 1);
+    border-color: rgba(219, 62, 62, 0.7);
   }  
 
   .team-selection-overlay {
@@ -2897,6 +3083,27 @@ and also configure additional buttons for mobile compatibility.
     font-weight: 800;
   }
 
+  /* Puck Control Indicator */
+  .puck-control-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .puck-arrow {
+    font-size: 2.5rem;
+    font-weight: 900;
+    color: rgb(204, 20, 20);
+    text-shadow: 0 0 8px rgba(204, 20, 20, 0.8), 0 0 4px rgba(204, 20, 20, 0.6);
+    animation: puckArrowBlink 1s ease-in-out infinite;
+  }
+
+  @keyframes puckArrowBlink {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.6; transform: scale(1.1); }
+  }
+
   /* Body Check Cooldown Indicator */
   .body-check-cooldown-indicator {
     /* All positioning handled by .skill-bar-row flexbox */
@@ -3031,7 +3238,9 @@ and also configure additional buttons for mobile compatibility.
   .pass-shot-icon-group.disabled .pass-shot-icon,
   .pass-shot-icon-group.disabled .pass-shot-label,
   .spin-move-indicator.disabled .spin-move-icon,
-  .spin-move-indicator.disabled .skill-input-label {
+  .spin-move-indicator.disabled .skill-input-label,
+  .hockey-stop-indicator.disabled .hockey-stop-icon,
+  .hockey-stop-indicator.disabled .skill-input-label {
     filter: grayscale(1) brightness(0.6);
     color: #aaa !important;
     opacity: 0.7;
@@ -3073,7 +3282,9 @@ and also configure additional buttons for mobile compatibility.
     opacity: 0.7;
   }
   .body-check-cooldown-indicator:not(.disabled) .body-check-cooldown-icon,
-  .body-check-cooldown-indicator:not(.disabled) .skill-input-label {
+  .body-check-cooldown-indicator:not(.disabled) .skill-input-label,
+  .hockey-stop-indicator:not(.disabled) .hockey-stop-icon,
+  .hockey-stop-indicator:not(.disabled) .skill-input-label {
     filter: none;
     color: #fff !important;
     opacity: 1;

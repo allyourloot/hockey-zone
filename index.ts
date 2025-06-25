@@ -26,7 +26,7 @@
 // =========================
 // 1. IMPORTS & TYPE DEFINITIONS
 // =========================
-import { startServer, Entity } from 'hytopia';
+import { startServer, Entity, Audio } from 'hytopia';
 import { HockeyGameManager } from './classes/managers/HockeyGameManager';
 
 // Import managers
@@ -43,6 +43,7 @@ import { WorldInitializer } from './classes/systems/WorldInitializer';
 
 // Import services
 import { GoalDetectionService } from './classes/services/GoalDetectionService';
+import { PuckControlIndicatorService } from './classes/services/PuckControlIndicatorService';
 
 // Import managers
 import { PlayerSpawnManager } from './classes/managers/PlayerSpawnManager';
@@ -69,17 +70,23 @@ startServer(world => {
   // Initialize AudioManager for ambient sounds and SFX
   AudioManager.instance.initialize(world);
   
-  // Create managed background music using AudioManager
-  const gameMusic = AudioManager.instance.createManagedAudio({
+  // Simple background music setup - works for all players
+  const gameMusic = new Audio({
     uri: 'audio/music/ready-for-this.mp3',
     loop: true,
     volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
-  }, 'music');
+  });
   
-  // Music will start when user interacts (browser autoplay policy)
-  if (gameMusic) {
-    (world as any)._gameMusic = gameMusic; // Store reference for user activation
-  }
+  gameMusic.play(world);
+  
+  // Store reference to original volume for mute/unmute functionality
+  let originalMusicVolume = CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME;
+  let isMusicMuted = false;
+  
+  // Background music mute functionality will be handled by PlayerManager
+  // Store gameMusic reference globally for access by other managers
+  (global as any).gameMusic = gameMusic;
+  
   PuckTrailManager.instance.initialize(world);
 
   // Initialize goal detection service
@@ -89,6 +96,9 @@ startServer(world => {
   const playerSpawnManager = PlayerSpawnManager.instance;
   playerSpawnManager.initialize(world);
   playerSpawnManager.validateSpawnPositions();
+  
+  // Initialize puck control indicator service
+  PuckControlIndicatorService.instance.initialize(world);
   
   // Start goal detection monitoring loop
   // Check for goals every 50ms (20 times per second) for responsive detection
@@ -133,8 +143,9 @@ startServer(world => {
 
   // Clean up on server shutdown
   process.on('SIGINT', () => {
-    CONSTANTS.debugLog('Shutting down goal detection service...', 'Main');
+    CONSTANTS.debugLog('Shutting down services...', 'Main');
     goalDetectionService.stopMonitoring();
+    PuckControlIndicatorService.instance.cleanup();
     AudioManager.instance.stop(); // Clean up all audio resources
     clearInterval(goalDetectionInterval);
     process.exit(0);

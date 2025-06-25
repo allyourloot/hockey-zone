@@ -5,8 +5,9 @@
  * Extracted from index.ts section 9. AUDIO MANAGEMENT
  */
 
-import { Audio } from 'hytopia';
-import type { World, Entity } from 'hytopia';
+import { Audio, Entity, World } from 'hytopia';
+import { debugLog, debugError, debugWarn, setAudioDebugFilter } from '../utils/constants';
+import { HockeyGameState } from '../utils/types';
 import * as CONSTANTS from '../utils/constants';
 
 interface ManagedAudio {
@@ -49,7 +50,6 @@ export class AudioManager {
   private nextPercussionTime: number = 0;
   private nextStompBeatTime: number = 0;
   private world: World | null = null;
-  private backgroundMusic: Audio | null = null;
   
   // Audio object management
   private activeAudioInstances: Set<ManagedAudio> = new Set();
@@ -58,7 +58,7 @@ export class AudioManager {
   
   // NEW: Audio pooling system
   private audioPool: Map<string, PooledAudio[]> = new Map();
-  private maxPoolSize: number = 3; // Increased to 3 to handle ambient + gameplay sounds
+  private maxPoolSize: number = 2; // Reduced from 3 to 2 to limit memory usage
   private poolCleanupInterval: NodeJS.Timeout | null = null;
   
   // NEW: Continuous looped audio system for global sounds (not entity-specific)
@@ -75,8 +75,39 @@ export class AudioManager {
   private degradationDetected: boolean = false;
   private lastAudioAnalysis: AudioDebugInfo | null = null;
   
-  // Prevent duplicate initialization
+  // NEW: Multi-player scaling optimizations
+  private playerCount: number = 1; // Track active player count for dynamic scaling
+  
+  // Initialization state
   private isInitialized: boolean = false;
+  
+  // NEW: Dynamic scaling constants based on player count
+  private readonly MAX_TOTAL_AUDIO_INSTANCES = 15; // Base limit for 1-2 players
+  private readonly AGGRESSIVE_CLEANUP_THRESHOLD = 20; // Base threshold
+  private readonly POOL_CLEANUP_FREQUENCY = 10000; // Clean up pools every 10 seconds
+  private readonly ENTITY_AUDIO_MAX_AGE = 15000; // Maximum age for entity audio (15 seconds)
+  
+  // NEW: Multi-player scaling methods
+  private getScaledMaxInstances(): number {
+    // Scale more conservatively for multiplayer
+    const baseLimit = this.MAX_TOTAL_AUDIO_INSTANCES;
+    if (this.playerCount <= 2) return baseLimit;
+    if (this.playerCount <= 6) return Math.min(baseLimit + 5, 20); // Max 20 for 3-6 players
+    return Math.min(baseLimit + 8, 25); // Max 25 for 7+ players (much more conservative)
+  }
+  
+  private getScaledCleanupThreshold(): number {
+    const scaledMax = this.getScaledMaxInstances();
+    return Math.max(scaledMax - 5, 10); // Trigger cleanup 5 instances before limit
+  }
+  
+  private getScaledEntityAudioMaxAge(): number {
+    // Shorter entity audio lifespan with more players
+    const baseAge = this.ENTITY_AUDIO_MAX_AGE;
+    if (this.playerCount <= 2) return baseAge;
+    if (this.playerCount <= 6) return baseAge * 0.75; // 11.25 seconds for 3-6 players
+    return baseAge * 0.5; // 7.5 seconds for 7+ players
+  }
   
   // Private constructor for singleton pattern
   private constructor() {}
@@ -105,16 +136,24 @@ export class AudioManager {
     this.startPoolCleanup();
     this.isInitialized = true;
     CONSTANTS.debugLog('Audio manager initialized with pooled audio system and enhanced memory management', 'AudioManager');
+    
+    // Show helpful console instructions for audio debugging
+    setTimeout(() => {
+      console.log('🎵 AUDIO DEBUG HELPER:');
+      console.log('💡 To show ONLY AudioManager logs, type: audioon');
+      console.log('💡 To show all logs again, type: audiooff');
+      console.log('💡 Alternative: setAudioDebugFilter(true/false)');
+    }, 1000); // Delay so it shows after initial startup logs
   }
   
   /**
    * Start comprehensive audio debugging and monitoring
    */
   private startDebugMonitoring(): void {
-    // Monitor audio health every 5 seconds
+    // Monitor audio health every 3 seconds (more frequent for better optimization)
     this.debugInterval = setInterval(() => {
       this.performAudioAnalysis();
-    }, 5000);
+    }, 3000);
     
     CONSTANTS.debugLog('Audio debugging monitoring started', 'AudioManager');
   }
@@ -125,9 +164,9 @@ export class AudioManager {
   private startPoolCleanup(): void {
     this.poolCleanupInterval = setInterval(() => {
       this.cleanupAudioPool();
-    }, 30000); // Clean up pool every 30 seconds
+    }, this.POOL_CLEANUP_FREQUENCY); // Clean up pool every 10 seconds (more aggressive)
     
-    CONSTANTS.debugLog('Audio pool cleanup started', 'AudioManager');
+    CONSTANTS.debugLog('Audio pool cleanup started with aggressive 10s frequency', 'AudioManager');
   }
 
   /**
@@ -200,9 +239,12 @@ export class AudioManager {
      // Clean up continuous audios
      this.cleanupContinuousAudios();
      
-     // Then do our regular pool cleanup
+     // NEW: Clean up entity-attached audios based on player count
+     this.cleanupEntityAttachedAudios();
+     
+     // Less aggressive pool cleanup - keep instances longer for better reuse
      const now = Date.now();
-     const maxAge = 60000; // 60 seconds
+     const maxAge = 45000; // Increased from 20 seconds to 45 seconds
     
     for (const [uri, pool] of this.audioPool.entries()) {
       const activePool = pool.filter(pooled => {
@@ -220,11 +262,88 @@ export class AudioManager {
         return shouldKeep;
       });
       
+      // Always keep at least 1 instance per pool for better reuse
+      if (activePool.length === 0 && pool.length > 0) {
+        // Keep the most recently used instance
+        const mostRecent = pool.reduce((newest, current) => 
+          current.lastUsed > newest.lastUsed ? current : newest
+        );
+        activePool.push(mostRecent);
+        CONSTANTS.debugLog(`Kept 1 instance of ${uri.split('/').pop()} pool for reuse`, 'AudioManager');
+      }
+      
       if (activePool.length === 0) {
         this.audioPool.delete(uri);
       } else {
         this.audioPool.set(uri, activePool);
       }
+    }
+    
+    // NEW: Check total audio instance count and trigger aggressive cleanup if needed
+    if (this.world) {
+      const allAudios = (this.world as any).audioManager?.getAllAudios() || [];
+      if (allAudios.length > this.getScaledCleanupThreshold()) {
+        CONSTANTS.debugLog(`Total audio instances (${allAudios.length}) exceeds threshold (${this.getScaledCleanupThreshold()}), triggering aggressive cleanup`, 'AudioManager');
+        this.aggressiveInstanceCleanup();
+      }
+    }
+  }
+
+  /**
+   * Aggressive cleanup when too many audio instances exist
+   */
+  private aggressiveInstanceCleanup(): void {
+    if (!this.world?.audioManager) {
+      return;
+    }
+    
+    try {
+      // Get all audio instances
+      const allAudios = this.world.audioManager.getAllAudios();
+      const oneshotAudios = this.world.audioManager.getAllOneshotAudios();
+      
+      // Sort oneshot audios by age (oldest first)
+      const sortedOneshots = oneshotAudios
+        .filter((audio: any) => audio.createdAt)
+        .sort((a: any, b: any) => a.createdAt - b.createdAt);
+      
+      // Remove oldest 60% of oneshot audios if we have too many
+      const targetCleanupCount = Math.min(
+        Math.floor(sortedOneshots.length * 0.6), 
+        allAudios.length - this.getScaledMaxInstances()
+      );
+      
+      const toCleanup = sortedOneshots.slice(0, targetCleanupCount);
+      
+      for (const audio of toCleanup) {
+        try {
+          this.world.audioManager.unregisterAudio(audio);
+        } catch (error) {
+          // Continue with cleanup even if one fails
+        }
+      }
+      
+      // Also clean up old entity-attached audios
+      const entityAudios = allAudios.filter((audio: any) => 
+        audio.attachedToEntity && 
+        audio.createdAt && 
+        (Date.now() - audio.createdAt > this.getScaledEntityAudioMaxAge())
+      );
+      
+      for (const audio of entityAudios) {
+        try {
+          this.world.audioManager.unregisterAudio(audio);
+        } catch (error) {
+          // Continue with cleanup
+        }
+      }
+      
+      const totalCleaned = toCleanup.length + entityAudios.length;
+      if (totalCleaned > 0) {
+        CONSTANTS.debugLog(`Aggressive cleanup: removed ${totalCleaned} audio instances (${toCleanup.length} oneshots, ${entityAudios.length} entity audios)`, 'AudioManager');
+      }
+    } catch (error) {
+      CONSTANTS.debugError('Error in aggressive instance cleanup', error, 'AudioManager');
     }
   }
 
@@ -237,21 +356,79 @@ export class AudioManager {
     // Get existing pool for this URI
     let pool = this.audioPool.get(uri) || [];
     
-    // Find an available (not playing) audio instance
+    // Clean up any pooled audio with invalid entity references
+    pool = pool.filter(pooled => {
+      if (pooled.attachedEntity && !pooled.attachedEntity.isSpawned) {
+        CONSTANTS.debugLog(`Cleaning up pooled audio with invalid entity reference for ${uri.split('/').pop()}`, 'AudioManager');
+        try {
+          pooled.audio.pause();
+        } catch (error) {
+          // Continue with cleanup
+        }
+        return false; // Remove this pooled audio
+      }
+      return true; // Keep this pooled audio
+    });
+    
+    // Update the pool after cleanup
+    if (pool.length === 0) {
+      this.audioPool.delete(uri);
+    } else {
+      this.audioPool.set(uri, pool);
+    }
+    
+    // Find an available (not playing) audio instance - prioritize reuse
     let availableAudio = pool.find(pooled => !pooled.isPlaying);
     
     if (availableAudio) {
       // Reuse the available audio instance
-      // Note: We can't change volume/playbackRate after creation, but for gameplay
-      // sound effects, slight variations are acceptable for better performance
       availableAudio.isPlaying = true;
       availableAudio.lastUsed = Date.now();
+      // Update entity reference if provided
+      availableAudio.attachedEntity = config.attachedToEntity;
       return availableAudio;
     }
     
-    // Create new audio instance if pool isn't full
+    // Check total audio instance count before creating new ones
+    const allAudios = (this.world as any).audioManager?.getAllAudios() || [];
+    if (allAudios.length >= this.getScaledMaxInstances()) {
+      // Force reuse of an existing instance if we're at the limit
+      if (pool.length > 0) {
+        const oldestAudio = pool.reduce((oldest, current) => 
+          current.lastUsed < oldest.lastUsed ? current : oldest
+        );
+        
+        try {
+          oldestAudio.audio.pause(); // Stop the current playback
+        } catch (error) {
+          // Continue with reuse
+        }
+        
+        oldestAudio.isPlaying = true;
+        oldestAudio.lastUsed = Date.now();
+        // Update entity reference if provided
+        oldestAudio.attachedEntity = config.attachedToEntity;
+        CONSTANTS.debugLog(`Forced reuse of pooled audio for ${uri.split('/').pop()} (at instance limit)`, 'AudioManager');
+        return oldestAudio;
+      }
+      
+      // No pool exists and we're at limit - deny creation
+      CONSTANTS.debugLog(`Cannot create new pooled audio for ${uri.split('/').pop()} - at instance limit (${allAudios.length}/${this.getScaledMaxInstances()})`, 'AudioManager');
+      return null;
+    }
+    
+    // Create new audio instance if pool isn't full and we're under the global limit
     if (pool.length < this.maxPoolSize) {
       try {
+        // Validate entity before creating audio
+        const entityToAttach = config.attachedToEntity;
+        if (entityToAttach && !entityToAttach.isSpawned) {
+          CONSTANTS.debugLog(`Entity not spawned when creating pooled audio for ${uri.split('/').pop()}, creating as global sound`, 'AudioManager');
+          // Remove entity attachment for this creation
+          config = { ...config };
+          delete config.attachedToEntity;
+        }
+        
         // Create audio instance directly - bypass managed audio system for pooled audio
         const newAudio = new Audio({
           uri: uri,
@@ -272,7 +449,7 @@ export class AudioManager {
         pool.push(pooledAudio);
         this.audioPool.set(uri, pool);
         
-        CONSTANTS.debugLog(`Created pooled audio for ${uri.split('/').pop()} (pool size: ${pool.length}/${this.maxPoolSize})`, 'AudioManager');
+        CONSTANTS.debugLog(`Created pooled audio for ${uri.split('/').pop()} (pool: ${pool.length}/${this.maxPoolSize}, total: ${allAudios.length + 1}/${this.getScaledMaxInstances()})`, 'AudioManager');
         return pooledAudio;
       } catch (error) {
         CONSTANTS.debugError('Error creating new pooled audio', error, 'AudioManager');
@@ -291,10 +468,18 @@ export class AudioManager {
         );
       }
       
+      try {
+        oldestAudio.audio.pause(); // Stop the current playback before reuse
+      } catch (error) {
+        // Continue with reuse
+      }
+      
       // Reuse this instance
       oldestAudio.isPlaying = true;
       oldestAudio.lastUsed = Date.now();
-      CONSTANTS.debugLog(`Reusing pooled audio for ${uri.split('/').pop()} (forced reuse)`, 'AudioManager');
+      // Update entity reference if provided
+      oldestAudio.attachedEntity = config.attachedToEntity;
+      CONSTANTS.debugLog(`Reusing pooled audio for ${uri.split('/').pop()} (pool full)`, 'AudioManager');
       return oldestAudio;
     }
     
@@ -307,6 +492,19 @@ export class AudioManager {
   public playPooledSoundEffect(uri: string, config: any = {}): boolean {
     if (!this.world) return false;
     
+    // Validate entity attachment before proceeding
+    if (config.attachedToEntity) {
+      const entity = config.attachedToEntity;
+      
+      // Check if entity exists and is spawned
+      if (!entity || !entity.isSpawned) {
+        CONSTANTS.debugLog(`Entity not spawned for ${uri.split('/').pop()}, playing as global sound instead`, 'AudioManager');
+        // Remove entity attachment and play as global sound
+        config = { ...config };
+        delete config.attachedToEntity;
+      }
+    }
+    
     // Get pooled audio instance (no cooldown or limit checks for pooled audio)
     const pooledAudio = this.getPooledAudio(uri, config);
     if (!pooledAudio) {
@@ -314,19 +512,34 @@ export class AudioManager {
     }
     
     try {
-      // Play the audio
-      pooledAudio.audio.play(this.world, true);
+      // Double-check entity validity again before playing
+      if (pooledAudio.attachedEntity) {
+        // Validate entity exists and is spawned
+        if (!pooledAudio.attachedEntity.isSpawned) {
+          CONSTANTS.debugLog(`Pooled audio entity not spawned for ${uri.split('/').pop()}, playing as global sound`, 'AudioManager');
+          // Play as global sound instead
+          pooledAudio.audio.play(this.world, true);
+        } else {
+          // Entity is valid, play attached audio
+          pooledAudio.audio.play(this.world, true);
+        }
+      } else {
+        // No entity attachment, play as global sound
+        pooledAudio.audio.play(this.world, true);
+      }
       
-      // Set up completion handler to mark as not playing
+      // Set up completion handler to mark as not playing - use shorter durations
+      const duration = config.duration || 1500; // Reduced from 2000 to 1500ms default
       setTimeout(() => {
         pooledAudio.isPlaying = false;
-      }, config.duration || 2000); // Default 2 second duration for sound effects
+      }, duration);
       
       // Don't update lastGlobalSoundTime for pooled audio - keep it independent
       return true;
       
     } catch (error) {
-      CONSTANTS.debugError('Error playing pooled audio', error, 'AudioManager');
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      CONSTANTS.debugError(`Error playing pooled audio for ${uri.split('/').pop()}: ${errorMessage}`, error, 'AudioManager');
       pooledAudio.isPlaying = false;
       return false;
     }
@@ -366,7 +579,7 @@ export class AudioManager {
         this.maxSimultaneousAudios = debugInfo.totalAudiosInWorld;
       }
       
-      // Detect potential issues
+      // Detect audio degradation and take corrective action
       this.detectAudioDegradation(debugInfo, allAudios);
       
       // Log detailed info every 30 seconds or if issues detected
@@ -449,44 +662,31 @@ export class AudioManager {
   }
   
   /**
-   * Detect audio degradation patterns
+   * Detect audio degradation and take corrective action
    */
   private detectAudioDegradation(debugInfo: AudioDebugInfo, allAudios: any[]): void {
-    const issues: string[] = [];
+    const isMemoryHigh = debugInfo.memoryEstimate > 15; // Reduced from 20MB to 15MB threshold
+    const tooManyInstances = allAudios.length > this.getScaledCleanupThreshold(); // Use scaled threshold
+    const tooManyUnmanaged = debugInfo.unmanagedAudios > debugInfo.managedAudios + 5; // Allow fewer unmanaged
+    const tooManyLooped = debugInfo.loopedAudios > 8; // Reduced from higher threshold
     
-    // Check for too many audio instances (more lenient threshold)
-    if (debugInfo.totalAudiosInWorld > CONSTANTS.AUDIO_PERFORMANCE.EMERGENCY_CLEANUP_THRESHOLD) {
-      issues.push(`Excessive audio instances: ${debugInfo.totalAudiosInWorld} (limit: ${CONSTANTS.AUDIO_PERFORMANCE.EMERGENCY_CLEANUP_THRESHOLD})`);
-    }
-    
-    // Check for memory concerns
-    if (debugInfo.memoryEstimate > CONSTANTS.AUDIO_PERFORMANCE.MAX_AUDIO_MEMORY_MB * 1.5) { // 1.5x the limit
-      issues.push(`High estimated audio memory: ${debugInfo.memoryEstimate}MB`);
-    }
-    
-    // Check for unmanaged audio leaks
-    if (debugInfo.unmanagedAudios > debugInfo.managedAudios) {
-      issues.push(`More unmanaged audios (${debugInfo.unmanagedAudios}) than managed (${debugInfo.managedAudios})`);
-    }
-    
-    // Check for very old audio instances
-    if (debugInfo.oldestAudio && debugInfo.oldestAudio.age > 300000) { // Older than 5 minutes
-      issues.push(`Very old audio detected: ${Math.round(debugInfo.oldestAudio.age / 1000)}s old (${debugInfo.oldestAudio.uri})`);
-    }
-    
-    // Check for stuck looped audios
-    if (debugInfo.loopedAudios > 5) { // More than 5 looped sounds
-      issues.push(`Many looped audios: ${debugInfo.loopedAudios}`);
-    }
-    
-    if (issues.length > 0) {
-      this.degradationDetected = true;
-      CONSTANTS.debugWarn('🚨 AUDIO DEGRADATION DETECTED:', 'AudioManager');
-      issues.forEach(issue => CONSTANTS.debugWarn(`  - ${issue}`, 'AudioManager'));
+    if (isMemoryHigh || tooManyInstances || tooManyUnmanaged || tooManyLooped) {
+      if (!this.degradationDetected) {
+        CONSTANTS.debugWarn('🚨 AUDIO DEGRADATION DETECTED:', 'AudioManager');
+        if (isMemoryHigh) CONSTANTS.debugWarn(`  - High memory usage: ${debugInfo.memoryEstimate.toFixed(1)}MB`, 'AudioManager');
+        if (tooManyInstances) CONSTANTS.debugWarn(`  - Too many audio instances: ${allAudios.length}`, 'AudioManager');
+        if (tooManyUnmanaged) CONSTANTS.debugWarn(`  - More unmanaged audios (${debugInfo.unmanagedAudios}) than managed (${debugInfo.managedAudios})`, 'AudioManager');
+        if (tooManyLooped) CONSTANTS.debugWarn(`  - Many looped audios: ${debugInfo.loopedAudios}`, 'AudioManager');
+        CONSTANTS.debugWarn('Performing emergency audio cleanup...', 'AudioManager');
+        this.degradationDetected = true;
+      }
       
-      // Attempt emergency cleanup
+      // Always perform aggressive cleanup when degradation is detected
+      this.aggressiveInstanceCleanup();
       this.emergencyAudioCleanup();
-    } else {
+    } else if (this.degradationDetected) {
+      // Audio system has recovered
+      CONSTANTS.debugLog('✅ Audio system recovered from degradation', 'AudioManager');
       this.degradationDetected = false;
     }
   }
@@ -894,14 +1094,6 @@ export class AudioManager {
     // Stop ambient sounds
     this.stopAmbientSounds();
     
-    // Stop background music
-    if (this.backgroundMusic) {
-      if ((this.backgroundMusic as any).stop) {
-        (this.backgroundMusic as any).stop();
-      }
-      this.backgroundMusic = null;
-    }
-    
     // Cleanup all active audio instances
     this.activeAudioInstances.forEach(managed => this.cleanupManagedAudio(managed));
     this.activeAudioInstances.clear();
@@ -974,7 +1166,7 @@ export class AudioManager {
    * Get the current background music instance (for debugging)
    */
   public getBackgroundMusic(): Audio | null {
-    return this.backgroundMusic;
+    return null; // Background music is no longer managed by AudioManager
   }
   
   /**
@@ -1115,187 +1307,89 @@ export class AudioManager {
   }
 
   /**
-   * Clean up entity-attached audios using the official AudioManager method
-   * @param entity - The entity whose audios should be cleaned up
+   * Clean up entity-attached audios that are too old or have invalid entities
    */
-  public cleanupEntityAudios(entity: Entity): void {
+  private cleanupEntityAttachedAudios(): void {
     if (!this.world?.audioManager) {
       return;
     }
     
     try {
-      // Use the official AudioManager method to unregister all entity-attached audios
-      this.world.audioManager.unregisterEntityAttachedAudios(entity);
-      CONSTANTS.debugLog(`Cleaned up all audios for entity`, 'AudioManager');
-    } catch (error) {
-      CONSTANTS.debugError('Error cleaning up entity audios', error, 'AudioManager');
-    }
-  }
-
-  /**
-   * Unregister a specific audio instance using the official AudioManager method
-   * @param audio - The audio instance to unregister
-   */
-  public unregisterSpecificAudio(audio: Audio): void {
-    if (!this.world?.audioManager) {
-      return;
-    }
-    
-    try {
-      // Use the official AudioManager method to unregister the specific audio
-      this.world.audioManager.unregisterAudio(audio);
-      CONSTANTS.debugLog(`Unregistered specific audio instance`, 'AudioManager');
-    } catch (error) {
-      CONSTANTS.debugError('Error unregistering specific audio', error, 'AudioManager');
-    }
-  }
-
-  /**
-   * Start a global continuous looped sound (not attached to any entity)
-   * @param uri - The audio URI
-   * @param config - Audio configuration (volume, playbackRate, etc.)
-   * @returns true if the sound was started successfully
-   */
-  public startGlobalContinuousSound(uri: string, config: any = {}): boolean {
-    if (!this.world) {
-      CONSTANTS.debugLog(`Cannot start global continuous sound - no world`, 'AudioManager');
-      return false;
-    }
-    
-    // If already playing, just return true
-    const existingAudio = this.continuousAudios.get(uri);
-    if (existingAudio) {
-      try {
-        // Check if audio is still valid by accessing a property
-        const volume = existingAudio.volume;
-        CONSTANTS.debugLog(`Global continuous sound ${uri} already playing`, 'AudioManager');
-        return true;
-      } catch (error) {
-        // Audio might be invalid, remove it and create new one
-        CONSTANTS.debugLog(`Existing global continuous audio invalid for ${uri}, removing`, 'AudioManager');
-        this.continuousAudios.delete(uri);
-      }
-    }
-    
-    try {
-      // Create new global looped audio (not attached to entity)
-      const audio = new Audio({
-        uri: uri,
-        volume: config.volume || 0.5,
-        playbackRate: config.playbackRate || 1.0,
-        loop: true
-      });
+      const allAudios = this.world.audioManager.getAllAudios();
+      const entityAttachedAudios = allAudios.filter((audio: any) => 
+        audio.attachedToEntity !== undefined && audio.attachedToEntity !== null
+      );
       
-      // Start playing
-      audio.play(this.world);
+      const now = Date.now();
+      const maxAge = this.getScaledEntityAudioMaxAge();
+      let cleanedCount = 0;
       
-      // Store in continuous audio tracking
-      this.continuousAudios.set(uri, audio);
-      
-      CONSTANTS.debugLog(`Started global continuous sound ${uri}`, 'AudioManager');
-      return true;
-    } catch (error) {
-      CONSTANTS.debugError(`Failed to start global continuous sound ${uri}`, error, 'AudioManager');
-      return false;
-    }
-  }
-  
-  /**
-   * Stop a global continuous looped sound
-   * @param uri - The audio URI to stop
-   */
-  public stopGlobalContinuousSound(uri: string): void {
-    const audio = this.continuousAudios.get(uri);
-    
-    if (audio) {
-      try {
-        audio.pause();
-        CONSTANTS.debugLog(`Stopped global continuous sound ${uri}`, 'AudioManager');
-      } catch (error) {
-        CONSTANTS.debugError(`Error stopping global continuous sound ${uri}`, error, 'AudioManager');
+      // Clean up entity-attached audios that are too old or have invalid entities
+      for (const audio of entityAttachedAudios) {
+        let shouldCleanup = false;
+        let reason = '';
+        
+        // Check if entity is invalid (undefined or not spawned)
+        if (!audio.attachedToEntity || !audio.attachedToEntity.isSpawned) {
+          shouldCleanup = true;
+          reason = 'invalid entity';
+        }
+        // Check if audio is too old (if we can determine age)
+        else if ((audio as any).createdAt && (now - (audio as any).createdAt > maxAge)) {
+          shouldCleanup = true;
+          reason = `too old (${Math.round((now - (audio as any).createdAt) / 1000)}s)`;
+        }
+        
+        if (shouldCleanup) {
+          try {
+            audio.pause();
+            cleanedCount++;
+            CONSTANTS.debugLog(`Cleaned up entity audio: ${audio.uri?.split('/').pop() || 'unknown'} (${reason})`, 'AudioManager');
+          } catch (error) {
+            // Continue with other cleanups
+          }
+        }
       }
       
-      this.continuousAudios.delete(uri);
-    }
-  }
-  
-  /**
-   * Check if a global continuous sound is playing
-   * @param uri - The audio URI to check
-   * @returns true if the sound is currently playing
-   */
-  public isGlobalContinuousSoundPlaying(uri: string): boolean {
-    return this.continuousAudios.has(uri);
-  }
-  
-  /**
-   * Stop all global continuous sounds
-   */
-  public stopAllGlobalContinuousSounds(): void {
-    const keysToRemove: string[] = [];
-    
-    for (const [uri, audio] of this.continuousAudios.entries()) {
-      try {
-        audio.pause();
-      } catch (error) {
-        // Audio might already be cleaned up
+      if (cleanedCount > 0) {
+        CONSTANTS.debugLog(`Cleaned up ${cleanedCount} entity-attached audio instances`, 'AudioManager');
       }
-      keysToRemove.push(uri);
-    }
-    
-    keysToRemove.forEach(uri => this.continuousAudios.delete(uri));
-    
-    if (keysToRemove.length > 0) {
-      CONSTANTS.debugLog(`Stopped ${keysToRemove.length} global continuous sounds`, 'AudioManager');
-    }
-  }
-  
-  /**
-   * Set a player's skating status and manage global ice skating sound
-   * @param playerId - The player entity ID
-   * @param isSkating - Whether the player is currently skating
-   */
-  public setPlayerSkatingStatus(playerId: string, isSkating: boolean): void {
-    const wasSkating = this.skatingPlayers.has(playerId);
-    
-    if (isSkating && !wasSkating) {
-      // Player started skating
-      this.skatingPlayers.add(playerId);
       
-      // Start global ice skating sound if this is the first player skating
-      if (this.skatingPlayers.size === 1) {
-        this.startGlobalContinuousSound(CONSTANTS.AUDIO_PATHS.ICE_SKATING, {
-          volume: CONSTANTS.SKATING_SOUND.VOLUME,
-          playbackRate: 1.0
+      // Also clean up pooled audio with invalid entities
+      let poolCleanedCount = 0;
+      for (const [uri, pool] of this.audioPool.entries()) {
+        const originalLength = pool.length;
+        const cleanedPool = pool.filter(pooled => {
+          if (pooled.attachedEntity && !pooled.attachedEntity.isSpawned) {
+            try {
+              pooled.audio.pause();
+            } catch (error) {
+              // Continue with cleanup
+            }
+            poolCleanedCount++;
+            return false;
+          }
+          return true;
         });
+        
+        if (cleanedPool.length !== originalLength) {
+          if (cleanedPool.length === 0) {
+            this.audioPool.delete(uri);
+          } else {
+            this.audioPool.set(uri, cleanedPool);
+          }
+        }
       }
-    } else if (!isSkating && wasSkating) {
-      // Player stopped skating
-      this.skatingPlayers.delete(playerId);
       
-      // Stop global ice skating sound if no players are skating
-      if (this.skatingPlayers.size === 0) {
-        this.stopGlobalContinuousSound(CONSTANTS.AUDIO_PATHS.ICE_SKATING);
+      if (poolCleanedCount > 0) {
+        CONSTANTS.debugLog(`Cleaned up ${poolCleanedCount} pooled audio instances with invalid entities`, 'AudioManager');
       }
+      
+    } catch (error) {
+      CONSTANTS.debugError('Error during entity-attached audio cleanup', error, 'AudioManager');
     }
   }
-  
-  /**
-   * Get the number of players currently skating
-   * @returns Number of skating players
-   */
-  public getSkatingPlayersCount(): number {
-    return this.skatingPlayers.size;
-  }
-  
-  /**
-   * Clear all skating player tracking (useful for resets)
-   */
-  public clearSkatingPlayers(): void {
-    this.skatingPlayers.clear();
-    this.stopGlobalContinuousSound(CONSTANTS.AUDIO_PATHS.ICE_SKATING);
-  }
-  
+
   /**
    * Clean up invalid global continuous audio instances
    */
@@ -1304,11 +1398,23 @@ export class AudioManager {
     
     for (const [uri, audio] of this.continuousAudios.entries()) {
       try {
-        // Check if audio is still valid by accessing a property
+        // Check if audio is still valid by accessing properties
         const volume = audio.volume;
-        // Audio is still valid, keep it
+        
+        // Additional check: verify the audio is still registered with the world
+        if (this.world) {
+          const allAudios = (this.world as any).audioManager?.getAllAudios() || [];
+          const audioStillExists = allAudios.some((worldAudio: any) => 
+            worldAudio.uri === uri && worldAudio.loop === true
+          );
+          
+          if (!audioStillExists) {
+            CONSTANTS.debugLog(`Continuous audio ${uri} no longer exists in world, removing reference`, 'AudioManager');
+            keysToRemove.push(uri);
+          }
+        }
       } catch (error) {
-        // Audio is invalid, remove it
+        CONSTANTS.debugLog(`Continuous audio ${uri} is invalid, removing`, 'AudioManager');
         keysToRemove.push(uri);
       }
     }
@@ -1329,22 +1435,209 @@ export class AudioManager {
     }
     
     try {
-      // Get all oneshot audios and clean up the oldest ones
+      const allAudios = this.world.audioManager.getAllAudios();
       const oneshotAudios = this.world.audioManager.getAllOneshotAudios();
-      const sortedByAge = oneshotAudios
-        .filter((audio: any) => audio.createdAt)
-        .sort((a: any, b: any) => a.createdAt - b.createdAt);
       
-      // Clean up the oldest 50% of oneshot audios
-      const toCleanup = sortedByAge.slice(0, Math.floor(sortedByAge.length * 0.5));
-      
-      for (const audio of toCleanup) {
-        this.world.audioManager.unregisterAudio(audio);
+      // Strategy 1: Clean up oldest oneshot audios
+      if (oneshotAudios.length > 3) {
+        const targetRemoval = Math.min(oneshotAudios.length - 3, 5);
+        const toRemove = oneshotAudios.slice(0, targetRemoval);
+        
+        for (const audio of toRemove) {
+          try {
+            this.world.audioManager.unregisterAudio(audio);
+          } catch (error) {
+            // Continue with cleanup
+          }
+        }
+        
+        if (toRemove.length > 0) {
+          CONSTANTS.debugLog(`Enhanced emergency cleanup: removed ${toRemove.length} oldest audio instances`, 'AudioManager');
+          return;
+        }
       }
       
-      CONSTANTS.debugLog(`Enhanced emergency cleanup: removed ${toCleanup.length} oldest audio instances`, 'AudioManager');
+      // Strategy 2: Clean up entity-attached audios
+      const entityAudios = allAudios.filter((audio: any) => audio.attachedToEntity);
+      if (entityAudios.length > 3) {
+        const targetRemoval = Math.min(entityAudios.length - 3, 3);
+        const toRemove = entityAudios.slice(0, targetRemoval);
+        
+        for (const audio of toRemove) {
+          try {
+            this.world.audioManager.unregisterAudio(audio);
+          } catch (error) {
+            // Continue with cleanup
+          }
+        }
+        
+        if (toRemove.length > 0) {
+          CONSTANTS.debugLog(`Enhanced emergency cleanup: removed ${toRemove.length} entity-attached audio instances`, 'AudioManager');
+          return;
+        }
+      }
+      
     } catch (error) {
       CONSTANTS.debugError('Error in enhanced emergency cleanup', error, 'AudioManager');
+    }
+  }
+
+  /**
+   * Start a global continuous looped sound (not attached to any entity)
+   */
+  public startGlobalContinuousSound(uri: string, config: any = {}): boolean {
+    if (!this.world) {
+      CONSTANTS.debugLog(`Cannot start global continuous sound - no world`, 'AudioManager');
+      return false;
+    }
+    
+    // If already playing, just return true - prevent duplicates
+    const existingAudio = this.continuousAudios.get(uri);
+    if (existingAudio) {
+      try {
+        const volume = existingAudio.volume;
+        CONSTANTS.debugLog(`Global continuous sound ${uri} already playing - preventing duplicate`, 'AudioManager');
+        return true;
+      } catch (error) {
+        CONSTANTS.debugLog(`Existing global continuous audio invalid for ${uri}, removing`, 'AudioManager');
+        this.continuousAudios.delete(uri);
+      }
+    }
+    
+    // Check if we're at the total instance limit
+    const allAudios = (this.world as any).audioManager?.getAllAudios() || [];
+    if (allAudios.length >= this.getScaledMaxInstances()) {
+      CONSTANTS.debugLog(`Cannot start global continuous sound ${uri} - at instance limit (${allAudios.length}/${this.getScaledMaxInstances()})`, 'AudioManager');
+      return false;
+    }
+    
+    try {
+      const audio = new Audio({
+        uri: uri,
+        volume: config.volume || 0.5,
+        playbackRate: config.playbackRate || 1.0,
+        loop: true
+      });
+      
+      audio.play(this.world);
+      this.continuousAudios.set(uri, audio);
+      
+      CONSTANTS.debugLog(`Started global continuous sound ${uri} (total: ${allAudios.length + 1}/${this.getScaledMaxInstances()})`, 'AudioManager');
+      return true;
+    } catch (error) {
+      CONSTANTS.debugError(`Failed to start global continuous sound ${uri}`, error, 'AudioManager');
+      return false;
+    }
+  }
+  
+  /**
+   * Stop a global continuous looped sound
+   */
+  public stopGlobalContinuousSound(uri: string): void {
+    const audio = this.continuousAudios.get(uri);
+    
+    if (audio) {
+      try {
+        audio.pause();
+        CONSTANTS.debugLog(`Stopped global continuous sound ${uri}`, 'AudioManager');
+      } catch (error) {
+        CONSTANTS.debugError(`Error stopping global continuous sound ${uri}`, error, 'AudioManager');
+      }
+      
+      this.continuousAudios.delete(uri);
+    }
+  }
+
+  /**
+   * @deprecated This method is deprecated. Ice skating sounds are now handled per-player in IceSkatingController.
+   * Set a player's skating status and manage global ice skating sound
+   */
+  public setPlayerSkatingStatus(playerId: string, isSkating: boolean): void {
+    const wasSkating = this.skatingPlayers.has(playerId);
+    
+    if (isSkating && !wasSkating) {
+      this.skatingPlayers.add(playerId);
+      
+      if (this.skatingPlayers.size === 1) {
+        if (this.world) {
+          const allAudios = (this.world as any).audioManager?.getAllAudios() || [];
+          const existingIceSkatingCount = allAudios.filter((audio: any) => 
+            audio.uri && audio.uri.includes('ice-skating')
+          ).length;
+          
+          if (existingIceSkatingCount === 0) {
+            this.startGlobalContinuousSound(CONSTANTS.AUDIO_PATHS.ICE_SKATING, {
+              volume: CONSTANTS.SKATING_SOUND.VOLUME,
+              playbackRate: 1.0
+            });
+          } else {
+            CONSTANTS.debugLog(`Ice skating sound already exists (${existingIceSkatingCount} instances), not creating duplicate`, 'AudioManager');
+          }
+        }
+      }
+    } else if (!isSkating && wasSkating) {
+      this.skatingPlayers.delete(playerId);
+      
+      if (this.skatingPlayers.size === 0) {
+        this.stopGlobalContinuousSound(CONSTANTS.AUDIO_PATHS.ICE_SKATING);
+        
+        if (this.world) {
+          const allAudios = (this.world as any).audioManager?.getAllAudios() || [];
+          const iceSkatingAudios = allAudios.filter((audio: any) => 
+            audio.uri && audio.uri.includes('ice-skating')
+          );
+          
+          for (const audio of iceSkatingAudios) {
+            try {
+              this.world.audioManager.unregisterAudio(audio);
+            } catch (error) {
+              // Continue cleanup
+            }
+          }
+          
+          if (iceSkatingAudios.length > 0) {
+            CONSTANTS.debugLog(`Cleaned up ${iceSkatingAudios.length} duplicate ice skating sounds`, 'AudioManager');
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Update the active player count for dynamic scaling
+   */
+  public updatePlayerCount(count: number): void {
+    const oldCount = this.playerCount;
+    this.playerCount = Math.max(1, count);
+    
+    if (oldCount !== this.playerCount) {
+      CONSTANTS.debugLog(`Player count updated: ${oldCount} → ${this.playerCount} (max instances: ${this.getScaledMaxInstances()}, cleanup threshold: ${this.getScaledCleanupThreshold()})`, 'AudioManager');
+      
+      if (this.playerCount > oldCount + 2) {
+        this.forceCleanup();
+      }
+    }
+  }
+
+  /**
+   * Get current player count
+   */
+  public getPlayerCount(): number {
+    return this.playerCount;
+  }
+
+  /**
+   * @deprecated This method is deprecated. Ice skating sounds are now handled per-player in IceSkatingController.
+   * Clear all skating players and stop global ice skating sound
+   * Used during match resets to ensure clean audio state
+   */
+  public clearSkatingPlayers(): void {
+    if (this.skatingPlayers.size > 0) {
+      CONSTANTS.debugLog(`Clearing ${this.skatingPlayers.size} skating players for match reset`, 'AudioManager');
+      this.skatingPlayers.clear();
+      
+      // Stop the global ice skating sound if it's playing
+      this.stopGlobalContinuousSound('audio/sfx/hockey/ice-skating.mp3');
     }
   }
 } 

@@ -6,7 +6,10 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = true; // Set to true during development, false for production
+export const DEBUG_MODE = false; // Set to true during development, false for production
+
+// NEW: Audio-only debug filter for isolating AudioManager logs
+export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
 
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
@@ -32,14 +35,14 @@ export const ICE_SKATING = {
 // HOCKEY STOP CONSTANTS
 // =========================
 export const HOCKEY_STOP = {
-  DURATION: 400, // Increased duration for smoother transition
-  DECELERATION: 0.95, // Less aggressive deceleration
-  TURN_SPEED: 15, // Reduced turn speed for smoother rotation
-  MIN_SPEED: 4, // Keep the same minimum speed requirement
-  COOLDOWN: 2000, // Reduced cooldown for better responsiveness
-  MOMENTUM_PRESERVATION: 0.9, // Increased momentum preservation
-  SPEED_BOOST: 1.10, // Speed boost during direction change
-  MAX_ANGLE: 45, // Reduced max angle for more natural feel
+  DURATION: 700, // Longer duration for smoother network sync and visual transition
+  DECELERATION: 0.98, // Much gentler deceleration (closer to normal ice deceleration)
+  TURN_SPEED: 15, // Keep current turn speed
+  MIN_SPEED: 8, // Keep the same minimum speed requirement
+  COOLDOWN: 3000, // Keep current cooldown
+  MOMENTUM_PRESERVATION: 0.6, // Reduced momentum preservation for less dramatic changes
+  SPEED_BOOST: 0.15, // Much smaller speed boost to prevent teleportation effect
+  MAX_ANGLE: 35, // Slightly reduced max angle for more subtle movement
 } as const;
 
 // =========================
@@ -48,7 +51,7 @@ export const HOCKEY_STOP = {
 export const SPIN_MOVE = {
   DURATION: 300, // 300ms for one quick spin
   COOLDOWN: 7000, // 7 seconds cooldown
-  MIN_SPEED: 4, // Minimum speed required to spin
+  MIN_SPEED: 8, // Minimum speed required to spin (must be running, not walking)
   MOMENTUM_PRESERVATION: 0.85,
   BOOST_MULTIPLIER: 1.2, // 20% speed boost after spin
 } as const;
@@ -67,11 +70,10 @@ export const DASH = {
 // SKATING SOUND CONSTANTS
 // =========================
 export const SKATING_SOUND = {
-  VOLUME: 0.13,
-  MIN_SPEED: 0.5,
-  DURATION: 800,
-  MIN_PLAYBACK_RATE: 0.7,
-  MAX_PLAYBACK_RATE: 1.3,
+  VOLUME: 0.1,
+  MIN_SPEED: 4.0,
+  WALK_LOOP_DURATION: 1600, // Slow loop for walking (1.2 seconds)
+  RUN_LOOP_DURATION: 1000,   // Fast loop for running (0.6 seconds)
 } as const;
 
 // =========================
@@ -100,7 +102,8 @@ export const PASS_SHOT = {
 // =========================
 export const PUCK_SOUND = {
   COOLDOWN: 200, // 200ms cooldown between puck sounds
-  VOLUME: 0.4, // Volume for puck movement sounds
+  LATERAL_COOLDOWN: 200, // 400ms cooldown between lateral puck movement sounds (A/D dangling)
+  VOLUME: 0.3, // Volume for puck movement sounds
   HIT_POST_VOLUME: 0.6, // Volume for post collision sounds
   HIT_POST_COOLDOWN: 500, // 500ms cooldown between post hit sounds
   HIT_POST_REFERENCE_DISTANCE: 45, // Distance for spatial audio (audible across rink with proper falloff)
@@ -120,8 +123,8 @@ export const STICK_CHECK = {
 // BODY CHECK CONSTANTS
 // =========================
 export const BODY_CHECK = {
-  COOLDOWN: 5000, // 5 seconds
-  DASH_FORCE: 18, // Forward impulse
+  COOLDOWN: 7000, // 7 seconds
+  DASH_FORCE: 60, // Forward impulse
   DURATION: 180, // ms
   UI_RANGE: 3.5, // meters (increased range for UI overlay and magnetization)
   RANGE: 2.5, // meters (actual hitbox/collision range)
@@ -133,23 +136,23 @@ export const BODY_CHECK = {
 // =========================
 export const AUDIO = {
   // Ambient sound scheduling
-  MIN_GAP_BETWEEN_SOUNDS: 30000, // 30 seconds
+  MIN_GAP_BETWEEN_SOUNDS: 45000, // 45 seconds
   CROWD_CHANT_MIN: 20000, // 20s
-  CROWD_CHANT_MAX: 130000, // 130s
-  PERCUSSION_MIN: 50000, // 50s
-  PERCUSSION_MAX: 150000, // 150s
+  CROWD_CHANT_MAX: 360000, // 6 minutes
+  PERCUSSION_MIN: 45000, // 45s
+  PERCUSSION_MAX: 360000, // 6 minutes
   
   // Background music
-  BACKGROUND_MUSIC_VOLUME: 0.05,
+  BACKGROUND_MUSIC_VOLUME: 0.04,
   
   // Stomp beat timing
   STOMP_BEAT_MIN: 35000, // 35s
-  STOMP_BEAT_MAX: 90000, // 90s
+  STOMP_BEAT_MAX: 360000, // 6 minutes
   
   // Sound effect volumes
   CROWD_CHANT_VOLUME: 0.3,
-  PERCUSSION_VOLUME: 0.4,
-  STOMP_BEAT_VOLUME: 0.4,
+  PERCUSSION_VOLUME: 0.3,
+  STOMP_BEAT_VOLUME: 0.3,
   GOAL_HORN_VOLUME: 0.6,
 } as const;
 
@@ -187,32 +190,32 @@ export const PLAYER_DEFAULTS = {
 // =========================
 export const POSITION_STATS = {
   DEFENDER: {
-    runVelocity: 10,
+    runVelocity: 11,
     walkVelocity: 6,
-    minShotForce: 15,
-    maxShotForce: 30,
+    minShotForce: 18,
+    maxShotForce: 28,
     passingPower: 1.3,
   },
   WINGER: {
-    runVelocity: 14,
+    runVelocity: 13,
     walkVelocity: 8,
     minShotForce: 20,
-    maxShotForce: 35,
-    passingPower: 1.6,
+    maxShotForce: 32,
+    passingPower: 1.2,
   },
   CENTER: {
     runVelocity: 12,
     walkVelocity: 7,
     minShotForce: 25,
-    maxShotForce: 40,
+    maxShotForce: 35,
     passingPower: 1.1,
   },
   GOALIE: {
-    runVelocity: 6,
+    runVelocity: 8,
     walkVelocity: 4,
-    minShotForce: 8,
-    maxShotForce: 15,
-    passingPower: 0.8,
+    minShotForce: 10,
+    maxShotForce: 20,
+    passingPower: 1.0,
   },
 } as const;
 
@@ -222,7 +225,7 @@ export const POSITION_STATS = {
 export const AUDIO_PATHS = {
   // Hockey sounds
   ICE_SKATING: 'audio/sfx/hockey/ice-skating.mp3',
-  ICE_STOP: 'audio/sfx/hockey/whoosh.mp3',
+  ICE_STOP: 'audio/sfx/hockey/hockey-stop.mp3',
   PUCK_ATTACH: 'audio/sfx/hockey/puck-attach.mp3',
   PUCK_CATCH: 'audio/sfx/hockey/puck-catch.mp3',
   PUCK_LEFT: 'audio/sfx/hockey/puck-left.mp3',
@@ -282,7 +285,7 @@ export const PUCK_PHYSICS = {
   GRAVITY_SCALE: 1.0,
   
   // Collider properties - optimized for ice floor interaction WITH CCD
-  RADIUS: 0.4,
+  RADIUS: 0.45,
   HALF_HEIGHT: 0.03, // Very thin to make puck sit directly on ice surface
   BORDER_RADIUS: 0.1,
   FRICTION: 0.05,    // Much lower friction for ice floor interaction (was 0.2)
@@ -303,7 +306,7 @@ export const ICE_FLOOR_PHYSICS = {
   
   // Damping values for ice physics
   ICE_DAMPING: 0.01,   // Very low damping for ice-like sliding
-  NORMAL_DAMPING: 0.02, // Normal puck damping when off ice
+  NORMAL_DAMPING: 0.01, // Normal puck damping when off ice
   
   // Floor dimensions (based on map analysis)
   HALF_EXTENTS: {
@@ -321,10 +324,10 @@ export const ICE_FLOOR_PHYSICS = {
 // PUCK TRAIL CONSTANTS
 // =========================
 export const PUCK_TRAIL = {
-  MAX_LENGTH: 4, // Fewer particles for gradient plane trail
+  MAX_LENGTH: 3, // Fewer particles for gradient plane trail
   SPAWN_INTERVAL: 70, // Slightly longer for smooth gradient effect
   PARTICLE_LIFETIME: 600, // Longer lifetime to show gradient fade
-  MIN_SPEED_FOR_TRAIL: 2.5, // Speed threshold for trail activation
+  MIN_SPEED_FOR_TRAIL: 3.0, // Speed threshold for trail activation
   PARTICLE_SCALE: 0.8, // Larger scale for gradient plane visibility
   POSITION_RANDOMNESS: 0.05 // Minimal randomness for clean gradient trail
 } as const;
@@ -380,10 +383,16 @@ export const SPAWN_POSITIONS = {
  * @param prefix - Optional prefix for categorizing logs
  */
 export function debugLog(message: string, prefix?: string): void {
-  if (DEBUG_MODE) {
-    const logMessage = prefix ? `[${prefix}] ${message}` : message;
-    console.log(logMessage);
+  if (!DEBUG_MODE) return;
+  
+  // Audio-only debug filter: only show AudioManager logs if filter is enabled
+  const audioFilterEnabled = (globalThis as any).AUDIO_DEBUG_FILTER ?? AUDIO_DEBUG_FILTER;
+  if (audioFilterEnabled && prefix !== 'AudioManager') {
+    return;
   }
+  
+  const logMessage = prefix ? `[${prefix}] ${message}` : message;
+  console.log(logMessage);
 }
 
 /**
@@ -393,13 +402,19 @@ export function debugLog(message: string, prefix?: string): void {
  * @param prefix - Optional prefix for categorizing logs
  */
 export function debugError(message: string, error?: any, prefix?: string): void {
-  if (DEBUG_MODE) {
-    const logMessage = prefix ? `[${prefix}] ${message}` : message;
-    if (error) {
-      console.error(logMessage, error);
-    } else {
-      console.error(logMessage);
-    }
+  if (!DEBUG_MODE) return;
+  
+  // Audio-only debug filter: only show AudioManager logs if filter is enabled
+  const audioFilterEnabled = (globalThis as any).AUDIO_DEBUG_FILTER ?? AUDIO_DEBUG_FILTER;
+  if (audioFilterEnabled && prefix !== 'AudioManager') {
+    return;
+  }
+  
+  const logMessage = prefix ? `[${prefix}] ${message}` : message;
+  if (error) {
+    console.error(logMessage, error);
+  } else {
+    console.error(logMessage);
   }
 }
 
@@ -409,8 +424,36 @@ export function debugError(message: string, error?: any, prefix?: string): void 
  * @param prefix - Optional prefix for categorizing logs
  */
 export function debugWarn(message: string, prefix?: string): void {
-  if (DEBUG_MODE) {
-    const logMessage = prefix ? `[${prefix}] ${message}` : message;
-    console.warn(logMessage);
+  if (!DEBUG_MODE) return;
+  
+  // Audio-only debug filter: only show AudioManager logs if filter is enabled
+  const audioFilterEnabled = (globalThis as any).AUDIO_DEBUG_FILTER ?? AUDIO_DEBUG_FILTER;
+  if (audioFilterEnabled && prefix !== 'AudioManager') {
+    return;
   }
-} 
+  
+  const logMessage = prefix ? `[${prefix}] ${message}` : message;
+  console.warn(logMessage);
+}
+
+/**
+ * Toggle the audio-only debug filter at runtime
+ * When enabled, only AudioManager logs will be shown in the console
+ * @param enabled - Whether to enable audio-only filtering
+ */
+export function setAudioDebugFilter(enabled: boolean): void {
+  (globalThis as any).AUDIO_DEBUG_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('🎵 AUDIO DEBUG FILTER ENABLED - Only AudioManager logs will be shown');
+    console.log('💡 To disable: setAudioDebugFilter(false) or type "audiooff" in console');
+  } else {
+    console.log('🎵 AUDIO DEBUG FILTER DISABLED - All debug logs will be shown');
+    console.log('💡 To enable: setAudioDebugFilter(true) or type "audioon" in console');
+  }
+}
+
+// Make functions globally accessible for easy console usage
+(globalThis as any).setAudioDebugFilter = setAudioDebugFilter;
+(globalThis as any).audioon = () => setAudioDebugFilter(true);
+(globalThis as any).audiooff = () => setAudioDebugFilter(false); 
