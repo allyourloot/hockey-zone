@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
@@ -158,9 +158,14 @@ export const AUDIO = {
 // =========================
 export const AUDIO_PERFORMANCE = {
   // Audio object cleanup settings
-  CLEANUP_DELAY: 8000, // 8 seconds after playback to cleanup audio objects
-  MAX_CONCURRENT_SOUNDS: 20, // Maximum number of sound effects playing simultaneously
-  SOUND_COOLDOWN_GLOBAL: 50, // Global minimum time between any sound effects (ms)
+  CLEANUP_DELAY: 15000, // 15 seconds after playback to cleanup audio objects (increased to prevent premature cleanup)
+  MAX_CONCURRENT_SOUNDS: 25, // Maximum number of sound effects playing simultaneously (increased to accommodate rapid gameplay)
+  SOUND_COOLDOWN_GLOBAL: 25, // Global minimum time between any sound effects (ms) (reduced further with pooled system)
+  
+  // Emergency cleanup thresholds
+  EMERGENCY_CLEANUP_THRESHOLD: 50, // Trigger emergency cleanup at this many sounds (increased to accommodate rapid gameplay)
+  MAX_AUDIO_MEMORY_MB: 40, // Maximum estimated audio memory before cleanup (MB)
+  OLD_AUDIO_THRESHOLD: 180000, // Consider audio "old" after 3 minutes (ms)
 } as const;
 
 // =========================
@@ -217,7 +222,7 @@ export const POSITION_STATS = {
 export const AUDIO_PATHS = {
   // Hockey sounds
   ICE_SKATING: 'audio/sfx/hockey/ice-skating.mp3',
-  ICE_STOP: 'audio/sfx/hockey/ice-stop.mp3',
+  ICE_STOP: 'audio/sfx/hockey/whoosh.mp3',
   PUCK_ATTACH: 'audio/sfx/hockey/puck-attach.mp3',
   PUCK_CATCH: 'audio/sfx/hockey/puck-catch.mp3',
   PUCK_LEFT: 'audio/sfx/hockey/puck-left.mp3',
@@ -272,16 +277,44 @@ export const GOAL_COLLIDERS = {
 // =========================
 export const PUCK_PHYSICS = {
   MODEL_SCALE: 0.6,
-  LINEAR_DAMPING: 0.05,
-  ANGULAR_DAMPING: 0.8,
+  LINEAR_DAMPING: 0.02,  // Reduced for smoother movement (was 0.05)
+  ANGULAR_DAMPING: 0.6,  // Reduced for more natural spinning (was 0.8)
   GRAVITY_SCALE: 1.0,
   
-  // Collider properties
+  // Collider properties - optimized for ice floor interaction WITH CCD
   RADIUS: 0.4,
-  HALF_HEIGHT: 0.02, // Very thin to make puck sit directly on ice surface
+  HALF_HEIGHT: 0.03, // Very thin to make puck sit directly on ice surface
   BORDER_RADIUS: 0.1,
-  FRICTION: 0.2,
-  BOUNCINESS: 0.05,
+  FRICTION: 0.05,    // Much lower friction for ice floor interaction (was 0.2)
+  BOUNCINESS: 0.01,  // Very low bounce for realistic ice hockey behavior (was 0.05)
+  
+  // CCD enabled with ice floor providing smooth collision surface
+  CCD_ENABLED: true, // Enable CCD with ice floor handling smooth collisions
+} as const;
+
+// =========================
+// ICE FLOOR PHYSICS CONSTANTS
+// =========================
+export const ICE_FLOOR_PHYSICS = {
+  // Custom physics properties for the IceFloorEntity
+  // These are optimized for smooth puck movement WITH CCD enabled
+  FRICTION: 0.001,     // Ultra-low friction for ice-like behavior
+  BOUNCINESS: 0.0,     // Zero bounce to prevent any unwanted bouncing
+  
+  // Damping values for ice physics
+  ICE_DAMPING: 0.01,   // Very low damping for ice-like sliding
+  NORMAL_DAMPING: 0.02, // Normal puck damping when off ice
+  
+  // Floor dimensions (based on map analysis)
+  HALF_EXTENTS: {
+    x: 31.5,  // Total width: 63 blocks (-31.5 to +31.5)
+    y: 0.05,  // Very thin physical surface for minimal collision interference
+    z: 45.5   // Total length: 91 blocks (-45.5 to +45.5)
+  },
+  
+  // Position sensor at natural player level to detect when puck is on ice
+  Y_OFFSET: 1.0,       // Center sensor at mid-level between floor (Y=0) and player (Y=1.79)
+  CENTER_POSITION: { x: 0, y: 1, z: -1 }, // Sensor positioned to detect puck on playing surface
 } as const;
 
 // =========================
@@ -302,6 +335,9 @@ export const PUCK_TRAIL = {
 export const COLLISION_GROUPS = {
   // Custom collision group for player barriers (value between 1-127)
   PLAYER_BARRIER: 64,
+  
+  // Custom collision group for ice floor (value between 1-127)
+  ICE_FLOOR: 65,
 } as const;
 
 // =========================
@@ -328,7 +364,7 @@ export const PLAYER_BARRIERS = {
 // SPAWN POSITIONS
 // =========================
 export const SPAWN_POSITIONS = {
-  PUCK_CENTER_ICE: { x: 0, y: 1.1, z: 1 }, // Lowered from 1.8 to 0.2 to sit on ice surface
+  PUCK_CENTER_ICE: { x: 0, y: 1.8, z: 1 }, // At natural player level to sit on ice floor properly
   PLAYER_DEFAULT: { x: 0, y: 10, z: 0 },
   RED_GOAL: { x: 0, y: 2, z: -32 },
   BLUE_GOAL: { x: 0, y: 2, z: 32 },

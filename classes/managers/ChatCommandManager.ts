@@ -10,7 +10,9 @@ import { PuckTrailManager } from './PuckTrailManager';
 import { GoalDetectionService } from '../services/GoalDetectionService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
+import { WorldInitializer } from '../systems/WorldInitializer';
 import { HockeyTeam } from '../utils/types';
+import { AudioManager } from './AudioManager';
 
 // Import the IceSkatingController type - we'll need to reference it
 // Note: This creates a circular dependency that we'll resolve in later phases
@@ -77,8 +79,10 @@ export class ChatCommandManager {
     this.registerStickCheckDebugCommand();
     this.registerStatsTestCommands();
     this.registerPlayerBarrierCommands();
+    this.registerIceFloorCommands();
     this.registerTestCommands();
     this.registerGameplayMessageCommands();
+    this.registerAudioDebugCommands();
   }
   
   /**
@@ -146,19 +150,33 @@ export class ChatCommandManager {
 
       // Create new puck entity
       if (this.createPuckEntity) {
-        this.puck = this.createPuckEntity();
-        
-        // Spawn at center ice using constants
-        this.puck.spawn(this.world!, CONSTANTS.SPAWN_POSITIONS.PUCK_CENTER_ICE);
-        
-        // Attach trail effect to the new puck
-        PuckTrailManager.instance.attachTrailToPuck(this.puck);
-        
-        this.world!.chatManager.sendPlayerMessage(player, 'New puck spawned with custom gradient trail!', '00FF00');
-        console.log('New puck spawned with custom gradient trail');
+        try {
+          this.puck = this.createPuckEntity();
+          console.log('[SpawnPuck] Puck entity created successfully');
+          
+          // Spawn at center ice using constants
+          const spawnPos = CONSTANTS.SPAWN_POSITIONS.PUCK_CENTER_ICE;
+          console.log('[SpawnPuck] Attempting to spawn puck at:', spawnPos);
+          
+          this.puck.spawn(this.world!, spawnPos);
+          console.log('[SpawnPuck] Puck spawned, isSpawned:', this.puck.isSpawned);
+          
+          // Attach trail effect to the new puck
+          PuckTrailManager.instance.attachTrailToPuck(this.puck);
+          
+          this.world!.chatManager.sendPlayerMessage(
+            player, 
+            `Puck spawned at Y=${spawnPos.y} with trail!`, 
+            '00FF00'
+          );
+          console.log('[SpawnPuck] Success - puck spawned with trail at Y:', spawnPos.y);
+        } catch (error) {
+          this.world!.chatManager.sendPlayerMessage(player, `Error spawning puck: ${error}`, 'FF0000');
+          console.error('[SpawnPuck] Error creating/spawning puck:', error);
+        }
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'Error: Cannot create puck entity!', 'FF0000');
-        console.error('ChatCommandManager: createPuckEntity function not available');
+        console.error('[SpawnPuck] createPuckEntity function not available');
       }
     });
   }
@@ -399,13 +417,26 @@ export class ChatCommandManager {
     // /restartmusic - Restart background music cleanly
     this.world.chatManager.registerCommand('/restartmusic', (player) => {
       const { AudioManager } = require('./AudioManager');
+      const CONSTANTS = require('../utils/constants');
       try {
         // Stop existing music
         AudioManager.instance.stop();
-        // Reinitialize
-        AudioManager.instance.initialize(this.world!);
-        this.world!.chatManager.sendPlayerMessage(player, 'Background music restarted cleanly', '00FF00');
-        console.log('[ChatCommand] Background music restarted cleanly');
+        
+        // Create new background music without re-initializing entire AudioManager
+        // (this avoids duplicate ambient sound timers)
+        const gameMusic = AudioManager.instance.createManagedAudio({
+          uri: 'audio/music/ready-for-this.mp3',
+          loop: true,
+          volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
+        }, 'music');
+        
+        if (gameMusic && this.world) {
+          gameMusic.play(this.world);
+          (this.world as any)._gameMusic = gameMusic; // Store reference
+        }
+        
+        this.world!.chatManager.sendPlayerMessage(player, 'Background music restarted cleanly (no ambient duplication)', '00FF00');
+        console.log('[ChatCommand] Background music restarted cleanly without re-initializing ambient sounds');
       } catch (error) {
         console.error('[ChatCommand] Error restarting music:', error);
         this.world!.chatManager.sendPlayerMessage(player, 'Error restarting music', 'FF0000');
@@ -780,6 +811,97 @@ export class ChatCommandManager {
     });
   }
 
+  /**
+   * Register ice floor debug commands
+   */
+  private registerIceFloorCommands(): void {
+    if (!this.world) return;
+
+    // /icefloor - Show ice floor entity status
+    this.world.chatManager.registerCommand('/icefloor', (player) => {
+      const iceFloor = WorldInitializer.instance.getIceFloor();
+      if (iceFloor) {
+        const position = iceFloor.position;
+        const isSpawned = iceFloor.isSpawned;
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Ice Floor: spawned=${isSpawned}, pos=(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
+          '00FFFF'
+        );
+        console.log('[IceFloor] Status:', { spawned: isSpawned, position });
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Ice floor entity not found!', 'FF0000');
+        console.log('[IceFloor] Entity not found');
+      }
+    });
+
+    // /testpuckphysics - Test puck physics with detailed reporting
+    this.world.chatManager.registerCommand('/testpuckphysics', (player) => {
+      if (this.puck && this.puck.isSpawned) {
+        // Use the correct property names from Hytopia SDK
+        const velocity = this.puck.linearVelocity;
+        const position = this.puck.position;
+        const angularVel = this.puck.angularVelocity;
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Puck Physics: pos=(${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`,
+          '00FFFF'
+        );
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Linear Vel: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)})`,
+          '00FFFF'
+        );
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Angular Vel: (${angularVel.x.toFixed(2)}, ${angularVel.y.toFixed(2)}, ${angularVel.z.toFixed(2)})`,
+          '00FFFF'
+        );
+        
+        console.log('[PuckPhysics] Position:', position);
+        console.log('[PuckPhysics] Linear Velocity:', velocity);
+        console.log('[PuckPhysics] Angular Velocity:', angularVel);
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'No puck found or puck not spawned!', 'FF0000');
+      }
+    });
+
+    // /testcollisions - Check if puck is colliding with ice floor vs map blocks
+    this.world.chatManager.registerCommand('/testcollisions', (player) => {
+      const iceFloor = WorldInitializer.instance.getIceFloor();
+      if (!iceFloor) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Ice floor not found!', 'FF0000');
+        return;
+      }
+
+      if (!this.puck || !this.puck.isSpawned) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No puck found!', 'FF0000');
+        return;
+      }
+
+      // Display collision info
+      const iceFloorPos = iceFloor.position;
+      const puckPos = this.puck.position;
+      const verticalDiff = puckPos.y - iceFloorPos.y;
+
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Ice Floor Y: ${iceFloorPos.y.toFixed(3)}, Puck Y: ${puckPos.y.toFixed(3)}`,
+        '00FFFF'
+      );
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Vertical diff: ${verticalDiff.toFixed(3)} (should be ~0.05-0.1)`,
+        verticalDiff > 0.05 && verticalDiff < 0.15 ? '00FF00' : 'FF0000'
+      );
+
+      console.log('[CollisionTest] Ice floor position:', iceFloorPos);
+      console.log('[CollisionTest] Puck position:', puckPos);
+      console.log('[CollisionTest] Vertical difference:', verticalDiff);
+    });
+  }
+
   private registerTestCommands(): void {
     if (!this.world) return;
     
@@ -900,4 +1022,141 @@ export class ChatCommandManager {
       console.log(`[ChatCommand] Gameplay messages ${IceSkatingController._showGameplayMessages ? 'enabled' : 'disabled'} by`, player.id);
     });
   }
-} 
+  
+  /**
+   * Register audio debugging commands for diagnosing audio degradation issues
+   */
+  private registerAudioDebugCommands(): void {
+    if (!this.world) return;
+    
+    // /audioinfo - Shows comprehensive audio status
+    this.world.chatManager.registerCommand('/audioinfo', (player) => {
+      const debugInfo = AudioManager.instance.getAudioDebugInfo();
+      const stats = AudioManager.instance.getAudioStats();
+      
+      if (debugInfo) {
+        this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO SYSTEM STATUS:', '00FFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Total: ${debugInfo.totalAudiosInWorld} | Managed: ${debugInfo.managedAudios} | Unmanaged: ${debugInfo.unmanagedAudios}`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Looped: ${debugInfo.loopedAudios} | One-shot: ${debugInfo.oneshotAudios}`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Entity Attached: ${debugInfo.entityAttachedAudios}`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Memory Est: ${debugInfo.memoryEstimate}MB`, 'FFFFFF');
+        
+        if (debugInfo.oldestAudio) {
+          const ageSeconds = Math.round(debugInfo.oldestAudio.age / 1000);
+          this.world!.chatManager.sendPlayerMessage(player, `Oldest: ${ageSeconds}s (${debugInfo.oldestAudio.uri})`, 'FFFFFF');
+        }
+        
+        if (Object.keys(debugInfo.typeBreakdown).length > 0) {
+          this.world!.chatManager.sendPlayerMessage(player, `Types: ${JSON.stringify(debugInfo.typeBreakdown)}`, 'FFFFFF');
+        }
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'No audio debug info available yet', 'FFFF00');
+      }
+    });
+    
+    // /audioworld - Shows all audio instances in world using Hytopia API
+    this.world.chatManager.registerCommand('/audioworld', (player) => {
+      const allAudios = AudioManager.instance.getAllWorldAudios();
+      const loopedAudios = AudioManager.instance.getAllLoopedAudios();
+      const oneshotAudios = AudioManager.instance.getAllOneshotAudios();
+      
+      this.world!.chatManager.sendPlayerMessage(player, '🌍 WORLD AUDIO INSTANCES:', '00FFFF');
+      this.world!.chatManager.sendPlayerMessage(player, `Total: ${allAudios.length}`, 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, `Looped: ${loopedAudios.length}`, 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, `One-shot: ${oneshotAudios.length}`, 'FFFFFF');
+      
+      // Show details of first few audios
+      const firstFew = allAudios.slice(0, 5);
+      firstFew.forEach((audio, index) => {
+        const uri = audio.uri || 'unknown';
+        const attached = audio.attachedToEntity ? 'entity-attached' : 'global';
+        const looped = audio.loop ? 'looped' : 'one-shot';
+        this.world!.chatManager.sendPlayerMessage(player, `${index + 1}. ${uri} (${attached}, ${looped})`, 'CCCCCC');
+      });
+      
+      if (allAudios.length > 5) {
+        this.world!.chatManager.sendPlayerMessage(player, `... and ${allAudios.length - 5} more`, 'CCCCCC');
+      }
+    });
+    
+    // /audiocleanup - Forces manual cleanup
+    this.world.chatManager.registerCommand('/audiocleanup', (player) => {
+      AudioManager.instance.forceCleanup();
+      this.world!.chatManager.sendPlayerMessage(player, 'Manual audio cleanup performed!', '00FF00');
+    });
+    
+    // /audiocleanupenhanced - Forces enhanced cleanup using official AudioManager methods
+    this.world.chatManager.registerCommand('/audiocleanupenhanced', (player) => {
+      const allAudiosBefore = AudioManager.instance.getAllWorldAudios().length;
+      
+      // Try the enhanced cleanup methods
+      try {
+        // First cleanup old pooled audios
+        (AudioManager.instance as any).cleanupOldPooledAudios();
+        
+        // Then try enhanced emergency cleanup
+        (AudioManager.instance as any).enhancedEmergencyCleanup();
+        
+        const allAudiosAfter = AudioManager.instance.getAllWorldAudios().length;
+        const cleaned = allAudiosBefore - allAudiosAfter;
+        
+        this.world!.chatManager.sendPlayerMessage(player, `Enhanced audio cleanup completed!`, '00FF00');
+        this.world!.chatManager.sendPlayerMessage(player, `Cleaned up ${cleaned} audio instances (${allAudiosBefore} → ${allAudiosAfter})`, 'FFFFFF');
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(player, `Enhanced cleanup error: ${error}`, 'FF0000');
+      }
+    });
+    
+    // /audioanalyze - Forces manual analysis
+    this.world.chatManager.registerCommand('/audioanalyze', (player) => {
+      const debugInfo = AudioManager.instance.performManualAudioAnalysis();
+      if (debugInfo) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Audio analysis completed:', '00FF00');
+        this.world!.chatManager.sendPlayerMessage(player, `${debugInfo.totalAudiosInWorld} total audios detected`, 'FFFFFF');
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Audio analysis failed', 'FF0000');
+      }
+    });
+    
+    // /audioreset - Resets degradation detection
+    this.world.chatManager.registerCommand('/audioreset', (player) => {
+      AudioManager.instance.resetDegradationFlag();
+      this.world!.chatManager.sendPlayerMessage(player, 'Audio degradation flag reset', '00FF00');
+    });
+    
+    // /audiotest - Creates test audio to verify system
+    this.world.chatManager.registerCommand('/audiotest', (player) => {
+      const success = AudioManager.instance.playGlobalSoundEffect(
+        CONSTANTS.AUDIO_PATHS.REFEREE_WHISTLE,
+        0.5
+      );
+      
+      if (success) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Test audio played successfully', '00FF00');
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Test audio failed to play', 'FF0000');
+      }
+    });
+    
+    // /audiostopambient - Stop ambient sound timers to prevent duplication
+    this.world.chatManager.registerCommand('/audiostopambient', (player) => {
+      AudioManager.instance.stopAmbientSounds();
+      this.world!.chatManager.sendPlayerMessage(player, 'Ambient sound timers stopped to prevent duplication', '00FF00');
+    });
+
+    // /audiohelp - Shows available audio debug commands
+    this.world.chatManager.registerCommand('/audiohelp', (player) => {
+      this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO DEBUG COMMANDS:', '00FFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audioinfo - Show audio system status', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audioworld - Show all world audio instances', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audiocleanup - Force manual cleanup', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audiocleanupenhanced - Enhanced cleanup with official AudioManager', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audioanalyze - Force manual analysis', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audioreset - Reset degradation flag', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audiotest - Play test sound', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, '/audiostopambient - Stop ambient sound timers', 'FFFFFF');
+    });
+    
+    console.log('Audio debugging commands registered');
+  }
+}

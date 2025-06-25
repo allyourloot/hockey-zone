@@ -26,6 +26,7 @@ export class WorldInitializer {
   private world: World | null = null;
   private redGoal: Entity | null = null;
   private blueGoal: Entity | null = null;
+  private iceFloor: Entity | null = null;
   
   // Private constructor for singleton pattern
   private constructor() {}
@@ -57,6 +58,9 @@ export class WorldInitializer {
     
     // Create player barriers to prevent goal entry
     this.createPlayerBarriers();
+    
+    // Create ice floor entity for smooth puck physics
+    this.createIceFloor();
     
     CONSTANTS.debugLog('World initialization complete', 'WorldInitializer');
   }
@@ -153,8 +157,29 @@ export class WorldInitializer {
       throw new Error('Failed to create player barriers');
     }
   }
-  
+
   /**
+   * Create the ice floor entity for smooth puck physics
+   */
+  private createIceFloor(): void {
+    if (!this.world) {
+      CONSTANTS.debugError('Cannot create ice floor - world not initialized', undefined, 'WorldInitializer');
+      return;
+    }
+
+    try {
+      this.iceFloor = WorldInitializer.createIceFloorEntity();
+      // Use the ICE_FLOOR_PHYSICS constants for proper positioning above floor blocks
+      this.iceFloor.spawn(this.world, CONSTANTS.ICE_FLOOR_PHYSICS.CENTER_POSITION);
+      
+      CONSTANTS.debugLog('Ice floor entity created and spawned for smooth puck physics', 'WorldInitializer');
+    } catch (error) {
+      CONSTANTS.debugError('Failed to create ice floor entity', error, 'WorldInitializer');
+      throw new Error('Failed to create ice floor entity');
+    }
+  }
+
+      /**
    * Create a hockey goal entity with all colliders
    * @param modelUri The model URI to use for the goal
    * @returns The goal entity with proper physics setup
@@ -279,7 +304,7 @@ export class WorldInitializer {
       modelScale: CONSTANTS.PUCK_PHYSICS.MODEL_SCALE,
       rigidBodyOptions: {
         type: RigidBodyType.DYNAMIC,
-        ccdEnabled: false, // Enable CCD to prevent tunneling
+        ccdEnabled: CONSTANTS.PUCK_PHYSICS.CCD_ENABLED, // Disable CCD to prevent choppy movement
         linearDamping: CONSTANTS.PUCK_PHYSICS.LINEAR_DAMPING,
         angularDamping: CONSTANTS.PUCK_PHYSICS.ANGULAR_DAMPING,
         enabledRotations: { x: false, y: true, z: false },
@@ -296,10 +321,10 @@ export class WorldInitializer {
             bouncinessCombineRule: CoefficientCombineRule.Max,
             collisionGroups: {
               belongsTo: [CollisionGroup.ENTITY],
-              // Pucks collide with blocks and entities, but NOT with player barriers
-              // This allows pucks to pass through goal barriers while players are blocked
+              // Pucks collide with blocks and entities - ice floor will override floor block physics
+              // The ice floor entity provides smooth collision surface on top of floor blocks
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
-              // Note: PLAYER_BARRIER group is intentionally excluded from collidesWith
+              // Ice floor entity (ENTITY group) will provide smooth physics over rough floor blocks
             }
           }
         ]
@@ -318,6 +343,18 @@ export class WorldInitializer {
     
     return puck;
   }
+
+  /**
+   * Create an ice floor entity to replace choppy floor block collisions
+   * @returns A new ice floor entity ready for spawning
+   */
+  public static createIceFloorEntity(): Entity {
+    const { IceFloorEntity } = require('../entities/IceFloorEntity');
+    const iceFloor = new IceFloorEntity();
+    
+    CONSTANTS.debugLog('Ice floor entity created for smooth puck physics', 'WorldInitializer');
+    return iceFloor;
+  }
   
   /**
    * Get the red team goal entity
@@ -331,6 +368,13 @@ export class WorldInitializer {
    */
   public getBlueGoal(): Entity | null {
     return this.blueGoal;
+  }
+
+  /**
+   * Get the ice floor entity
+   */
+  public getIceFloor(): Entity | null {
+    return this.iceFloor;
   }
 
   /**
@@ -364,17 +408,16 @@ export class WorldInitializer {
                     // Check cooldown to prevent sound spam
           const currentTime = Date.now();
           if (currentTime - lastHitPostSoundTime > CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN) {
-            // Play hit-post sound effect with volume based on speed using managed audio
+            // Play hit-post sound effect with volume based on speed using pooled audio
             const volume = Math.min(CONSTANTS.PUCK_SOUND.HIT_POST_VOLUME, speed * 0.1);
-            const hitPostSound = AudioManager.instance.createManagedAudio({
-              uri: CONSTANTS.AUDIO_PATHS.HIT_POST,
+            const success = AudioManager.instance.playPooledSoundEffect(CONSTANTS.AUDIO_PATHS.HIT_POST, {
               volume: volume,
               attachedToEntity: other,
-              referenceDistance: CONSTANTS.PUCK_SOUND.HIT_POST_REFERENCE_DISTANCE
-            }, 'effect');
+              referenceDistance: CONSTANTS.PUCK_SOUND.HIT_POST_REFERENCE_DISTANCE,
+              duration: 1000 // 1 second duration for hit-post sound
+            });
             
-            if (hitPostSound && other.world) {
-              hitPostSound.play(other.world);
+            if (success) {
               updateLastSoundTime(currentTime);
               CONSTANTS.debugLog(`Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`, 'WorldInitializer');
             }

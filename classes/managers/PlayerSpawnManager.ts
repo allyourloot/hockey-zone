@@ -209,7 +209,7 @@ export class PlayerSpawnManager {
       // First, detach the puck from any player who might be controlling it
       this.detachPuckFromAllPlayers();
       
-      const centerIcePosition = { x: 0, y: 1.1, z: 1 }; // Same as SPAWN_POSITIONS.PUCK_CENTER_ICE
+      const centerIcePosition = CONSTANTS.SPAWN_POSITIONS.PUCK_CENTER_ICE; // Use constants for consistency
       puckEntity.setPosition(centerIcePosition);
       puckEntity.setLinearVelocity({ x: 0, y: 0, z: 0 });
       puckEntity.setAngularVelocity({ x: 0, y: 0, z: 0 });
@@ -271,6 +271,10 @@ export class PlayerSpawnManager {
     puckEntity: any
   ): void {
     CONSTANTS.debugLog('Performing complete reset...', 'PlayerSpawnManager');
+    
+    // Clear all skating players to stop global ice skating sound
+    const { AudioManager } = require('../managers/AudioManager');
+    AudioManager.instance.clearSkatingPlayers();
     
     // Reset all players to their spawn positions
     this.teleportAllPlayersToSpawn(teams, playerIdToPlayer);
