@@ -260,19 +260,19 @@ export const GOAL_COLLIDERS = {
   // Shared constants for both goals
   POST_HALF_EXTENTS: { x: 0.02, y: 1.15, z: 1 },
   POST_Y_OFFSET: -0.05,
-  LEFT_POST_X_OFFSET: -1.52,
-  RIGHT_POST_X_OFFSET: 1.52,
+  LEFT_POST_X_OFFSET: -1.98,
+  RIGHT_POST_X_OFFSET: 1.98,
   
-  CROSSBAR_HALF_EXTENTS: { x: 1.5, y: 0.03, z: 0.09 },
+  CROSSBAR_HALF_EXTENTS: { x: 2.0, y: 0.03, z: 0.09 },
   CROSSBAR_Y_OFFSET: 1.0,
   
-  BOTTOM_BAR_HALF_EXTENTS: { x: 1.5, y: 0.03, z: 0.12 },
+  BOTTOM_BAR_HALF_EXTENTS: { x: 2.0, y: 0.03, z: 0.12 },
   BOTTOM_BAR_Y_OFFSET: -0.9, // Position at bottom of goal opening
   
-  NETTING_HALF_EXTENTS: { x: 1.50, y: 1.1, z: 0.05 },
+  NETTING_HALF_EXTENTS: { x: 2.0, y: 1.1, z: 0.05 },
   
   // Flat wall behind netting to prevent players from running up the back
-  BACK_WALL_HALF_EXTENTS: { x: 1.50, y: 0.5, z: 0.05 },
+  BACK_WALL_HALF_EXTENTS: { x: 2.0, y: 0.5, z: 0.05 },
   
   FRICTION: 0.03,
   BOUNCINESS: 0.15,

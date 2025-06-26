@@ -29,15 +29,15 @@ export class PlayerBarrierService {
   // Goal zones based on the same coordinates as GoalDetectionService
   private readonly GOAL_ZONES: Record<string, GoalZone> = {
     BLUE: {
-      minX: -1.3,
-      maxX: 1.3,
+      minX: -1.62,
+      maxX: 1.62,
       goalLineZ: 31.26, // Blue goal line
       team: HockeyTeam.BLUE,
       name: 'Blue Goal'
     },
     RED: {
-      minX: -1.3,
-      maxX: 1.3,
+      minX: -1.62,
+      maxX: 1.62,
       goalLineZ: -31.285, // Red goal line
       team: HockeyTeam.RED,
       name: 'Red Goal'

@@ -58,7 +58,7 @@ import * as CONSTANTS from './classes/utils/constants';
 
 startServer(world => {
   // Enable debug rendering for all physics objects (including goal colliders)
-  world.simulation.enableDebugRendering(false);
+  world.simulation.enableDebugRendering(true);
   
   // Create shared references for managers
   const puckRef: { current: Entity | null } = { current: null };

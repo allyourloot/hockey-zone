@@ -103,7 +103,7 @@ export class WorldInitializer {
     
     try {
       // Create red team goal
-      this.redGoal = this.createGoalEntity('models/structures/hockey-goal.gltf', 'red');
+      this.redGoal = this.createGoalEntity('models/structures/hockey-goal-red-bigger.gltf', 'red');
       this.redGoal.spawn(
         this.world, 
         CONSTANTS.SPAWN_POSITIONS.RED_GOAL, 
@@ -119,7 +119,7 @@ export class WorldInitializer {
       redGoalLabelUI.load(this.world);
       
       // Create blue team goal with custom model
-      this.blueGoal = this.createGoalEntity('models/structures/hockey-goal-blue.gltf', 'blue');
+      this.blueGoal = this.createGoalEntity('models/structures/hockey-goal-blue-bigger.gltf', 'blue');
       this.blueGoal.spawn(
         this.world, 
         CONSTANTS.SPAWN_POSITIONS.BLUE_GOAL, 
