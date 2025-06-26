@@ -123,7 +123,7 @@ export class PuckControlIndicatorService {
           visible: true,
           playerName: playerName
         },
-        offset: { x: 0, y: 1.8, z: 0 }, // Position closer above player's head
+        offset: { x: 0, y: 2.0, z: 0 }, // Position closer above player's head
         viewDistance: 85, // Increase visibility distance to 100 blocks (from default ~15-20)
       });
       

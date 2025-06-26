@@ -2545,7 +2545,13 @@ and also configure additional buttons for mobile compatibility.
 
 <template id="puck-control-indicator-template">
   <div class="puck-control-indicator">
-    <div class="puck-arrow">▼</div>
+    <div class="puck-control-base">
+      <div class="puck-control-ripple"></div>
+      <div class="puck-control-ripple puck-control-ripple-delayed"></div>
+      <div class="puck-control-inner">
+        <div class="puck-arrow">▼</div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -3099,19 +3105,100 @@ and also configure additional buttons for mobile compatibility.
     align-items: center;
     justify-content: center;
     pointer-events: none;
+    position: relative;
+  }
+
+  .puck-control-base {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+  }
+
+  .puck-control-inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    background: radial-gradient(circle, rgba(255, 68, 68, 0.9) 0%, rgba(204, 20, 20, 0.8) 70%);
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    box-shadow: 
+      0 0 15px rgba(255, 68, 68, 0.6),
+      0 0 30px rgba(255, 68, 68, 0.4),
+      inset 0 0 15px rgba(255, 255, 255, 0.2);
+    z-index: 3;
+    animation: puckControlPulse 1.5s ease-in-out infinite;
+  }
+
+  .puck-control-ripple {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 42px;
+    height: 42px;
+    border: 2px solid rgba(255, 68, 68, 0.6);
+    border-radius: 50%;
+    animation: puckControlRipple 2s ease-out infinite;
+    z-index: 1;
+  }
+
+  .puck-control-ripple-delayed {
+    animation-delay: 1s;
+    border-color: rgba(255, 68, 68, 0.4);
   }
 
   .puck-arrow {
-    font-size: 2.5rem;
+    font-size: 1.8rem;
     font-weight: 900;
-    color: rgb(204, 20, 20);
-    text-shadow: 0 0 8px rgba(204, 20, 20, 0.8), 0 0 4px rgba(204, 20, 20, 0.6);
-    animation: puckArrowBlink 1s ease-in-out infinite;
+    color: #fff;
+    text-shadow: 
+      0 0 8px rgba(255, 255, 255, 0.8),
+      0 2px 4px rgba(0, 0, 0, 0.6);
+    animation: puckArrowBounce 1s ease-in-out infinite;
   }
 
-  @keyframes puckArrowBlink {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.6; transform: scale(1.1); }
+  @keyframes puckControlPulse {
+    0%, 100% { 
+      transform: scale(1);
+      box-shadow: 
+        0 0 20px rgba(255, 68, 68, 0.6),
+        0 0 40px rgba(255, 68, 68, 0.4),
+        inset 0 0 20px rgba(255, 255, 255, 0.2);
+    }
+    50% { 
+      transform: scale(1.05);
+      box-shadow: 
+        0 0 30px rgba(255, 68, 68, 0.8),
+        0 0 60px rgba(255, 68, 68, 0.6),
+        inset 0 0 25px rgba(255, 255, 255, 0.3);
+    }
+  }
+
+  @keyframes puckControlRipple {
+    0% {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(2.5);
+      opacity: 0;
+    }
+  }
+
+  @keyframes puckArrowBounce {
+    0%, 100% { 
+      transform: translateY(0);
+    }
+    50% { 
+      transform: translateY(-3px);
+    }
   }
 
   /* Body Check Cooldown Indicator */
