@@ -1,4 +1,5 @@
-import { Entity, RigidBodyType, ColliderShape, CollisionGroup, CoefficientCombineRule, EntityEvent, Vector3Like } from 'hytopia';
+import { Entity, RigidBodyType, ColliderShape, CollisionGroup, CoefficientCombineRule, EntityEvent } from 'hytopia';
+import type { Vector3Like, PlayerEntity } from 'hytopia';
 import { HockeyTeam } from '../utils/types';
 import * as CONSTANTS from '../utils/constants';
 
@@ -29,15 +30,15 @@ export class PlayerBarrierService {
   // Goal zones based on the same coordinates as GoalDetectionService
   private readonly GOAL_ZONES: Record<string, GoalZone> = {
     BLUE: {
-      minX: -1.62,
-      maxX: 1.62,
+      minX: -1.65,
+      maxX: 1.65,
       goalLineZ: 31.26, // Blue goal line
       team: HockeyTeam.BLUE,
       name: 'Blue Goal'
     },
     RED: {
-      minX: -1.62,
-      maxX: 1.62,
+      minX: -1.65,
+      maxX: 1.65,
       goalLineZ: -31.285, // Red goal line
       team: HockeyTeam.RED,
       name: 'Red Goal'
@@ -103,7 +104,8 @@ export class PlayerBarrierService {
       const gameManager = HockeyGameManager.instance;
       
       // Get the actual player ID from the entity's player property
-      const actualPlayerId = playerEntity.player?.id;
+      const playerEntity_ = playerEntity as PlayerEntity;
+      const actualPlayerId = playerEntity_.player?.id;
       
       if (!actualPlayerId) {
         return { 
@@ -208,7 +210,7 @@ export class PlayerBarrierService {
    */
   private blockPlayerMovement(playerEntity: Entity, zone: GoalZone): void {
     try {
-      const playerId = playerEntity.id;
+      const playerId = playerEntity.id?.toString() || 'unknown';
       const currentTime = Date.now();
       const lastBlockTime = this._lastPushTime.get(playerId) || 0;
       
@@ -247,9 +249,9 @@ export class PlayerBarrierService {
           
           // Stop only the Z velocity component gently
           try {
-            const velocity = playerEntity.velocity;
+            const velocity = playerEntity.linearVelocity;
             if (velocity) {
-              playerEntity.setVelocity({
+              playerEntity.setLinearVelocity({
                 x: velocity.x,
                 y: velocity.y,
                 z: 0 // Just stop Z movement, no impulse
@@ -292,7 +294,7 @@ export class PlayerBarrierService {
       const isPersistent = persistenceLevel >= 2;
       
       // Get current velocity and speed
-      const velocity = playerEntity.velocity;
+      const velocity = playerEntity.linearVelocity;
       const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
       
       // Standard cooldown system
@@ -346,7 +348,7 @@ export class PlayerBarrierService {
         
         // Apply velocity changes and impulses
         try {
-          playerEntity.setVelocity({ x: 0, y: 0, z: 0 });
+          playerEntity.setLinearVelocity({ x: 0, y: 0, z: 0 });
           const mass = playerEntity.mass || 1.0;
           playerEntity.applyImpulse({ x: 0, y: 0, z: counterForce * mass });
         } catch (velocityError) {
@@ -359,7 +361,7 @@ export class PlayerBarrierService {
       } else {
         // Player is in buffer zone - standard velocity stopping
         try {
-          const velocity = playerEntity.velocity;
+          const velocity = playerEntity.linearVelocity;
           if (velocity) {
             let shouldBlock = false;
             
@@ -370,7 +372,7 @@ export class PlayerBarrierService {
             }
             
             if (shouldBlock) {
-              playerEntity.setVelocity({
+              playerEntity.setLinearVelocity({
                 x: velocity.x,
                 y: velocity.y,
                 z: 0
@@ -419,14 +421,14 @@ export class PlayerBarrierService {
           const position = entity.position;
           const playerId = entity.id;
           
-          // Check if player is in any goal zone (with velocity prediction and player entity for goalie logic)
-          for (const zone of Object.values(this.GOAL_ZONES)) {
-            const velocity = entity.velocity;
-            if (this.isPlayerInGoalZone(position, zone, velocity, entity)) {
-              // Get player info for better logging
-              const playerInfo = this.getPlayerInfo(entity);
-              const goalieNote = playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone) ? ' (GOALIE at own goal)' : '';
-              const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
+                  // Check if player is in any goal zone (with velocity prediction and player entity for goalie logic)
+        for (const zone of Object.values(this.GOAL_ZONES)) {
+          const velocity = entity.linearVelocity;
+          if (this.isPlayerInGoalZone(position, zone, velocity, entity)) {
+            // Get player info for better logging
+            const playerInfo = this.getPlayerInfo(entity);
+            const goalieNote = playerInfo.isGoalie && playerInfo.isAtOwnGoal(zone) ? ' (GOALIE at own goal)' : '';
+            const speed = velocity ? Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z) : 0;
               
               CONSTANTS.debugLog(`Player ${playerId} at (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)}) detected in ${zone.name}${goalieNote} - velocity Z: ${velocity?.z?.toFixed(2) || 'unknown'}, speed: ${speed.toFixed(2)}`, 'PlayerBarrierService');
               this.blockPlayerMovement(entity, zone);

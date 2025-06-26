@@ -344,7 +344,7 @@ export class ChatCommandManager {
     this.world.chatManager.registerCommand('/resetplayers', (player) => {
       const gameManager = HockeyGameManager.instance;
       PlayerSpawnManager.instance.performCompleteReset(
-        gameManager.teams,
+        gameManager.teams as any, // Type assertion to handle Teams vs Record type mismatch
         gameManager['_playerIdToPlayer'], // Access private property for testing
         this.puck
       );
@@ -567,15 +567,21 @@ export class ChatCommandManager {
       }
       
       // Get player's controller
-      const controller = player.entity?.controller;
+      const playerEntities = this.world!.entityManager.getPlayerEntitiesByPlayer(player);
+      if (playerEntities.length === 0) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No player entity found!', 'FF0000');
+        return;
+      }
+      
+      const controller = playerEntities[0].controller;
       if (!controller) {
         this.world!.chatManager.sendPlayerMessage(player, 'No controller found!', 'FF0000');
         return;
       }
       
-      const isControllingPuck = controller._isControllingPuck || false;
-      const isCollidingWithPuck = controller._isCollidingWithPuck || false;
-      const stickCheckCooldown = controller._stickCheckCooldown || 0;
+      const isControllingPuck = (controller as any)._isControllingPuck || false;
+      const isCollidingWithPuck = (controller as any)._isCollidingWithPuck || false;
+      const stickCheckCooldown = (controller as any)._stickCheckCooldown || 0;
       
       this.world!.chatManager.sendPlayerMessage(
         player, 
@@ -650,7 +656,7 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, `Total Goals: ${goals.length}`, '00FFFF');
       
       // Show each player's stats
-      allStats.forEach(stats => {
+      allStats.forEach((stats: any) => {
         this.world!.chatManager.sendPlayerMessage(
           player, 
           `${stats.playerName}: ${stats.goals}G ${stats.assists}A ${stats.saves}S`, 
@@ -960,7 +966,7 @@ export class ChatCommandManager {
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(
           player, 
-          `Error getting node names: ${error.message}`, 
+          `Error getting node names: ${error instanceof Error ? error.message : String(error)}`, 
           'FF0000'
         );
         console.error('Error getting node names:', error);
