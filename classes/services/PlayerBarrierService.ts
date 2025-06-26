@@ -405,7 +405,17 @@ export class PlayerBarrierService {
       const playerEntities = this._world.entityManager.getAllPlayerEntities();
       
       for (const entity of playerEntities) {
-        if (entity.isSpawned) {
+        // Debug: Log all entities being processed
+        const modelUri = entity.modelUri || 'unknown';
+        const isPuck = this.isPuckEntity(entity);
+        const isPlayer = this.isPlayerEntity(entity);
+        
+        if (isPuck) {
+          CONSTANTS.debugLog(`PlayerBarrierService: Skipping puck entity ${entity.id} with model ${modelUri}`, 'PlayerBarrierService');
+          continue;
+        }
+        
+        if (entity.isSpawned && isPlayer) {
           const position = entity.position;
           const playerId = entity.id;
           

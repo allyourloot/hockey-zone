@@ -12,7 +12,8 @@ import {
   CollisionGroup,
   SceneUI,
   BlockType,
-  Audio
+  Audio,
+  Quaternion
 } from 'hytopia';
 import type { World } from 'hytopia';
 import worldMap from '../../assets/maps/hockey-zone-ayl.json';
@@ -102,11 +103,11 @@ export class WorldInitializer {
     
     try {
       // Create red team goal
-      this.redGoal = this.createGoalEntity('models/structures/hockey-goal.gltf');
+      this.redGoal = this.createGoalEntity('models/structures/hockey-goal.gltf', 'red');
       this.redGoal.spawn(
         this.world, 
         CONSTANTS.SPAWN_POSITIONS.RED_GOAL, 
-        { x: 0, y: 1, z: 0, w: 0 }
+        { x: 0, y: 0, z: 0, w: 0 }
       );
       
       // Create red goal label UI
@@ -118,7 +119,7 @@ export class WorldInitializer {
       redGoalLabelUI.load(this.world);
       
       // Create blue team goal with custom model
-      this.blueGoal = this.createGoalEntity('models/structures/hockey-goal-blue.gltf');
+      this.blueGoal = this.createGoalEntity('models/structures/hockey-goal-blue.gltf', 'blue');
       this.blueGoal.spawn(
         this.world, 
         CONSTANTS.SPAWN_POSITIONS.BLUE_GOAL, 
@@ -182,13 +183,17 @@ export class WorldInitializer {
       /**
    * Create a hockey goal entity with all colliders
    * @param modelUri The model URI to use for the goal
+   * @param goalType The type of goal ('red' or 'blue') to determine collider positioning
    * @returns The goal entity with proper physics setup
    */
-  private createGoalEntity(modelUri: string): Entity {
+  private createGoalEntity(modelUri: string, goalType: 'red' | 'blue'): Entity {
     // Track last hit-post sound time to prevent spam
     let lastHitPostSoundTime = 0;
     
-    return new Entity({
+    // Get goal-specific constants
+    const goalConstants = goalType === 'red' ? CONSTANTS.RED_GOAL_COLLIDERS : CONSTANTS.BLUE_GOAL_COLLIDERS;
+    
+    const goalEntity = new Entity({
       modelUri: modelUri,
       modelScale: 0.5,
       rigidBodyOptions: {
@@ -206,13 +211,13 @@ export class WorldInitializer {
             friction: CONSTANTS.GOAL_COLLIDERS.FRICTION,
             bounciness: CONSTANTS.GOAL_COLLIDERS.BOUNCINESS,
             frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
+            bouncinessCombineRule: CoefficientCombineRule.Min,
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
             },
             onCollision: (other: Entity | BlockType, started: boolean) => {
-              this.handleGoalPostCollision(other, started, lastHitPostSoundTime, (time: number) => { lastHitPostSoundTime = time; });
+              this.handleGoalPostCollision(other, started, lastHitPostSoundTime, (time: number) => { lastHitPostSoundTime = time; }, `${goalType.toUpperCase()} LEFT POST`);
             }
           },
           // Right post (vertical bar on the right side of the goal)
@@ -227,7 +232,7 @@ export class WorldInitializer {
             friction: CONSTANTS.GOAL_COLLIDERS.FRICTION,
             bounciness: CONSTANTS.GOAL_COLLIDERS.BOUNCINESS,
             frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
+            bouncinessCombineRule: CoefficientCombineRule.Min,
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -240,11 +245,11 @@ export class WorldInitializer {
           {
             shape: ColliderShape.BLOCK,
             halfExtents: CONSTANTS.GOAL_COLLIDERS.CROSSBAR_HALF_EXTENTS,
-            relativePosition: { x: 0, y: CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET, z: 0 },
+            relativePosition: { x: 0, y: CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET, z: goalConstants.CROSSBAR_Z_OFFSET },
             friction: CONSTANTS.GOAL_COLLIDERS.FRICTION,
             bounciness: CONSTANTS.GOAL_COLLIDERS.BOUNCINESS,
             frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
+            bouncinessCombineRule: CoefficientCombineRule.Min,
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -259,31 +264,60 @@ export class WorldInitializer {
             halfExtents: CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_HALF_EXTENTS,
             relativePosition: { 
               x: 0, 
-              y: CONSTANTS.GOAL_COLLIDERS.POST_Y_OFFSET, 
-              z: CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_Z_OFFSET 
+              y: CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_Y_OFFSET, 
+              z: goalConstants.BOTTOM_BAR_Z_OFFSET 
             },
             friction: CONSTANTS.GOAL_COLLIDERS.FRICTION,
             bounciness: CONSTANTS.GOAL_COLLIDERS.BOUNCINESS,
             frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
+            bouncinessCombineRule: CoefficientCombineRule.Min,
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+            },
+            onCollision: (other: Entity | BlockType, started: boolean) => {
+              this.handleGoalPostCollision(other, started, lastHitPostSoundTime, (time: number) => { lastHitPostSoundTime = time; }, `${goalType.toUpperCase()} BOTTOM BAR`);
             }
           },
-          // Netting (back of goal, acts as a thin wall at the rear)
+          // Netting (back of goal, acts as a slanted wall at the rear)
           {
             shape: ColliderShape.BLOCK,
             halfExtents: CONSTANTS.GOAL_COLLIDERS.NETTING_HALF_EXTENTS,
             relativePosition: { 
               x: 0, 
-              y: CONSTANTS.GOAL_COLLIDERS.POST_Y_OFFSET, 
-              z: CONSTANTS.GOAL_COLLIDERS.NETTING_Z_OFFSET 
+              y: goalConstants.NETTING_Y_OFFSET, 
+              z: goalConstants.NETTING_Z_OFFSET 
+            },
+            // Calculate quaternion manually for X rotation
+            relativeRotation: {
+              x: Math.sin(goalConstants.NETTING_X_ROTATION / 2),
+              y: 0,
+              z: 0,
+              w: Math.cos(goalConstants.NETTING_X_ROTATION / 2)
             },
             friction: CONSTANTS.GOAL_COLLIDERS.FRICTION,
             bounciness: CONSTANTS.GOAL_COLLIDERS.BOUNCINESS,
             frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
+            bouncinessCombineRule: CoefficientCombineRule.Min,
+            collisionGroups: {
+              belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
+              collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
+            }
+          },
+          // Flat back wall (prevents players from running up behind the goal)
+          {
+            shape: ColliderShape.BLOCK,
+            halfExtents: CONSTANTS.GOAL_COLLIDERS.BACK_WALL_HALF_EXTENTS,
+            relativePosition: { 
+              x: 0, 
+              y: goalConstants.BACK_WALL_Y_OFFSET, 
+              z: goalConstants.BACK_WALL_Z_OFFSET 
+            },
+            // No rotation - this is a flat vertical wall
+            friction: CONSTANTS.GOAL_COLLIDERS.FRICTION,
+            bounciness: CONSTANTS.GOAL_COLLIDERS.BOUNCINESS,
+            frictionCombineRule: CoefficientCombineRule.Min,
+            bouncinessCombineRule: CoefficientCombineRule.Min,
             collisionGroups: {
               belongsTo: [CollisionGroup.BLOCK, CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.BLOCK, CollisionGroup.ENTITY]
@@ -292,6 +326,25 @@ export class WorldInitializer {
         ]
       }
     });
+
+    // Debug logging for goal entity creation  
+    CONSTANTS.debugLog(`Goal entity created with model: ${modelUri}`, 'WorldInitializer');
+    CONSTANTS.debugLog(`Goal collision groups: belongsTo=[BLOCK, ENTITY], collidesWith=[BLOCK, ENTITY]`, 'WorldInitializer');
+    CONSTANTS.debugLog(`Goal crossbar Y offset: ${CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET}`, 'WorldInitializer');
+    CONSTANTS.debugLog(`Goal bounciness: ${CONSTANTS.GOAL_COLLIDERS.BOUNCINESS}`, 'WorldInitializer');
+    
+    // Debug logging for netting rotation
+    const nettingRotationRadians = goalConstants.NETTING_X_ROTATION;
+    const nettingQuaternion = {
+      x: Math.sin(nettingRotationRadians / 2),
+      y: 0,
+      z: 0,
+      w: Math.cos(nettingRotationRadians / 2)
+    };
+    CONSTANTS.debugLog(`${goalType.toUpperCase()} Goal netting rotation: ${nettingRotationRadians} radians (${(nettingRotationRadians * 180 / Math.PI).toFixed(1)} degrees)`, 'WorldInitializer');
+    CONSTANTS.debugLog(`${goalType.toUpperCase()} Goal netting quaternion: ${JSON.stringify(nettingQuaternion)}`, 'WorldInitializer');
+    
+    return goalEntity;
   }
   
   /**
@@ -384,10 +437,17 @@ export class WorldInitializer {
     other: Entity | BlockType, 
     started: boolean, 
     lastHitPostSoundTime: number, 
-    updateLastSoundTime: (time: number) => void
+    updateLastSoundTime: (time: number) => void,
+    colliderName?: string
   ): void {
+    // Enhanced debugging for collision detection
+    const colliderInfo = colliderName ? ` [${colliderName}]` : '';
+    CONSTANTS.debugLog(`Goal collision detected${colliderInfo}: started=${started}, other=${other instanceof Entity ? 'Entity' : 'BlockType'}`, 'WorldInitializer');
+    
     // Only handle collision start events with puck entities
     if (started && other instanceof Entity && other.modelUri && other.modelUri.includes('puck')) {
+      CONSTANTS.debugLog(`Puck collision confirmed with modelUri: ${other.modelUri}`, 'WorldInitializer');
+      
       // Check if the puck is currently being controlled by a player
       // If so, don't play the hit-post sound (player is just skating into the posts)
       const customProperties = (other as any).customProperties;
@@ -402,12 +462,16 @@ export class WorldInitializer {
       const puckVelocity = other.linearVelocity;
       if (puckVelocity) {
         const speed = Math.sqrt(puckVelocity.x * puckVelocity.x + puckVelocity.z * puckVelocity.z);
+        CONSTANTS.debugLog(`Puck speed: ${speed.toFixed(2)} (threshold: 5.0)`, 'WorldInitializer');
         
         // Only play sound if puck is moving with sufficient speed (to avoid tiny bumps)
-        if (speed > 2.0) {
-                    // Check cooldown to prevent sound spam
+        if (speed > 5.0) {
+          // Check cooldown to prevent sound spam
           const currentTime = Date.now();
-          if (currentTime - lastHitPostSoundTime > CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN) {
+          const timeSinceLastSound = currentTime - lastHitPostSoundTime;
+          CONSTANTS.debugLog(`Time since last sound: ${timeSinceLastSound}ms (cooldown: ${CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN}ms)`, 'WorldInitializer');
+          
+          if (timeSinceLastSound > CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN) {
             // Play hit-post sound effect with volume based on speed using pooled audio
             const volume = Math.min(CONSTANTS.PUCK_SOUND.HIT_POST_VOLUME, speed * 0.1);
             const success = AudioManager.instance.playPooledSoundEffect(CONSTANTS.AUDIO_PATHS.HIT_POST, {
@@ -419,11 +483,243 @@ export class WorldInitializer {
             
             if (success) {
               updateLastSoundTime(currentTime);
-              CONSTANTS.debugLog(`Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`, 'WorldInitializer');
+              CONSTANTS.debugLog(`✅ Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`, 'WorldInitializer');
+            } else {
+              CONSTANTS.debugLog(`❌ Failed to play hit-post sound`, 'WorldInitializer');
             }
+          } else {
+            CONSTANTS.debugLog(`⏰ Hit-post sound on cooldown`, 'WorldInitializer');
           }
+        } else {
+          CONSTANTS.debugLog(`🐌 Puck speed too low for sound (${speed.toFixed(2)} < 5.0)`, 'WorldInitializer');
         }
+      } else {
+        CONSTANTS.debugLog(`❌ No puck velocity data available`, 'WorldInitializer');
       }
+    } else {
+      if (!started) {
+        CONSTANTS.debugLog(`Collision ended (started=false)`, 'WorldInitializer');
+      } else if (!(other instanceof Entity)) {
+        CONSTANTS.debugLog(`Not an entity collision`, 'WorldInitializer');
+      } else if (!other.modelUri || !other.modelUri.includes('puck')) {
+        CONSTANTS.debugLog(`Not a puck entity (modelUri: ${other.modelUri})`, 'WorldInitializer');
+      }
+    }
+  }
+
+  /**
+   * Create visible debug entities to show goal collider positions
+   * This will help visualize exactly where the goal physics colliders are located
+   */
+  public createGoalColliderDebugEntities(): void {
+    if (!this.world || !CONSTANTS.DEBUG_MODE) {
+      return;
+    }
+
+    const redGoalPos = CONSTANTS.SPAWN_POSITIONS.RED_GOAL;
+    const blueGoalPos = CONSTANTS.SPAWN_POSITIONS.BLUE_GOAL;
+
+    // Create debug entities for red goal colliders
+    this.createDebugColliderEntity(
+      'Red Goal Left Post',
+      redGoalPos,
+      { 
+        x: CONSTANTS.GOAL_COLLIDERS.LEFT_POST_X_OFFSET, 
+        y: CONSTANTS.GOAL_COLLIDERS.POST_Y_OFFSET, 
+        z: 0 
+      },
+      CONSTANTS.GOAL_COLLIDERS.POST_HALF_EXTENTS,
+      'red'
+    );
+
+    this.createDebugColliderEntity(
+      'Red Goal Right Post',
+      redGoalPos,
+      { 
+        x: CONSTANTS.GOAL_COLLIDERS.RIGHT_POST_X_OFFSET, 
+        y: CONSTANTS.GOAL_COLLIDERS.POST_Y_OFFSET, 
+        z: 0 
+      },
+      CONSTANTS.GOAL_COLLIDERS.POST_HALF_EXTENTS,
+      'red'
+    );
+
+    this.createDebugColliderEntity(
+      'Red Goal Crossbar',
+      redGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET, 
+        z: CONSTANTS.RED_GOAL_COLLIDERS.CROSSBAR_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.CROSSBAR_HALF_EXTENTS,
+      'red'
+    );
+
+    this.createDebugColliderEntity(
+      'Red Goal Bottom Bar',
+      redGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_Y_OFFSET, 
+        z: CONSTANTS.RED_GOAL_COLLIDERS.BOTTOM_BAR_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_HALF_EXTENTS,
+      'red'
+    );
+
+    this.createDebugColliderEntity(
+      'Red Goal Netting',
+      redGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.RED_GOAL_COLLIDERS.NETTING_Y_OFFSET, 
+        z: CONSTANTS.RED_GOAL_COLLIDERS.NETTING_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.NETTING_HALF_EXTENTS,
+      'red',
+      {
+        x: Math.sin(CONSTANTS.RED_GOAL_COLLIDERS.NETTING_X_ROTATION / 2),
+        y: 0,
+        z: 0,
+        w: Math.cos(CONSTANTS.RED_GOAL_COLLIDERS.NETTING_X_ROTATION / 2)
+      }
+    );
+
+    this.createDebugColliderEntity(
+      'Red Goal Back Wall',
+      redGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.RED_GOAL_COLLIDERS.BACK_WALL_Y_OFFSET, 
+        z: CONSTANTS.RED_GOAL_COLLIDERS.BACK_WALL_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.BACK_WALL_HALF_EXTENTS,
+      'red'
+    );
+
+    // Create debug entities for blue goal colliders
+    this.createDebugColliderEntity(
+      'Blue Goal Left Post',
+      blueGoalPos,
+      { 
+        x: CONSTANTS.GOAL_COLLIDERS.LEFT_POST_X_OFFSET, 
+        y: CONSTANTS.GOAL_COLLIDERS.POST_Y_OFFSET, 
+        z: 0 
+      },
+      CONSTANTS.GOAL_COLLIDERS.POST_HALF_EXTENTS,
+      'blue'
+    );
+
+    this.createDebugColliderEntity(
+      'Blue Goal Right Post',
+      blueGoalPos,
+      { 
+        x: CONSTANTS.GOAL_COLLIDERS.RIGHT_POST_X_OFFSET, 
+        y: CONSTANTS.GOAL_COLLIDERS.POST_Y_OFFSET, 
+        z: 0 
+      },
+      CONSTANTS.GOAL_COLLIDERS.POST_HALF_EXTENTS,
+      'blue'
+    );
+
+    this.createDebugColliderEntity(
+      'Blue Goal Crossbar',
+      blueGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET, 
+        z: CONSTANTS.BLUE_GOAL_COLLIDERS.CROSSBAR_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.CROSSBAR_HALF_EXTENTS,
+      'blue'
+    );
+
+    this.createDebugColliderEntity(
+      'Blue Goal Bottom Bar',
+      blueGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_Y_OFFSET, 
+        z: CONSTANTS.BLUE_GOAL_COLLIDERS.BOTTOM_BAR_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.BOTTOM_BAR_HALF_EXTENTS,
+      'blue'
+    );
+
+    this.createDebugColliderEntity(
+      'Blue Goal Netting',
+      blueGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.BLUE_GOAL_COLLIDERS.NETTING_Y_OFFSET, 
+        z: CONSTANTS.BLUE_GOAL_COLLIDERS.NETTING_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.NETTING_HALF_EXTENTS,
+      'blue',
+      {
+        x: Math.sin(CONSTANTS.BLUE_GOAL_COLLIDERS.NETTING_X_ROTATION / 2),
+        y: 0,
+        z: 0,
+        w: Math.cos(CONSTANTS.BLUE_GOAL_COLLIDERS.NETTING_X_ROTATION / 2)
+      }
+    );
+
+    this.createDebugColliderEntity(
+      'Blue Goal Back Wall',
+      blueGoalPos,
+      { 
+        x: 0, 
+        y: CONSTANTS.BLUE_GOAL_COLLIDERS.BACK_WALL_Y_OFFSET, 
+        z: CONSTANTS.BLUE_GOAL_COLLIDERS.BACK_WALL_Z_OFFSET 
+      },
+      CONSTANTS.GOAL_COLLIDERS.BACK_WALL_HALF_EXTENTS,
+      'blue'
+    );
+
+    CONSTANTS.debugLog('Goal collider debug entities created', 'WorldInitializer');
+  }
+
+  /**
+   * Create a single debug entity to visualize a collider
+   */
+  private createDebugColliderEntity(
+    name: string,
+    goalPosition: { x: number, y: number, z: number },
+    relativePosition: { x: number, y: number, z: number },
+    halfExtents: { x: number, y: number, z: number },
+    color: 'red' | 'blue',
+    rotation?: { x: number, y: number, z: number, w: number }
+  ): void {
+    if (!this.world) return;
+
+    // Choose existing block textures based on color - use ice blocks for visibility
+    const textureUri = color === 'red' ? 'blocks/red-line-r.png' : 'blocks/blue-line-r.png';
+    
+    const debugEntity = new Entity({
+      name: `Debug_${name}`,
+      blockTextureUri: textureUri, // Red or blue line textures from your assets
+      blockHalfExtents: halfExtents,
+      rigidBodyOptions: {
+        type: RigidBodyType.FIXED,
+        // No colliders - just visual representation
+      }
+    });
+
+    // Calculate world position
+    const worldPosition = {
+      x: goalPosition.x + relativePosition.x,
+      y: goalPosition.y + relativePosition.y,
+      z: goalPosition.z + relativePosition.z
+    };
+
+    // Apply rotation if provided (for netting visualization)
+    if (rotation) {
+      debugEntity.spawn(this.world, worldPosition, rotation);
+      CONSTANTS.debugLog(`Created rotated debug entity: ${name} at position ${JSON.stringify(worldPosition)} with rotation ${JSON.stringify(rotation)}`, 'WorldInitializer');
+    } else {
+      debugEntity.spawn(this.world, worldPosition);
+      CONSTANTS.debugLog(`Created debug entity: ${name} at position ${JSON.stringify(worldPosition)}`, 'WorldInitializer');
     }
   }
 } 

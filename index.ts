@@ -57,12 +57,19 @@ import * as CONSTANTS from './classes/utils/constants';
 // =========================
 
 startServer(world => {
+  // Enable debug rendering for all physics objects (including goal colliders)
+  world.simulation.enableDebugRendering(false);
+  
   // Create shared references for managers
   const puckRef: { current: Entity | null } = { current: null };
   const createPuckEntity = WorldInitializer.createPuckEntity;
 
   // Initialize all game systems in order
   WorldInitializer.instance.initialize(world);
+  
+  // Create debug visualization for goal colliders (only when DEBUG_MODE is true)
+  WorldInitializer.instance.createGoalColliderDebugEntities();
+  
   HockeyGameManager.instance.setupGame(world);
   ChatCommandManager.instance.initialize(world, puckRef, createPuckEntity);
   PlayerManager.instance.initialize(world, puckRef, createPuckEntity, IceSkatingController);

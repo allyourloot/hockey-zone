@@ -178,9 +178,19 @@ and also configure additional buttons for mobile compatibility.
     if (isStatsOverlayVisible) {
       statsOverlay.style.display = 'none';
       isStatsOverlayVisible = false;
+      // Re-lock pointer when closing stats overlay
+      setTimeout(() => {
+        if (document.pointerLockElement === null) {
+          document.body.requestPointerLock?.();
+        }
+      }, 100);
     } else {
       statsOverlay.style.display = 'flex';
       isStatsOverlayVisible = true;
+      // Unlock pointer to allow interaction with stats
+      if (document.pointerLockElement) {
+        document.exitPointerLock?.();
+      }
       // Request fresh stats data when opening
       hytopia.sendData({ type: 'request-live-stats' });
     }
@@ -1921,7 +1931,7 @@ and also configure additional buttons for mobile compatibility.
       <button id="controls-close" class="controls-close">×</button>
       
       <div class="controls-header">
-        <div class="controls-title">Game Controls</div>
+        <div class="controls-title">Controls</div>
         <div class="controls-subtitle">Press 'C' to toggle this help overlay</div>
       </div>
 
@@ -3648,23 +3658,20 @@ and also configure additional buttons for mobile compatibility.
     position: absolute;
     top: 20px;
     right: 20px;
-    background: rgba(255, 255, 255, 0.1);
-    border: none;
-    color: #fff;
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    color: #ccc;
     font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 50%;
     transition: all 0.2s ease;
+    user-select: none;
+    border: none;
+    background: transparent;
   }
 
   .controls-close:hover {
-    background: rgba(255, 68, 68, 0.8);
-    transform: scale(1.1);
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
   }
 
   .controls-content-grid {
@@ -4866,12 +4873,17 @@ and also configure additional buttons for mobile compatibility.
 
   .live-stats-close {
     color: #ccc;
-    font-size: 1.5rem;
+    font-size: 1.8rem;
     cursor: pointer;
-    padding: 5px 10px;
+    padding: 8px 12px;
     border-radius: 50%;
     transition: all 0.2s ease;
     user-select: none;
+    min-width: 40px;
+    min-height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .live-stats-close:hover {

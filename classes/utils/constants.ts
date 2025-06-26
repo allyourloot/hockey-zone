@@ -257,22 +257,53 @@ export const AUDIO_PATHS = {
 // GOAL COLLIDER CONSTANTS
 // =========================
 export const GOAL_COLLIDERS = {
+  // Shared constants for both goals
   POST_HALF_EXTENTS: { x: 0.02, y: 1.15, z: 1 },
   POST_Y_OFFSET: -0.05,
-  LEFT_POST_X_OFFSET: -1.55,
-  RIGHT_POST_X_OFFSET: 1.55,
+  LEFT_POST_X_OFFSET: -1.52,
+  RIGHT_POST_X_OFFSET: 1.52,
   
-  CROSSBAR_HALF_EXTENTS: { x: 0.8, y: 0.02, z: 0.09 },
-  CROSSBAR_Y_OFFSET: 2.2,
+  CROSSBAR_HALF_EXTENTS: { x: 1.5, y: 0.03, z: 0.09 },
+  CROSSBAR_Y_OFFSET: 1.0,
   
-  BOTTOM_BAR_HALF_EXTENTS: { x: 1.5, y: 0.15, z: -0.09 },
-  BOTTOM_BAR_Z_OFFSET: 1.0,
+  BOTTOM_BAR_HALF_EXTENTS: { x: 1.5, y: 0.03, z: 0.12 },
+  BOTTOM_BAR_Y_OFFSET: -0.9, // Position at bottom of goal opening
   
-  NETTING_HALF_EXTENTS: { x: 1.50, y: 1.15, z: 0.05 },
-  NETTING_Z_OFFSET: 0.9,
+  NETTING_HALF_EXTENTS: { x: 1.50, y: 1.1, z: 0.05 },
+  
+  // Flat wall behind netting to prevent players from running up the back
+  BACK_WALL_HALF_EXTENTS: { x: 1.50, y: 0.5, z: 0.05 },
   
   FRICTION: 0.03,
-  BOUNCINESS: 0.3,
+  BOUNCINESS: 0.15,
+} as const;
+
+// Blue goal colliders (current perfect setup)
+export const BLUE_GOAL_COLLIDERS = {
+  CROSSBAR_Z_OFFSET: -0.9,     // Crossbar position for blue goal
+  BOTTOM_BAR_Z_OFFSET: 0.9,   // At front of blue goal
+  NETTING_Z_OFFSET: 0.5,      // At back of blue goal
+  NETTING_Y_OFFSET: 0.2,    // Vertical position of netting (same as posts by default)
+  NETTING_X_ROTATION: -0.4,   // Slant netting backward in RADIANS (negative = slopes back toward goal)
+  
+  // Flat wall positioned behind the slanted netting
+  BACK_WALL_Z_OFFSET: 1.0,    // Further back than netting to catch players going around/behind
+  BACK_WALL_Y_OFFSET: 0.2,    // Same height as netting
+} as const;
+
+// Red goal colliders (adjusted for 180-degree Y rotation)
+// Since red goal is spawned with { x: 0, y: 1, z: 0, w: 0 } (180° rotation), 
+// all Z offsets are flipped compared to blue goal
+export const RED_GOAL_COLLIDERS = {
+  CROSSBAR_Z_OFFSET: 0.9,     // After 180° rotation, this becomes the back crossbar position
+  BOTTOM_BAR_Z_OFFSET: -0.9,   // After 180° rotation, this becomes the back bottom bar position
+  NETTING_Z_OFFSET: -0.5,     // After 180° rotation, this becomes the back netting position
+  NETTING_Y_OFFSET: 0.2,      // Y offset is not affected by Y rotation
+  NETTING_X_ROTATION: 0.4,    // Rotation for slanted netting
+  
+  // Flat wall positioned behind the slanted netting (adjusted for 180° rotation)
+  BACK_WALL_Z_OFFSET: -1.0,   // Further back than netting (negative due to 180° rotation)
+  BACK_WALL_Y_OFFSET: 0.2,    // Same height as netting
 } as const;
 
 // =========================
@@ -355,7 +386,7 @@ export const PLAYER_BARRIERS = {
   },
   
   // Barrier positions (same as goal lines)
-  RED_GOAL_Z: -31.285,  // Same as red goal line
+  RED_GOAL_Z: -31.26,  // Same as red goal line
   BLUE_GOAL_Z: 31.26,   // Same as blue goal line
   
   // Physics properties
