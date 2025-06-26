@@ -1,4 +1,4 @@
-import { Entity, Vector3Like } from 'hytopia';
+import { Entity, type Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyGameState } from '../utils/types';
 import { HockeyGameManager } from '../managers/HockeyGameManager';
 import { IceSkatingController } from '../controllers/IceSkatingController';
