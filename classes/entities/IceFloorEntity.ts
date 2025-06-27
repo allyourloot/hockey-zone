@@ -40,9 +40,9 @@ export class IceFloorEntity extends Entity {
             },
             // Physical collider with optimized properties for ice-like behavior
             friction: ICE_FLOOR_PHYSICS.FRICTION, // Ultra-low friction
-            bounciness: ICE_FLOOR_PHYSICS.BOUNCINESS, // Zero bounce
+            bounciness: ICE_FLOOR_PHYSICS.BOUNCINESS, // Zero bounce for floor (walls should handle bounce)
             frictionCombineRule: CoefficientCombineRule.Min, // Use minimum friction
-            bouncinessCombineRule: CoefficientCombineRule.Min, // Use minimum bounce
+            bouncinessCombineRule: CoefficientCombineRule.Min, // Use minimum bounce for floor only
             collisionGroups: {
               belongsTo: [CollisionGroup.ENTITY],
               collidesWith: [CollisionGroup.ENTITY]

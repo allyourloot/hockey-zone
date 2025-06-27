@@ -370,8 +370,8 @@ export class WorldInitializer {
             borderRadius: CONSTANTS.PUCK_PHYSICS.BORDER_RADIUS,
             friction: CONSTANTS.PUCK_PHYSICS.FRICTION,
             bounciness: CONSTANTS.PUCK_PHYSICS.BOUNCINESS,
-            frictionCombineRule: CoefficientCombineRule.Min,
-            bouncinessCombineRule: CoefficientCombineRule.Max,
+            frictionCombineRule: CoefficientCombineRule.Min, // Keep min friction for smooth sliding
+            bouncinessCombineRule: CoefficientCombineRule.Max, // Use max bounce - puck will bounce at its own rate
             collisionGroups: {
               belongsTo: [CollisionGroup.ENTITY],
               // Pucks collide with blocks and entities - ice floor will override floor block physics

@@ -59,11 +59,11 @@ export class PlayerBarrierService {
    */
   public startMonitoring(world: any): void {
     if (this._isActive) {
-      console.log('[PlayerBarrierService] Player monitoring already active');
+      CONSTANTS.debugLog('Player monitoring already active', 'PlayerBarrierService');
       return;
     }
 
-    console.log('[PlayerBarrierService] Starting coordinate-based player monitoring...');
+    CONSTANTS.debugLog('Starting coordinate-based player monitoring...', 'PlayerBarrierService');
     
     this._world = world;
     this._isActive = true;
@@ -73,7 +73,7 @@ export class PlayerBarrierService {
       this.checkPlayerPositions();
     }, 16);
     
-    console.log('[PlayerBarrierService] Player position monitoring started');
+    CONSTANTS.debugLog('Player position monitoring started', 'PlayerBarrierService');
   }
 
   /**
@@ -87,7 +87,7 @@ export class PlayerBarrierService {
     
     this._isActive = false;
     this._world = null;
-    console.log('[PlayerBarrierService] Player position monitoring stopped');
+    CONSTANTS.debugLog('Player position monitoring stopped', 'PlayerBarrierService');
   }
 
   /**
@@ -135,7 +135,7 @@ export class PlayerBarrierService {
       };
       
     } catch (error) {
-      console.warn('[PlayerBarrierService] Error getting player info:', error);
+      CONSTANTS.debugWarn('Error getting player info: ' + error, 'PlayerBarrierService');
       return { 
         isGoalie: false, 
         team: null, 
@@ -220,7 +220,7 @@ export class PlayerBarrierService {
       
       // Debug: Log goalie detection
       if (playerInfo.isGoalie) {
-        console.log(`[PlayerBarrierService] GOALIE DETECTED: Player ${playerId}, isGoalie: ${playerInfo.isGoalie}, team: ${playerInfo.team}, zone.team: ${zone.team}, isAtOwnGoal: ${playerInfo.isAtOwnGoal(zone)}`);
+        CONSTANTS.debugLog(`GOALIE DETECTED: Player ${playerId}, isGoalie: ${playerInfo.isGoalie}, team: ${playerInfo.team}, zone.team: ${zone.team}, isAtOwnGoal: ${playerInfo.isAtOwnGoal(zone)}`, 'PlayerBarrierService');
       }
       
       // Special handling for goalies at their own goal - create a gentle "wall" effect
@@ -261,7 +261,7 @@ export class PlayerBarrierService {
             // If velocity setting fails, do nothing - no impulses for goalies at own goal
           }
           
-          console.log(`[PlayerBarrierService] GOALIE WALL: Gently positioned goalie ${playerId} at wall Z=${wallPosition.toFixed(2)} (own ${zone.name})`);
+          CONSTANTS.debugLog(`GOALIE WALL: Gently positioned goalie ${playerId} at wall Z=${wallPosition.toFixed(2)} (own ${zone.name})`, 'PlayerBarrierService');
         }
         
         return; // Exit early for goalies at own goal - no further processing
@@ -390,7 +390,7 @@ export class PlayerBarrierService {
       }
       
     } catch (error) {
-      console.warn('[PlayerBarrierService] Error blocking player movement:', error);
+      CONSTANTS.debugWarn('Error blocking player movement: ' + error, 'PlayerBarrierService');
     }
   }
 
@@ -437,7 +437,7 @@ export class PlayerBarrierService {
         }
       }
     } catch (error) {
-      console.warn('[PlayerBarrierService] Error checking player positions:', error);
+      CONSTANTS.debugWarn('Error checking player positions: ' + error, 'PlayerBarrierService');
     }
   }
 
@@ -479,7 +479,7 @@ export class PlayerBarrierService {
    * Legacy method - now starts coordinate monitoring instead of creating barriers
    */
   public createBarriers(world: any): void {
-    console.log('[PlayerBarrierService] createBarriers called - starting coordinate monitoring');
+    CONSTANTS.debugLog('createBarriers called - starting coordinate monitoring', 'PlayerBarrierService');
     this.startMonitoring(world);
   }
 
@@ -487,7 +487,7 @@ export class PlayerBarrierService {
    * Legacy method - now stops coordinate monitoring instead of removing barriers
    */
   public removeBarriers(): void {
-    console.log('[PlayerBarrierService] removeBarriers called - stopping coordinate monitoring');
+    CONSTANTS.debugLog('removeBarriers called - stopping coordinate monitoring', 'PlayerBarrierService');
     this.stopMonitoring();
   }
 

@@ -1310,4 +1310,59 @@ export class HockeyGameManager {
   // The movement lock system was interfering with puck controls
   // Players will be able to move during goal reset countdowns
   // This is acceptable for Phase 1 implementation
+
+  /**
+   * Broadcast save notification to all players
+   */
+  public saveRecorded(goalieId: string, shooterId: string): void {
+    if (!this._world) return;
+    
+    const goalieStats = PlayerStatsManager.instance.getPlayerStats(goalieId);
+    const shooterStats = PlayerStatsManager.instance.getPlayerStats(shooterId);
+    
+    if (goalieStats && shooterStats) {
+      const goalieInfo = this.getTeamAndPosition(goalieId);
+      const shooterInfo = this.getTeamAndPosition(shooterId);
+      
+      // Get all player IDs from teams and convert to Player objects
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
+      allPlayers.forEach((player) => {
+        try {
+          player.ui.sendData({
+            type: 'save-recorded',
+            goalieId: goalieId,
+            goalieName: goalieStats.playerName,
+            goalieTeam: goalieInfo?.team || 'Unknown',
+            shooterId: shooterId,
+            shooterName: shooterStats.playerName,
+            shooterTeam: shooterInfo?.team || 'Unknown',
+            totalSaves: goalieStats.saves
+          });
+        } catch (error) {
+          console.error('Error sending save notification to player:', error);
+        }
+      });
+      
+      // Enhanced save announcement
+      const saveMessage = `SAVE! ${goalieStats.playerName} (${goalieInfo?.team}) stopped ${shooterStats.playerName} (${shooterInfo?.team})! [${goalieStats.saves} saves]`;
+      
+      this._world.chatManager.sendBroadcastMessage(
+        saveMessage,
+        goalieInfo?.team === HockeyTeam.RED ? 'FF4444' : '44AAFF'
+      );
+      
+      // Broadcast updated stats after save
+      this.broadcastStatsUpdate();
+      
+      CONSTANTS.debugLog(`Save notification broadcasted: ${goalieStats.playerName} -> ${goalieStats.saves} saves`, 'HockeyGameManager');
+    }
+  }
 } 

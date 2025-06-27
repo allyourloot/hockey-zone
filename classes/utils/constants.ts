@@ -6,10 +6,13 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
+
+// NEW: Save detection debug filter for isolating SaveDetectionService logs
+export const SAVE_DEBUG_FILTER = false; // Set to true to show ONLY SaveDetectionService logs
 
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
@@ -35,14 +38,29 @@ export const ICE_SKATING = {
 // HOCKEY STOP CONSTANTS
 // =========================
 export const HOCKEY_STOP = {
-  DURATION: 700, // Longer duration for smoother network sync and visual transition
-  DECELERATION: 0.98, // Much gentler deceleration (closer to normal ice deceleration)
+  DURATION: 400, // Shorter duration for less dramatic movement (was 700)
+  DECELERATION: 0.85, // Much more deceleration to nearly stop player (was 0.92)
   TURN_SPEED: 15, // Keep current turn speed
   MIN_SPEED: 8, // Keep the same minimum speed requirement
   COOLDOWN: 3000, // Keep current cooldown
-  MOMENTUM_PRESERVATION: 0.6, // Reduced momentum preservation for less dramatic changes
-  SPEED_BOOST: 0.15, // Much smaller speed boost to prevent teleportation effect
-  MAX_ANGLE: 35, // Slightly reduced max angle for more subtle movement
+  MOMENTUM_PRESERVATION: 0.02, // Minimal momentum preservation - almost complete stop (was 0.1)
+  SPEED_BOOST: 0.0, // No speed boost at all to prevent any dramatic movement (was 0.02)
+  MAX_ANGLE: 15, // Reduced max angle for subtle movement (was 20)
+} as const;
+
+// =========================
+// GOALIE SLIDE CONSTANTS
+// =========================
+export const GOALIE_SLIDE = {
+  DURATION: 300, // Quick slide duration (ms)
+  DECELERATION: 0.9, // Minimal deceleration to maintain momentum
+  TURN_SPEED: 15, // Keep same turn speed as hockey stop
+  MIN_SPEED: 1, // Very low minimum speed requirement for goalies
+  COOLDOWN: 3000, // 4 seconds cooldown (shorter than hockey stop)
+  MOMENTUM_PRESERVATION: 0.8, // Better momentum preservation than hockey stop
+  SPEED_BOOST: 0.3, // Small speed boost for goalies
+  MAX_ANGLE: 25, // Slightly larger angle for more dramatic movement
+  DASH_FORCE: 12, // Moderate dash force for goalies
 } as const;
 
 // =========================
@@ -211,7 +229,7 @@ export const POSITION_STATS = {
     passingPower: 1.1,
   },
   GOALIE: {
-    runVelocity: 8,
+    runVelocity: 6,
     walkVelocity: 4,
     minShotForce: 10,
     maxShotForce: 20,
@@ -226,6 +244,7 @@ export const AUDIO_PATHS = {
   // Hockey sounds
   ICE_SKATING: 'audio/sfx/hockey/ice-skating.mp3',
   ICE_STOP: 'audio/sfx/hockey/hockey-stop.mp3',
+  GOALIE_SLIDE: 'audio/sfx/hockey/hockey-stop.mp3', // Reuse hockey stop sound for now
   PUCK_ATTACH: 'audio/sfx/hockey/puck-attach.mp3',
   PUCK_CATCH: 'audio/sfx/hockey/puck-catch.mp3',
   PUCK_LEFT: 'audio/sfx/hockey/puck-left.mp3',
@@ -319,8 +338,8 @@ export const PUCK_PHYSICS = {
   RADIUS: 0.45,
   HALF_HEIGHT: 0.03, // Very thin to make puck sit directly on ice surface
   BORDER_RADIUS: 0.1,
-  FRICTION: 0.05,    // Much lower friction for ice floor interaction (was 0.2)
-  BOUNCINESS: 0.01,  // Very low bounce for realistic ice hockey behavior (was 0.05)
+  FRICTION: 0.08,    // Even lower friction to prevent sticky wall behavior (was 0.05)
+  BOUNCINESS: 0.06,   // Increased bounciness for natural wall bounces (was 0.01)
   
   // CCD enabled with ice floor providing smooth collision surface
   CCD_ENABLED: true, // Enable CCD with ice floor handling smooth collisions
@@ -422,6 +441,12 @@ export function debugLog(message: string, prefix?: string): void {
     return;
   }
   
+  // Save detection debug filter: only show SaveDetectionService logs if filter is enabled
+  const saveFilterEnabled = (globalThis as any).SAVE_DEBUG_FILTER ?? SAVE_DEBUG_FILTER;
+  if (saveFilterEnabled && prefix !== 'SaveDetectionService') {
+    return;
+  }
+  
   const logMessage = prefix ? `[${prefix}] ${message}` : message;
   console.log(logMessage);
 }
@@ -438,6 +463,12 @@ export function debugError(message: string, error?: any, prefix?: string): void 
   // Audio-only debug filter: only show AudioManager logs if filter is enabled
   const audioFilterEnabled = (globalThis as any).AUDIO_DEBUG_FILTER ?? AUDIO_DEBUG_FILTER;
   if (audioFilterEnabled && prefix !== 'AudioManager') {
+    return;
+  }
+  
+  // Save detection debug filter: only show SaveDetectionService logs if filter is enabled
+  const saveFilterEnabled = (globalThis as any).SAVE_DEBUG_FILTER ?? SAVE_DEBUG_FILTER;
+  if (saveFilterEnabled && prefix !== 'SaveDetectionService') {
     return;
   }
   
@@ -463,6 +494,12 @@ export function debugWarn(message: string, prefix?: string): void {
     return;
   }
   
+  // Save detection debug filter: only show SaveDetectionService logs if filter is enabled
+  const saveFilterEnabled = (globalThis as any).SAVE_DEBUG_FILTER ?? SAVE_DEBUG_FILTER;
+  if (saveFilterEnabled && prefix !== 'SaveDetectionService') {
+    return;
+  }
+  
   const logMessage = prefix ? `[${prefix}] ${message}` : message;
   console.warn(logMessage);
 }
@@ -484,7 +521,29 @@ export function setAudioDebugFilter(enabled: boolean): void {
   }
 }
 
+/**
+ * Toggle the save detection debug filter at runtime
+ * When enabled, only SaveDetectionService logs will be shown in the console
+ * @param enabled - Whether to enable save detection filtering
+ */
+export function setSaveDebugFilter(enabled: boolean): void {
+  (globalThis as any).SAVE_DEBUG_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('🥅 SAVE DEBUG FILTER ENABLED - Only SaveDetectionService logs will be shown');
+    console.log('💡 To disable: setSaveDebugFilter(false) or type "saveoff" in console');
+  } else {
+    console.log('🥅 SAVE DEBUG FILTER DISABLED - All debug logs will be shown');
+    console.log('💡 To enable: setSaveDebugFilter(true) or type "saveon" in console');
+  }
+}
+
 // Make functions globally accessible for easy console usage
 (globalThis as any).setAudioDebugFilter = setAudioDebugFilter;
 (globalThis as any).audioon = () => setAudioDebugFilter(true);
-(globalThis as any).audiooff = () => setAudioDebugFilter(false); 
+(globalThis as any).audiooff = () => setAudioDebugFilter(false);
+
+// Save detection debug filter shortcuts
+(globalThis as any).setSaveDebugFilter = setSaveDebugFilter;
+(globalThis as any).saveon = () => setSaveDebugFilter(true);
+(globalThis as any).saveoff = () => setSaveDebugFilter(false); 

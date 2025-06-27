@@ -455,4 +455,20 @@ export class PlayerStatsManager {
       teamStats
     };
   }
+
+  /**
+   * Record a save by a goalie
+   */
+  public recordSave(goalieId: string, shooterId: string, shooterTeam: HockeyTeam): void {
+    const goalieStats = this._playerStats.get(goalieId);
+    const shooterStats = this._playerStats.get(shooterId);
+    
+    if (goalieStats) {
+      goalieStats.saves++;
+      CONSTANTS.debugLog(`SAVE! ${goalieStats.playerName} saved shot from ${shooterStats?.playerName || 'Unknown'} (${shooterTeam} team)`, 'PlayerStatsManager');
+      CONSTANTS.debugLog(`${goalieStats.playerName} now has ${goalieStats.saves} saves`, 'PlayerStatsManager');
+    } else {
+      CONSTANTS.debugWarn(`Cannot record save - goalie ${goalieId} not found in stats`, 'PlayerStatsManager');
+    }
+  }
 } 

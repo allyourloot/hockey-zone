@@ -11,7 +11,7 @@ import { GoalDetectionService } from '../services/GoalDetectionService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { WorldInitializer } from '../systems/WorldInitializer';
-import { HockeyTeam } from '../utils/types';
+import { HockeyTeam, HockeyPosition } from '../utils/types';
 import { AudioManager } from './AudioManager';
 
 // Import the IceSkatingController type - we'll need to reference it
@@ -317,20 +317,66 @@ export class ChatCommandManager {
       console.log('[ChatCommand] Goal detection debug info:', debugInfo);
     });
 
-    // /testgoal <team> - Manually trigger a goal for testing
+    // /testgoal - Simulate a goal for testing stats
     this.world.chatManager.registerCommand('/testgoal', (player, args) => {
       const team = args[0]?.toUpperCase();
-      if (team === 'RED' || team === 'BLUE') {
-        HockeyGameManager.instance.goalScored(team as any);
-        this.world!.chatManager.sendPlayerMessage(
-          player, 
-          `Test goal triggered for ${team} team!`, 
-          team === 'RED' ? 'FF4444' : '44AAFF'
-        );
-        console.log(`[ChatCommand] Test goal triggered for ${team} team`);
-      } else {
-        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <red|blue>', 'FFFF00');
+      
+      if (team !== 'RED' && team !== 'BLUE') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <RED|BLUE> [assist_player_id]', 'FFFF00');
+        return;
       }
+
+      // Get player's ID for goal attribution
+      const scorerId = player.id;
+      const assistId = args[1]; // Optional assist player ID
+      
+      this.world!.chatManager.sendPlayerMessage(player, `Simulating ${team} goal by ${player.username}${assistId ? ` (assist: ${assistId})` : ''}...`, '00FF00');
+      console.log(`[ChatCommand] Test goal simulated: ${team} by ${player.username} (${player.id})${assistId ? ` with assist from ${assistId}` : ''}`);
+      
+      // Trigger goal with proper attribution
+      HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId, assistId);
+    });
+
+    // /testsave - Simulate a save for testing stats
+    this.world.chatManager.registerCommand('/testsave', (player, args) => {
+      // Player who runs the command is the goalie making the save
+      const goalieId = player.id;
+      const shooterId = args[0]; // Required shooter ID
+      
+      if (!shooterId) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testsave <shooter_player_id>', 'FFFF00');
+        return;
+      }
+
+      // Check if the current player is actually a goalie
+      const goalieInfo = HockeyGameManager.instance.getTeamAndPosition(goalieId);
+      if (!goalieInfo || goalieInfo.position !== HockeyPosition.GOALIE) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Error: You must be assigned as a goalie to test saves!', 'FF0000');
+        return;
+      }
+
+      // Check if shooter exists
+      const shooterInfo = HockeyGameManager.instance.getTeamAndPosition(shooterId);
+      if (!shooterInfo) {
+        this.world!.chatManager.sendPlayerMessage(player, `Error: Shooter player ${shooterId} not found!`, 'FF0000');
+        return;
+      }
+
+      // Check if shooter is on opposing team
+      if (shooterInfo.team === goalieInfo.team) {
+        this.world!.chatManager.sendPlayerMessage(player, `Error: Shooter must be on opposing team!`, 'FF0000');
+        return;
+      }
+
+      this.world!.chatManager.sendPlayerMessage(player, `Simulating save by ${player.username} (${goalieInfo.team}) against shooter ${shooterId} (${shooterInfo.team})...`, '00FF00');
+      console.log(`[ChatCommand] Test save simulated: ${player.username} (${goalieId}) saved shot from ${shooterId}`);
+      
+      // Record the save directly
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      PlayerStatsManager.instance.recordSave(goalieId, shooterId, shooterInfo.team);
+      
+      // Broadcast the save notification
+      HockeyGameManager.instance.saveRecorded(goalieId, shooterId);
     });
 
     // /resetgoals - Reset goal detection service
@@ -622,26 +668,6 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, 'Broadcasting current stats to all players...', '00FF00');
       HockeyGameManager.instance.broadcastStatsUpdate();
       console.log('[ChatCommand] Stats broadcast triggered by', player.id);
-    });
-
-    // /testgoal - Simulate a goal for testing stats
-    this.world.chatManager.registerCommand('/testgoal', (player, args) => {
-      const team = args[0]?.toUpperCase();
-      
-      if (team !== 'RED' && team !== 'BLUE') {
-        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testgoal <RED|BLUE> [assist_player_id]', 'FFFF00');
-        return;
-      }
-
-      // Get player's ID for goal attribution
-      const scorerId = player.id;
-      const assistId = args[1]; // Optional assist player ID
-      
-      this.world!.chatManager.sendPlayerMessage(player, `Simulating ${team} goal by ${player.username}${assistId ? ` (assist: ${assistId})` : ''}...`, '00FF00');
-      console.log(`[ChatCommand] Test goal simulated: ${team} by ${player.username} (${player.id})${assistId ? ` with assist from ${assistId}` : ''}`);
-      
-      // Trigger goal with proper attribution
-      HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId, assistId);
     });
 
     // /debugstats - Show detailed stats debugging info

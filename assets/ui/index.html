@@ -613,6 +613,35 @@ and also configure additional buttons for mobile compatibility.
           bodyCheckIndicator.classList.add('disabled'); // Start disabled until targets available
         }
       }
+      
+      // Show/Hide position-specific move buttons
+      if (selectedPosition === 'GOALIE') {
+        // Show Goalie Slide button for Goalies
+        const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
+        if (goalieSlideIndicator) {
+          goalieSlideIndicator.style.display = 'flex';
+          goalieSlideIndicator.classList.add('disabled'); // Start disabled until speed requirement met
+        }
+        
+        // Hide Hockey Stop button for Goalies
+        const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
+        if (hockeyStopIndicator) {
+          hockeyStopIndicator.style.display = 'none';
+        }
+      } else {
+        // Show Hockey Stop button for Non-Goalies
+        const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
+        if (hockeyStopIndicator) {
+          hockeyStopIndicator.style.display = 'flex';
+          hockeyStopIndicator.classList.add('disabled'); // Start disabled until speed requirement met
+        }
+        
+        // Hide Goalie Slide button for Non-Goalies
+        const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
+        if (goalieSlideIndicator) {
+          goalieSlideIndicator.style.display = 'none';
+        }
+      }
     }
     if (data.type === 'show-waiting-overlay') {
       // Hide team selection overlay if it's still visible
@@ -1001,6 +1030,7 @@ and also configure additional buttons for mobile compatibility.
   document.addEventListener('keydown', (e) => {
     if (e.code === 'Space') {
       applyButtonPressEffect('hockey-stop-indicator', true);
+      applyButtonPressEffect('goalie-slide-indicator', true);
     } else if (e.code === 'KeyR') {
       applyButtonPressEffect('spin-move-indicator', true);
     }
@@ -1009,6 +1039,7 @@ and also configure additional buttons for mobile compatibility.
   document.addEventListener('keyup', (e) => {
     if (e.code === 'Space') {
       applyButtonPressEffect('hockey-stop-indicator', false);
+      applyButtonPressEffect('goalie-slide-indicator', false);
     } else if (e.code === 'KeyR') {
       applyButtonPressEffect('spin-move-indicator', false);
     }
@@ -1250,6 +1281,34 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  // Goalie slide cooldown handling
+  let goalieSlideCooldownEndTime = 0;
+  let goalieSlideCooldownAnimationFrame = null;
+
+  function updateGoalieSlideCooldownDisplay() {
+    const indicator = document.getElementById('goalie-slide-indicator');
+    const cooldownOverlay = indicator.querySelector('.cooldown-overlay');
+    const cooldownText = document.getElementById('goalie-slide-cooldown-text');
+    
+    const now = Date.now();
+    const timeRemaining = Math.max(0, goalieSlideCooldownEndTime - now);
+    
+    if (timeRemaining > 0) {
+      // Calculate progress (1 to 0)
+      const progress = timeRemaining / 4000; // 4 seconds cooldown
+      cooldownOverlay.style.transform = `scaleY(${progress})`;
+      const secondsRemaining = (timeRemaining / 1000).toFixed(1);
+      cooldownText.textContent = secondsRemaining;
+      indicator.classList.add('on-cooldown');
+      goalieSlideCooldownAnimationFrame = requestAnimationFrame(updateGoalieSlideCooldownDisplay);
+    } else {
+      cooldownOverlay.style.transform = 'scaleY(0)';
+      cooldownText.textContent = '';
+      indicator.classList.remove('on-cooldown');
+      goalieSlideCooldownAnimationFrame = null;
+    }
+  }
+
   hytopia.onData(data => {
     if (data.type === 'body-check-cooldown') {
       if (data.cooldownRemaining > 0) {
@@ -1293,6 +1352,27 @@ and also configure additional buttons for mobile compatibility.
         }
       }
     }
+    // Goalie Slide availability handler
+    if (data.type === 'goalie-slide-available') {
+      const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
+      if (goalieSlideIndicator) {
+        if (data.available) {
+          goalieSlideIndicator.classList.remove('disabled');
+        } else {
+          goalieSlideIndicator.classList.add('disabled');
+        }
+      }
+    }
+    // Goalie Slide cooldown handler
+    if (data.type === 'goalie-slide-cooldown') {
+      if (data.cooldownRemaining > 0) {
+        goalieSlideCooldownEndTime = Date.now() + data.cooldownRemaining;
+        if (goalieSlideCooldownAnimationFrame) {
+          cancelAnimationFrame(goalieSlideCooldownAnimationFrame);
+        }
+        goalieSlideCooldownAnimationFrame = requestAnimationFrame(updateGoalieSlideCooldownDisplay);
+      }
+    }
     // Body Check visibility handler (kept for compatibility, but now handled in team-position-confirmed)
     if (data.type === 'set-body-check-visibility') {
       const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
@@ -1320,6 +1400,7 @@ and also configure additional buttons for mobile compatibility.
     const shotIconGroup = document.getElementById('shot-icon-group');
     const spinMoveIndicator = document.getElementById('spin-move-indicator');
     const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
+    const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
     const stickCheckIconGroup = document.getElementById('stick-check-icon-group');
     
     // Initially disable puck-dependent actions (pass, shot, spin move)
@@ -1336,10 +1417,16 @@ and also configure additional buttons for mobile compatibility.
       console.log('Spin move disabled');
     }
     
-    // Initially disable speed-dependent actions (hockey stop)
+    // Initially disable and hide position-specific speed actions
     if (hockeyStopIndicator) {
       hockeyStopIndicator.classList.add('disabled');
-      console.log('Hockey stop disabled');
+      hockeyStopIndicator.style.display = 'none'; // Hidden by default until position confirmed
+      console.log('Hockey stop disabled and hidden');
+    }
+    if (goalieSlideIndicator) {
+      goalieSlideIndicator.classList.add('disabled');
+      goalieSlideIndicator.style.display = 'none'; // Hidden by default until position confirmed
+      console.log('Goalie slide disabled and hidden');
     }
     
     // Initially enable stick check (since no puck)
@@ -1905,6 +1992,12 @@ and also configure additional buttons for mobile compatibility.
       <div class="skill-input-label">LMB</div>
       <div class="cooldown-text" id="body-check-cooldown-text"></div>
     </div>
+    <div class="goalie-slide-indicator disabled" id="goalie-slide-indicator" style="display: none;">
+      <div class="cooldown-overlay"></div>
+      <img class="goalie-slide-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Goalie Slide" />
+      <div class="skill-input-label">SPACE</div>
+      <div class="cooldown-text" id="goalie-slide-cooldown-text"></div>
+    </div>
   </div>
 
   <!-- Mobile Controls -->
@@ -2018,6 +2111,16 @@ and also configure additional buttons for mobile compatibility.
             <div class="control-info">
               <div class="control-name">Hockey Stop <span class="control-key">SPACE</span></div>
               <div class="control-description">Quick stop and change direction</div>
+            </div>
+          </div>
+
+          <div class="control-item">
+            <div class="control-icon">
+              <img src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Goalie Slide" />
+            </div>
+            <div class="control-info">
+              <div class="control-name">Goalie Slide <span class="control-key">SPACE</span></div>
+              <div class="control-description">As Goalie only - quick dash slide</div>
             </div>
           </div>
         </div>
@@ -2963,7 +3066,7 @@ and also configure additional buttons for mobile compatibility.
     gap: 18px;
     z-index: 200;
   }
-  .pass-shot-icon-group, .hockey-stop-indicator, .spin-move-indicator, .body-check-cooldown-indicator {
+  .pass-shot-icon-group, .hockey-stop-indicator, .spin-move-indicator, .body-check-cooldown-indicator, .goalie-slide-indicator {
     margin: 0;
     display: flex;
     flex-direction: column;
@@ -3065,6 +3168,43 @@ and also configure additional buttons for mobile compatibility.
 
   .spin-move-indicator:hover::after {
     content: 'Spin Move (R)';
+    position: absolute;
+    right: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  /* Goalie Slide Indicator */
+  .goalie-slide-indicator {
+    /* All positioning handled by .skill-bar-row flexbox */
+  }
+
+  .goalie-slide-icon {
+    font-size: 24px;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+  }
+
+  .goalie-slide-indicator.on-cooldown {
+    background: rgba(40, 40, 40, 0.95);
+  }
+
+  .goalie-slide-indicator.on-cooldown .goalie-slide-icon {
+    opacity: 0.5;
+  }
+
+  .goalie-slide-indicator.on-cooldown .cooldown-text {
+    opacity: 1;
+  }
+
+  .goalie-slide-indicator:hover::after {
+    content: 'Goalie Slide';
     position: absolute;
     right: calc(100% + 8px);
     top: 50%;
@@ -5249,7 +5389,6 @@ and also configure additional buttons for mobile compatibility.
 
   .live-goal-info {
     display: flex;
-    border: 1px solid rgba(255, 255, 255, 0.1);
     align-items: center;
     gap: 15px;
   }
