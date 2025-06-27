@@ -526,6 +526,27 @@ and also configure additional buttons for mobile compatibility.
       const sortedPlayers = sortLeaderboardData(top100Data, currentTop100SortColumn, currentTop100SortDirection);
       console.log('Sorted', sortedPlayers.length, 'top 100 players by', currentTop100SortColumn, currentTop100SortDirection);
 
+      // Find the actual leader for the current category (not just first in sorted list)
+      let categoryLeader = null;
+      if (currentTop100Filter === 'scorers') {
+        // Leader is player with most points
+        categoryLeader = top100Data.reduce((leader, player) => {
+          const playerPoints = (player.goals || 0) + (player.assists || 0);
+          const leaderPoints = (leader.goals || 0) + (leader.assists || 0);
+          return playerPoints > leaderPoints ? player : leader;
+        });
+      } else if (currentTop100Filter === 'goalies') {
+        // Leader is player with most saves
+        categoryLeader = top100Data.reduce((leader, player) => {
+          return (player.saves || 0) > (leader.saves || 0) ? player : leader;
+        });
+      } else if (currentTop100Filter === 'enforcers') {
+        // Leader is player with most hits
+        categoryLeader = top100Data.reduce((leader, player) => {
+          return (player.hits || 0) > (leader.hits || 0) ? player : leader;
+        });
+      }
+
       sortedPlayers.forEach((player, index) => {
         const row = document.createElement('div');
         // Add alternating row class for every other row
@@ -540,10 +561,14 @@ and also configure additional buttons for mobile compatibility.
            <div class="leaderboard-profile-pic-fallback" style="display: none;">${(player.playerName || player.playerId || 'P')[0].toUpperCase()}</div>` :
           `<div class="leaderboard-profile-pic-fallback">${(player.playerName || player.playerId || 'P')[0].toUpperCase()}</div>`;
 
+        // Add crown icon for the category leader (not just first in sorted list)
+        const isLeader = categoryLeader && (player.playerId === categoryLeader.playerId || player.playerName === categoryLeader.playerName);
+        const crownIcon = isLeader ? '<img src="{{CDN_ASSETS_URL}}/icons/crown.svg" alt="Leader" class="crown-icon" />' : '';
+
         row.innerHTML = `
           <div class="leaderboard-col rank-col">${index + 1}</div>
           <div class="leaderboard-col profile-pic-col">${profilePicElement}</div>
-          <div class="leaderboard-col player-col">${player.playerName || player.playerId}</div>
+          <div class="leaderboard-col player-col">${player.playerName || player.playerId}${crownIcon}</div>
           <div class="leaderboard-col">${player.gamesPlayed || 0}</div>
           <div class="leaderboard-col">${player.goals || 0}</div>
           <div class="leaderboard-col">${player.assists || 0}</div>
@@ -563,26 +588,41 @@ and also configure additional buttons for mobile compatibility.
       tableBody.appendChild(noDataRow);
     }
     
-    // Update sort indicators in header
-    updateTop100SortIndicators();
+    // Update sort indicators in header with a small delay to ensure DOM is ready
+    setTimeout(() => {
+      updateTop100SortIndicators();
+    }, 10);
   }
 
   function updateTop100SortIndicators() {
     console.log('Updating top 100 sort indicators for column:', currentTop100SortColumn, 'direction:', currentTop100SortDirection);
     
-    // Remove all existing sort indicators
-    document.querySelectorAll('.top100-table-header .leaderboard-col[data-sort]').forEach(col => {
-      col.classList.remove('sorted-asc', 'sorted-desc');
-    });
-    
-    // Add indicator to current sorted column
+    // Find the current sorted column first
     const currentSortCol = document.querySelector(`.top100-table-header .leaderboard-col[data-sort="${currentTop100SortColumn}"]`);
     console.log('Found top 100 sort column element:', currentSortCol);
     
+    // Remove all existing sort indicators EXCEPT from the current column
+    document.querySelectorAll('.top100-table-header .leaderboard-col[data-sort]').forEach(col => {
+      if (col !== currentSortCol) {
+        col.classList.remove('sorted-asc', 'sorted-desc');
+      }
+    });
+    
+    // Add indicator to current sorted column
     if (currentSortCol) {
+      // Remove old classes first
+      currentSortCol.classList.remove('sorted-asc', 'sorted-desc');
+      
+      // Add new class
       const className = currentTop100SortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc';
       currentSortCol.classList.add(className);
       console.log('Added class:', className, 'to top 100 column');
+      
+      // Verify the class was added
+      setTimeout(() => {
+        console.log('Element after adding class (delayed check):', currentSortCol);
+        console.log('Classes on element:', currentSortCol.className);
+      }, 20);
     }
   }
 
@@ -3276,15 +3316,15 @@ and also configure additional buttons for mobile compatibility.
           <div class="top100-table-header">
             <div class="leaderboard-col rank-col">#</div>
             <div class="leaderboard-col profile-pic-col"></div>
-            <div class="leaderboard-col player-col sortable-header" data-sort="player">Player</div>
-            <div class="leaderboard-col sortable-header" data-sort="gamesPlayed">GP</div>
-            <div class="leaderboard-col sortable-header" data-sort="goals">G</div>
-            <div class="leaderboard-col sortable-header" data-sort="assists">A</div>
-            <div class="leaderboard-col sortable-header" data-sort="points">P</div>
-            <div class="leaderboard-col sortable-header" data-sort="shotsOnGoal">SOG</div>
-            <div class="leaderboard-col sortable-header" data-sort="saves">SV</div>
-            <div class="leaderboard-col sortable-header" data-sort="hits">H</div>
-            <div class="leaderboard-col sortable-header" data-sort="winLoss">W-L</div>
+            <div class="leaderboard-col player-col sortable-header" data-sort="player" onclick="sortTop100('player')">Player</div>
+            <div class="leaderboard-col sortable-header" data-sort="gamesPlayed" onclick="sortTop100('gamesPlayed')">GP</div>
+            <div class="leaderboard-col sortable-header" data-sort="goals" onclick="sortTop100('goals')">G</div>
+            <div class="leaderboard-col sortable-header" data-sort="assists" onclick="sortTop100('assists')">A</div>
+            <div class="leaderboard-col sortable-header" data-sort="points" onclick="sortTop100('points')">P</div>
+            <div class="leaderboard-col sortable-header" data-sort="shotsOnGoal" onclick="sortTop100('shotsOnGoal')">SOG</div>
+            <div class="leaderboard-col sortable-header" data-sort="saves" onclick="sortTop100('saves')">SV</div>
+            <div class="leaderboard-col sortable-header" data-sort="hits" onclick="sortTop100('hits')">H</div>
+            <div class="leaderboard-col sortable-header" data-sort="winLoss" onclick="sortTop100('winLoss')">W-L</div>
           </div>
           <div class="top100-table-body" id="top100-table-body">
             <!-- Top 100 data will be populated here -->
@@ -6579,6 +6619,15 @@ and also configure additional buttons for mobile compatibility.
     border-color: #44aaff;
   }
 
+  /* Crown icon styles */
+  .crown-icon {
+    width: 14px;
+    height: 14px;
+    margin-left: 6px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
+    vertical-align: middle;
+  }
+
   /* Sortable header styles */
   .sortable-header {
     cursor: pointer;
@@ -6611,7 +6660,10 @@ and also configure additional buttons for mobile compatibility.
     border-bottom: 6px solid #44aaff;
   }
 
-  .sortable-header.sorted-asc:hover::after {
+  .sortable-header.sorted-asc::after,
+  .sortable-header.sorted-asc:hover::after,
+  .top100-table-header .sortable-header.sorted-asc::after,
+  .top100-table-header .sortable-header.sorted-asc:hover::after {
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
     border-top: 6px solid #44aaff;
@@ -6619,7 +6671,10 @@ and also configure additional buttons for mobile compatibility.
     opacity: 1;
   }
 
-  .sortable-header.sorted-desc:hover::after {
+  .sortable-header.sorted-desc::after,
+  .sortable-header.sorted-desc:hover::after,
+  .top100-table-header .sortable-header.sorted-desc::after,
+  .top100-table-header .sortable-header.sorted-desc:hover::after {
     border-left: 4px solid transparent;
     border-right: 4px solid transparent;
     border-bottom: 6px solid #44aaff;
@@ -6738,6 +6793,7 @@ and also configure additional buttons for mobile compatibility.
     align-items: center;
     justify-content: center;
     min-height: 1.2em;
+    position: relative; /* Ensure ::after pseudo-elements work */
   }
 
   .top100-table-header .leaderboard-col.rank-col {
@@ -6752,6 +6808,86 @@ and also configure additional buttons for mobile compatibility.
   .top100-table-header .leaderboard-col.profile-pic-col {
     justify-content: center;
     padding: 0;
+  }
+
+  /* Specific arrow styling for Top 100 sortable headers */
+  .top100-table-header .leaderboard-col.sortable-header::after {
+    content: '';
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .top100-table-header .leaderboard-col.sortable-header:hover::after {
+    opacity: 0.6;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #44aaff;
+  }
+
+  .top100-table-header .leaderboard-col.sortable-header.sorted-asc::after {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #44aaff;
+    border-bottom: none;
+    opacity: 1;
+  }
+
+  .top100-table-header .leaderboard-col.sortable-header.sorted-desc::after {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #44aaff;
+    border-top: none;
+    opacity: 1;
+  }
+
+  .top100-table-header .leaderboard-col.sortable-header.player-col::after {
+    right: 15px;
+  }
+
+  /* IMPORTANT: Override any conflicting styles for Top 100 sorting arrows */
+  .top100-table-header .leaderboard-col.sortable-header.sorted-asc::after,
+  .top100-table-header .leaderboard-col.sortable-header.sorted-asc:hover::after {
+    content: '' !important;
+    position: absolute !important;
+    right: 5px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 4px solid transparent !important;
+    border-right: 4px solid transparent !important;
+    border-top: 6px solid #44aaff !important;
+    border-bottom: none !important;
+    opacity: 1 !important;
+    z-index: 10 !important;
+  }
+
+  .top100-table-header .leaderboard-col.sortable-header.sorted-desc::after,
+  .top100-table-header .leaderboard-col.sortable-header.sorted-desc:hover::after {
+    content: '' !important;
+    position: absolute !important;
+    right: 5px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    width: 0 !important;
+    height: 0 !important;
+    border-left: 4px solid transparent !important;
+    border-right: 4px solid transparent !important;
+    border-bottom: 6px solid #44aaff !important;
+    border-top: none !important;
+    opacity: 1 !important;
+    z-index: 10 !important;
+  }
+
+  .top100-table-header .leaderboard-col.sortable-header.sorted-asc.player-col::after,
+  .top100-table-header .leaderboard-col.sortable-header.sorted-desc.player-col::after {
+    right: 15px !important;
   }
 
   .top100-table-body {
