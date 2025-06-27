@@ -315,27 +315,123 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  // Leaderboard sorting state
+  let currentSortColumn = 'points'; // Default sort by points
+  let currentSortDirection = 'desc'; // 'asc' or 'desc'
+  let cachedLeaderboardData = null; // Store leaderboard data for local sorting
+  let sortTimeout = null; // Debounce sorting calls
+
+  // Top 100 sorting state
+  let currentTop100SortColumn = 'points'; // Default sort by points
+  let currentTop100SortDirection = 'desc'; // 'asc' or 'desc'
+  let cachedTop100Data = null; // Store top 100 data for local sorting
+  let top100SortTimeout = null; // Debounce sorting calls
+  
+  // Top 100 filter state
+  let currentTop100Filter = 'scorers'; // Default filter
+
+  function sortLeaderboardData(data, column, direction) {
+    return [...data].sort((a, b) => {
+      let aValue, bValue;
+      
+      switch (column) {
+        case 'player':
+          aValue = (a.playerName || a.playerId || '').toLowerCase();
+          bValue = (b.playerName || b.playerId || '').toLowerCase();
+          break;
+        case 'gamesPlayed':
+          aValue = a.gamesPlayed || 0;
+          bValue = b.gamesPlayed || 0;
+          break;
+        case 'goals':
+          aValue = a.goals || 0;
+          bValue = b.goals || 0;
+          break;
+        case 'assists':
+          aValue = a.assists || 0;
+          bValue = b.assists || 0;
+          break;
+        case 'points':
+          aValue = (a.goals || 0) + (a.assists || 0);
+          bValue = (b.goals || 0) + (b.assists || 0);
+          break;
+        case 'shotsOnGoal':
+          aValue = a.shotsOnGoal || 0;
+          bValue = b.shotsOnGoal || 0;
+          break;
+        case 'saves':
+          aValue = a.saves || 0;
+          bValue = b.saves || 0;
+          break;
+        case 'hits':
+          aValue = a.hits || 0;
+          bValue = b.hits || 0;
+          break;
+        case 'winLoss':
+          // Sort by win percentage, then by total games
+          const aWins = a.wins || 0;
+          const aLosses = a.losses || 0;
+          const aTotal = aWins + aLosses;
+          const aWinPercent = aTotal > 0 ? aWins / aTotal : 0;
+          
+          const bWins = b.wins || 0;
+          const bLosses = b.losses || 0;
+          const bTotal = bWins + bLosses;
+          const bWinPercent = bTotal > 0 ? bWins / bTotal : 0;
+          
+          if (aWinPercent !== bWinPercent) {
+            aValue = aWinPercent;
+            bValue = bWinPercent;
+          } else {
+            aValue = aTotal;
+            bValue = bTotal;
+          }
+          break;
+        default:
+          aValue = 0;
+          bValue = 0;
+      }
+      
+      if (typeof aValue === 'string') {
+        return direction === 'asc' ? aValue.localeCompare(bValue) : bValue.localeCompare(aValue);
+      } else {
+        return direction === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+    });
+  }
+
   function updateLeaderboard(leaderboardData) {
+    // Cache the data for local sorting (only cache new data from server, not sorted data)
+    if (leaderboardData && leaderboardData !== cachedLeaderboardData) {
+      cachedLeaderboardData = leaderboardData;
+      console.log('Cached new leaderboard data:', cachedLeaderboardData.length, 'players');
+    }
+    
     const tableBody = document.getElementById('leaderboard-table-body');
     tableBody.innerHTML = '';
 
     if (leaderboardData && leaderboardData.length > 0) {
-      // Sort players by total points (goals + assists)
-      const sortedPlayers = [...leaderboardData].sort((a, b) => {
-        const aPoints = (a.goals || 0) + (a.assists || 0);
-        const bPoints = (b.goals || 0) + (b.assists || 0);
-        return bPoints - aPoints;
-      });
+      // Sort players using current sort settings
+      const sortedPlayers = sortLeaderboardData(leaderboardData, currentSortColumn, currentSortDirection);
+      console.log('Sorted', sortedPlayers.length, 'players by', currentSortColumn, currentSortDirection);
 
       sortedPlayers.forEach((player, index) => {
         const row = document.createElement('div');
-        row.className = 'leaderboard-player-row';
+        // Add alternating row class for every other row
+        row.className = index % 2 === 0 ? 'leaderboard-player-row' : 'leaderboard-player-row leaderboard-player-row-alt';
         
         const points = (player.goals || 0) + (player.assists || 0);
         const winLossRecord = `${player.wins || 0}-${player.losses || 0}`;
         
+        // Generate profile picture element
+        const profilePicElement = player.profilePictureUrl ? 
+          `<img src="${player.profilePictureUrl}" alt="${player.playerName || player.playerId}" class="leaderboard-profile-pic" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+           <div class="leaderboard-profile-pic-fallback" style="display: none;">${(player.playerName || player.playerId || 'P')[0].toUpperCase()}</div>` :
+          `<div class="leaderboard-profile-pic-fallback">${(player.playerName || player.playerId || 'P')[0].toUpperCase()}</div>`;
+
         row.innerHTML = `
           <div class="leaderboard-col rank-col">${index + 1}</div>
+          <div class="leaderboard-col profile-pic-col">${profilePicElement}</div>
           <div class="leaderboard-col player-col">${player.playerName || player.playerId}</div>
           <div class="leaderboard-col">${player.gamesPlayed || 0}</div>
           <div class="leaderboard-col">${player.goals || 0}</div>
@@ -355,6 +451,328 @@ and also configure additional buttons for mobile compatibility.
       noDataRow.innerHTML = '<div class="leaderboard-col player-col" style="grid-column: 1 / -1; text-align: center; color: #999;">No leaderboard data available</div>';
       tableBody.appendChild(noDataRow);
     }
+    
+    // Update sort indicators in header
+    updateSortIndicators();
+  }
+
+  function updateSortIndicators() {
+    console.log('Updating sort indicators for column:', currentSortColumn, 'direction:', currentSortDirection);
+    
+    // Remove all existing sort indicators
+    document.querySelectorAll('.leaderboard-col[data-sort]').forEach(col => {
+      col.classList.remove('sorted-asc', 'sorted-desc');
+    });
+    
+    // Add indicator to current sorted column
+    const currentSortCol = document.querySelector(`[data-sort="${currentSortColumn}"]`);
+    console.log('Found sort column element:', currentSortCol);
+    
+    if (currentSortCol) {
+      const className = currentSortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc';
+      currentSortCol.classList.add(className);
+      console.log('Added class:', className, 'to column');
+    }
+  }
+
+  function sortLeaderboard(column) {
+    // Debounce rapid clicks
+    if (sortTimeout) {
+      clearTimeout(sortTimeout);
+    }
+    
+    sortTimeout = setTimeout(() => {
+      console.log('Sorting by column:', column, 'Current column:', currentSortColumn, 'Current direction:', currentSortDirection);
+      
+      // If clicking the same column, toggle direction
+      if (currentSortColumn === column) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+        console.log('Toggling direction to:', currentSortDirection);
+      } else {
+        // New column, default to descending for stats, ascending for names
+        currentSortColumn = column;
+        currentSortDirection = column === 'player' ? 'asc' : 'desc';
+        console.log('New column, direction set to:', currentSortDirection);
+      }
+      
+      // If we have cached data, sort it locally; otherwise request new data
+      if (cachedLeaderboardData) {
+        console.log('Using cached data for sorting');
+        updateLeaderboard(cachedLeaderboardData);
+      } else {
+        console.log('No cached data, requesting from server');
+        hytopia.sendData({ type: 'request-leaderboard' });
+      }
+      
+      sortTimeout = null;
+    }, 100); // 100ms debounce
+  }
+
+  // Make sortLeaderboard function globally accessible
+  window.sortLeaderboard = sortLeaderboard;
+
+  function updateTop100(top100Data) {
+    // Cache the data for local sorting (only cache new data from server, not sorted data)
+    if (top100Data && top100Data !== cachedTop100Data) {
+      cachedTop100Data = top100Data;
+      console.log('Cached new top 100 data:', cachedTop100Data.length, 'players');
+    }
+    
+    const tableBody = document.getElementById('top100-table-body');
+    tableBody.innerHTML = '';
+
+    if (top100Data && top100Data.length > 0) {
+      // Sort players using current sort settings
+      const sortedPlayers = sortLeaderboardData(top100Data, currentTop100SortColumn, currentTop100SortDirection);
+      console.log('Sorted', sortedPlayers.length, 'top 100 players by', currentTop100SortColumn, currentTop100SortDirection);
+
+      sortedPlayers.forEach((player, index) => {
+        const row = document.createElement('div');
+        // Add alternating row class for every other row
+        row.className = index % 2 === 0 ? 'top100-player-row' : 'top100-player-row top100-player-row-alt';
+        
+        const points = (player.goals || 0) + (player.assists || 0);
+        const winLossRecord = `${player.wins || 0}-${player.losses || 0}`;
+        
+        // Generate profile picture element
+        const profilePicElement = player.profilePictureUrl ? 
+          `<img src="${player.profilePictureUrl}" alt="${player.playerName || player.playerId}" class="leaderboard-profile-pic" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+           <div class="leaderboard-profile-pic-fallback" style="display: none;">${(player.playerName || player.playerId || 'P')[0].toUpperCase()}</div>` :
+          `<div class="leaderboard-profile-pic-fallback">${(player.playerName || player.playerId || 'P')[0].toUpperCase()}</div>`;
+
+        row.innerHTML = `
+          <div class="leaderboard-col rank-col">${index + 1}</div>
+          <div class="leaderboard-col profile-pic-col">${profilePicElement}</div>
+          <div class="leaderboard-col player-col">${player.playerName || player.playerId}</div>
+          <div class="leaderboard-col">${player.gamesPlayed || 0}</div>
+          <div class="leaderboard-col">${player.goals || 0}</div>
+          <div class="leaderboard-col">${player.assists || 0}</div>
+          <div class="leaderboard-col">${points}</div>
+          <div class="leaderboard-col">${player.shotsOnGoal || 0}</div>
+          <div class="leaderboard-col">${player.saves || 0}</div>
+          <div class="leaderboard-col">${player.hits || 0}</div>
+          <div class="leaderboard-col">${winLossRecord}</div>
+        `;
+        
+        tableBody.appendChild(row);
+      });
+    } else {
+      const noDataRow = document.createElement('div');
+      noDataRow.className = 'top100-player-row';
+      noDataRow.innerHTML = '<div class="leaderboard-col player-col" style="grid-column: 1 / -1; text-align: center; color: #999;">No top 100 data available</div>';
+      tableBody.appendChild(noDataRow);
+    }
+    
+    // Update sort indicators in header
+    updateTop100SortIndicators();
+  }
+
+  function updateTop100SortIndicators() {
+    console.log('Updating top 100 sort indicators for column:', currentTop100SortColumn, 'direction:', currentTop100SortDirection);
+    
+    // Remove all existing sort indicators
+    document.querySelectorAll('.top100-table-header .leaderboard-col[data-sort]').forEach(col => {
+      col.classList.remove('sorted-asc', 'sorted-desc');
+    });
+    
+    // Add indicator to current sorted column
+    const currentSortCol = document.querySelector(`.top100-table-header .leaderboard-col[data-sort="${currentTop100SortColumn}"]`);
+    console.log('Found top 100 sort column element:', currentSortCol);
+    
+    if (currentSortCol) {
+      const className = currentTop100SortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc';
+      currentSortCol.classList.add(className);
+      console.log('Added class:', className, 'to top 100 column');
+    }
+  }
+
+  function sortTop100(column) {
+    // Debounce rapid clicks
+    if (top100SortTimeout) {
+      clearTimeout(top100SortTimeout);
+    }
+    
+    top100SortTimeout = setTimeout(() => {
+      console.log('Sorting top 100 by column:', column, 'Current column:', currentTop100SortColumn, 'Current direction:', currentTop100SortDirection);
+      
+      // If clicking the same column, toggle direction
+      if (currentTop100SortColumn === column) {
+        currentTop100SortDirection = currentTop100SortDirection === 'asc' ? 'desc' : 'asc';
+        console.log('Toggling top 100 direction to:', currentTop100SortDirection);
+      } else {
+        // New column, default to descending for stats, ascending for names
+        currentTop100SortColumn = column;
+        currentTop100SortDirection = column === 'player' ? 'asc' : 'desc';
+        console.log('New top 100 column, direction set to:', currentTop100SortDirection);
+      }
+      
+      // If we have cached data, sort it locally; otherwise request new data
+      if (cachedTop100Data) {
+        console.log('Using cached top 100 data for sorting');
+        updateTop100(cachedTop100Data);
+      } else {
+        console.log('No cached top 100 data, requesting from server');
+        hytopia.sendData({ type: 'request-top100' });
+        console.log('Sent request-top100 message to server');
+        
+        // As a fallback, if we have leaderboard data, show it in Top 100 until server implements Top 100
+        if (cachedLeaderboardData && cachedLeaderboardData.length > 0) {
+          console.log('Using leaderboard data as fallback for Top 100');
+          setTimeout(() => {
+            if (!cachedTop100Data) { // Only use fallback if we still don't have Top 100 data
+              updateTop100(cachedLeaderboardData);
+            }
+          }, 1000); // Wait 1 second for server response
+        }
+      }
+      
+      top100SortTimeout = null;
+    }, 100); // 100ms debounce
+  }
+
+  // Make sortTop100 function globally accessible
+  window.sortTop100 = sortTop100;
+
+  function switchTop100Filter(filter) {
+    console.log('Switching Top 100 filter to:', filter);
+    
+    // Update current filter
+    currentTop100Filter = filter;
+    
+    // Update subtitle
+    const subtitle = document.getElementById('top100-subtitle');
+    switch (filter) {
+      case 'scorers':
+        subtitle.textContent = 'Top 100 scorers globally';
+        currentTop100SortColumn = 'points';
+        break;
+      case 'goalies':
+        subtitle.textContent = 'Top 100 goalies globally';
+        currentTop100SortColumn = 'saves';
+        break;
+      case 'enforcers':
+        subtitle.textContent = 'Top 100 enforcers globally';
+        currentTop100SortColumn = 'hits';
+        break;
+    }
+    
+    // Reset sort direction to descending
+    currentTop100SortDirection = 'desc';
+    
+    // Update sub-tab active states
+    document.querySelectorAll('.top100-sub-tab').forEach(tab => {
+      tab.classList.remove('active');
+    });
+    document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
+    
+    // Re-sort and update table if we have data
+    if (cachedTop100Data) {
+      updateTop100(cachedTop100Data);
+    }
+  }
+
+  // Make switchTop100Filter function globally accessible
+  window.switchTop100Filter = switchTop100Filter;
+
+  // Custom scrollbar functionality
+  function createCustomScrollbar(tableSelector, tableBodySelector) {
+    const table = document.querySelector(tableSelector);
+    const tableBody = document.querySelector(tableBodySelector);
+    
+    if (!table || !tableBody) return;
+    
+    // Create scroll thumb element
+    const scrollThumb = document.createElement('div');
+    scrollThumb.className = 'custom-scrollbar-thumb';
+    table.appendChild(scrollThumb);
+    
+    function updateScrollbar() {
+      const scrollTop = tableBody.scrollTop;
+      const scrollHeight = tableBody.scrollHeight;
+      const clientHeight = tableBody.clientHeight;
+      
+      if (scrollHeight <= clientHeight) {
+        scrollThumb.style.opacity = '0';
+        return;
+      }
+      
+      const scrollPercentage = scrollTop / (scrollHeight - clientHeight);
+      const trackHeight = table.offsetHeight - 60; // Account for header height
+      const thumbHeight = Math.max((clientHeight / scrollHeight) * trackHeight, 20); // Minimum 20px height
+      const thumbTop = 60 + (scrollPercentage * (trackHeight - thumbHeight)); // Start below header
+      
+      scrollThumb.style.top = thumbTop + 'px';
+      scrollThumb.style.height = thumbHeight + 'px';
+    }
+    
+    // Show/hide scrollbar on hover
+    table.addEventListener('mouseenter', () => {
+      updateScrollbar();
+      scrollThumb.style.opacity = scrollThumb.style.height !== '0px' ? '1' : '0';
+    });
+    
+    table.addEventListener('mouseleave', () => {
+      scrollThumb.style.opacity = '0';
+    });
+    
+    // Update on scroll
+    tableBody.addEventListener('scroll', updateScrollbar);
+    
+    // Update on resize
+    window.addEventListener('resize', updateScrollbar);
+  }
+
+  // Initialize custom scrollbars
+  function initializeCustomScrollbars() {
+    createCustomScrollbar('.leaderboard-table', '.leaderboard-table-body');
+    createCustomScrollbar('.top100-table', '.top100-table-body');
+  }
+
+  // Initialize when DOM is ready
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initializeCustomScrollbars);
+  } else {
+    initializeCustomScrollbars();
+  }
+
+  // Setup leaderboard sorting event listeners
+  function setupLeaderboardSorting() {
+    const sortableHeaders = document.querySelectorAll('.leaderboard-col.sortable-header[data-sort]');
+    sortableHeaders.forEach(header => {
+      if (!header.hasAttribute('data-sort-listener')) {
+        const column = header.getAttribute('data-sort');
+        header.addEventListener('click', () => {
+          sortLeaderboard(column);
+        });
+        header.setAttribute('data-sort-listener', 'true');
+      }
+    });
+  }
+
+  // Setup Top 100 sorting event listeners
+  function setupTop100Sorting() {
+    const sortableHeaders = document.querySelectorAll('.top100-table-header .leaderboard-col.sortable-header[data-sort]');
+    sortableHeaders.forEach(header => {
+      if (!header.hasAttribute('data-sort-listener')) {
+        const column = header.getAttribute('data-sort');
+        header.addEventListener('click', () => {
+          sortTop100(column);
+        });
+        header.setAttribute('data-sort-listener', 'true');
+      }
+    });
+    
+    // Setup sub-tab event listeners
+    const subTabs = document.querySelectorAll('.top100-sub-tab[data-filter]');
+    subTabs.forEach(tab => {
+      if (!tab.hasAttribute('data-filter-listener')) {
+        const filter = tab.getAttribute('data-filter');
+        tab.addEventListener('click', () => {
+          switchTop100Filter(filter);
+        });
+        tab.setAttribute('data-filter-listener', 'true');
+      }
+    });
   }
 
   // Event listeners for stats overlay
@@ -368,6 +786,7 @@ and also configure additional buttons for mobile compatibility.
   function setupTabEventListeners() {
     const liveStatsTab = document.getElementById('live-stats-tab');
     const leaderboardTab = document.getElementById('leaderboard-tab');
+    const top100Tab = document.getElementById('top100-tab');
     
     if (liveStatsTab && !liveStatsTab.hasAttribute('data-listener-setup')) {
       liveStatsTab.addEventListener('click', () => {
@@ -381,6 +800,23 @@ and also configure additional buttons for mobile compatibility.
         switchStatsTab('leaderboard');
       });
       leaderboardTab.setAttribute('data-listener-setup', 'true');
+      // Initialize sort indicators and setup sorting
+      setTimeout(() => {
+        setupLeaderboardSorting();
+        updateSortIndicators();
+      }, 50);
+    }
+
+    if (top100Tab && !top100Tab.hasAttribute('data-listener-setup')) {
+      top100Tab.addEventListener('click', () => {
+        switchStatsTab('top100');
+      });
+      top100Tab.setAttribute('data-listener-setup', 'true');
+      // Initialize sort indicators and setup sorting
+      setTimeout(() => {
+        setupTop100Sorting();
+        updateTop100SortIndicators();
+      }, 50);
     }
   }
 
@@ -446,6 +882,8 @@ and also configure additional buttons for mobile compatibility.
       setTimeout(() => {
         setupStatsOverlayScrolling();
         setupTabEventListeners(); // Ensure tab listeners are set up
+        setupLeaderboardSorting(); // Ensure leaderboard sorting is set up
+        setupTop100Sorting(); // Ensure top 100 sorting and sub-tabs are set up
         // Note: setupStatsOverlayEventPrevention is now handled within setupStatsOverlayScrolling
       }, 100);
     }
@@ -929,6 +1367,17 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'leaderboard-response') {
       // Handle leaderboard response from server
       updateLeaderboard(data.leaderboardData);
+      
+      // If we're on Top 100 tab and have no Top 100 data, use leaderboard data as fallback
+      if (currentStatsTab === 'top100' && !cachedTop100Data && data.leaderboardData) {
+        console.log('Using leaderboard response as Top 100 fallback data');
+        updateTop100(data.leaderboardData);
+      }
+    }
+    if (data.type === 'top100-response') {
+      // Handle top 100 response from server
+      console.log('Received top100-response from server:', data);
+      updateTop100(data.top100Data);
     }
     if (data.type === 'period-time-adjusted') {
       // Adjust period start time to account for goal celebration pause
@@ -2027,12 +2476,16 @@ and also configure additional buttons for mobile compatibility.
     // Update content visibility
     const liveStatsContent = document.getElementById('live-stats-content');
     const leaderboardContent = document.getElementById('leaderboard-content');
+    const top100Content = document.getElementById('top100-content');
     
     if (liveStatsContent) {
       liveStatsContent.style.display = tabName === 'live-stats' ? 'block' : 'none';
     }
     if (leaderboardContent) {
       leaderboardContent.style.display = tabName === 'leaderboard' ? 'block' : 'none';
+    }
+    if (top100Content) {
+      top100Content.style.display = tabName === 'top100' ? 'block' : 'none';
     }
     
     currentStatsTab = tabName;
@@ -2042,6 +2495,53 @@ and also configure additional buttons for mobile compatibility.
       hytopia.sendData({ type: 'request-live-stats' });
     } else if (tabName === 'leaderboard') {
       hytopia.sendData({ type: 'request-leaderboard' });
+      // Initialize sort indicators and setup sorting when switching to leaderboard tab
+      setTimeout(() => {
+        setupLeaderboardSorting();
+        updateSortIndicators();
+      }, 100);
+    } else if (tabName === 'top100') {
+      console.log('Requesting Top 100 data from server...');
+      hytopia.sendData({ type: 'request-top100' });
+      
+      // Immediate fallback if leaderboard data is already available
+      if (cachedLeaderboardData && cachedLeaderboardData.length > 0) {
+        console.log('Immediately showing leaderboard data in Top 100 as placeholder');
+        updateTop100(cachedLeaderboardData);
+        // Clear cache so server response can override this placeholder
+        setTimeout(() => {
+          if (cachedTop100Data === cachedLeaderboardData) {
+            console.log('Server did not provide Top 100 data, keeping leaderboard as fallback');
+          }
+        }, 2000);
+      }
+      
+      // Add fallback logic here as well
+      setTimeout(() => {
+        console.log('Checking for Top 100 server response...');
+        if (!cachedTop100Data) {
+          console.log('No Top 100 response received from server');
+          // If we have leaderboard data, use it as fallback
+          if (cachedLeaderboardData && cachedLeaderboardData.length > 0) {
+            console.log('Using cached leaderboard data as Top 100 fallback');
+            updateTop100(cachedLeaderboardData);
+          } else {
+            console.log('No leaderboard data available, requesting leaderboard as fallback');
+            // Request leaderboard data as fallback
+            hytopia.sendData({ type: 'request-leaderboard' });
+          }
+        } else {
+          console.log('Top 100 data already cached');
+        }
+      }, 1500); // Wait 1.5 seconds for server response
+      
+      // Initialize sort indicators and setup sorting when switching to top 100 tab
+      setTimeout(() => {
+        setupTop100Sorting();
+        updateTop100SortIndicators();
+        // Ensure default filter is set
+        switchTop100Filter(currentTop100Filter);
+      }, 100);
     }
   }
 
@@ -2066,8 +2566,11 @@ and also configure additional buttons for mobile compatibility.
       // Request data for current tab
       if (currentStatsTab === 'live-stats') {
         hytopia.sendData({ type: 'request-live-stats' });
-      } else {
+      } else if (currentStatsTab === 'leaderboard') {
         hytopia.sendData({ type: 'request-leaderboard' });
+      } else if (currentStatsTab === 'top100') {
+        console.log('Requesting Top 100 data from server (overlay toggle)...');
+        hytopia.sendData({ type: 'request-top100' });
       }
     }
   }
@@ -2619,6 +3122,7 @@ and also configure additional buttons for mobile compatibility.
       <div class="live-stats-tabs">
         <div class="live-stats-tab active" id="live-stats-tab" data-tab="live-stats">Live Stats</div>
         <div class="live-stats-tab" id="leaderboard-tab" data-tab="leaderboard">Leaderboard</div>
+        <div class="live-stats-tab" id="top100-tab" data-tab="top100">Top 100</div>
       </div>
       
       <!-- Live Stats Content -->
@@ -2734,15 +3238,16 @@ and also configure additional buttons for mobile compatibility.
         <div class="leaderboard-table">
           <div class="leaderboard-table-header">
             <div class="leaderboard-col rank-col">#</div>
-            <div class="leaderboard-col player-col">Player</div>
-            <div class="leaderboard-col">GP</div>
-            <div class="leaderboard-col">G</div>
-            <div class="leaderboard-col">A</div>
-            <div class="leaderboard-col">P</div>
-            <div class="leaderboard-col">SOG</div>
-            <div class="leaderboard-col">SV</div>
-            <div class="leaderboard-col">H</div>
-            <div class="leaderboard-col">W-L</div>
+            <div class="leaderboard-col profile-pic-col"></div>
+            <div class="leaderboard-col player-col sortable-header" data-sort="player">Player</div>
+            <div class="leaderboard-col sortable-header" data-sort="gamesPlayed">GP</div>
+            <div class="leaderboard-col sortable-header" data-sort="goals">G</div>
+            <div class="leaderboard-col sortable-header" data-sort="assists">A</div>
+            <div class="leaderboard-col sortable-header" data-sort="points">P</div>
+            <div class="leaderboard-col sortable-header" data-sort="shotsOnGoal">SOG</div>
+            <div class="leaderboard-col sortable-header" data-sort="saves">SV</div>
+            <div class="leaderboard-col sortable-header" data-sort="hits">H</div>
+            <div class="leaderboard-col sortable-header" data-sort="winLoss">W-L</div>
           </div>
           <div class="leaderboard-table-body" id="leaderboard-table-body">
             <!-- Leaderboard data will be populated here -->
@@ -2751,6 +3256,43 @@ and also configure additional buttons for mobile compatibility.
         
         <div class="leaderboard-footer">
           <div class="leaderboard-note">GP: Games Played | G: Goals | A: Assists | P: Points | SOG: Shots on Goal | SV: Saves | H: Hits | W-L: Wins-Losses</div>
+        </div>
+      </div>
+
+      <!-- Top 100 Content -->
+      <div class="top100-content" id="top100-content" style="display: none;">
+        <div class="top100-header">
+          <div class="top100-subtitle" id="top100-subtitle">Top 100 scorers globally</div>
+        </div>
+        
+        <!-- Top 100 Sub-tabs -->
+        <div class="top100-sub-tabs">
+          <div class="top100-sub-tab active" data-filter="scorers">Top Scorers</div>
+          <div class="top100-sub-tab" data-filter="goalies">Top Goalies</div>
+          <div class="top100-sub-tab" data-filter="enforcers">Top Enforcers</div>
+        </div>
+        
+        <div class="top100-table">
+          <div class="top100-table-header">
+            <div class="leaderboard-col rank-col">#</div>
+            <div class="leaderboard-col profile-pic-col"></div>
+            <div class="leaderboard-col player-col sortable-header" data-sort="player">Player</div>
+            <div class="leaderboard-col sortable-header" data-sort="gamesPlayed">GP</div>
+            <div class="leaderboard-col sortable-header" data-sort="goals">G</div>
+            <div class="leaderboard-col sortable-header" data-sort="assists">A</div>
+            <div class="leaderboard-col sortable-header" data-sort="points">P</div>
+            <div class="leaderboard-col sortable-header" data-sort="shotsOnGoal">SOG</div>
+            <div class="leaderboard-col sortable-header" data-sort="saves">SV</div>
+            <div class="leaderboard-col sortable-header" data-sort="hits">H</div>
+            <div class="leaderboard-col sortable-header" data-sort="winLoss">W-L</div>
+          </div>
+          <div class="top100-table-body" id="top100-table-body">
+            <!-- Top 100 data will be populated here -->
+          </div>
+        </div>
+        
+        <div class="top100-footer">
+          <div class="top100-note">GP: Games Played | G: Goals | A: Assists | P: Points | SOG: Shots on Goal | SV: Saves | H: Hits | W-L: Wins-Losses</div>
         </div>
       </div>
 
@@ -5872,7 +6414,7 @@ and also configure additional buttons for mobile compatibility.
 
   .leaderboard-table-header {
     display: grid;
-    grid-template-columns: 50px 2fr repeat(8, 1fr);
+    grid-template-columns: 50px 40px 2fr repeat(8, 1fr);
     background: rgba(255, 255, 255, 0.1);
     color: #ccc;
     font-weight: 700;
@@ -5882,18 +6424,91 @@ and also configure additional buttons for mobile compatibility.
     align-items: center;
   }
 
+  /* Force header columns to align exactly like data columns */
+  .leaderboard-table-header .leaderboard-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.2em;
+  }
+
+  .leaderboard-table-header .leaderboard-col.rank-col {
+    justify-content: center;
+  }
+
+  .leaderboard-table-header .leaderboard-col.player-col {
+    justify-content: flex-start;
+    padding-left: 10px;
+  }
+
+  .leaderboard-table-header .leaderboard-col.profile-pic-col {
+    justify-content: center;
+    padding: 0;
+  }
+
   .leaderboard-table-body {
     max-height: 400px;
-    overflow-y: auto;
+    overflow-y: scroll;
+    /* Hide default scrollbar completely */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  /* Hide webkit scrollbar but keep functionality */
+  .leaderboard-table-body::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Create a custom overlay scrollbar */
+  .leaderboard-table {
+    position: relative;
+  }
+
+  /* Custom scrollbar track */
+  .leaderboard-table::after {
+    content: '';
+    position: absolute;
+    top: 60px; /* Start below the header */
+    right: 4px;
+    width: 4px;
+    height: calc(100% - 60px);
+    background: rgba(68, 170, 255, 0.1);
+    border-radius: 2px;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+
+  .leaderboard-table:hover::after {
+    opacity: 1;
+  }
+
+  /* Custom scrollbar thumb */
+  .custom-scrollbar-thumb {
+    position: absolute;
+    right: 4px;
+    width: 4px;
+    background: linear-gradient(180deg, rgba(68, 170, 255, 0.8), rgba(68, 170, 255, 0.6));
+    border-radius: 2px;
+    border: 1px solid rgba(68, 170, 255, 0.4);
+    box-shadow: 0 2px 6px rgba(68, 170, 255, 0.3);
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+    z-index: 1000;
   }
 
   .leaderboard-player-row {
     display: grid;
-    grid-template-columns: 50px 2fr repeat(8, 1fr);
+    grid-template-columns: 50px 40px 2fr repeat(8, 1fr);
     align-items: center;
     padding: 12px 10px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
     transition: background 0.2s ease;
+  }
+
+  .leaderboard-player-row-alt {
+    background: rgba(255, 255, 255, 0.02);
   }
 
   .leaderboard-player-row:hover {
@@ -5907,7 +6522,6 @@ and also configure additional buttons for mobile compatibility.
   .leaderboard-col {
     color: #fff;
     font-weight: 500;
-    text-align: center;
     font-size: 0.9rem;
     display: flex;
     align-items: center;
@@ -5922,9 +6536,108 @@ and also configure additional buttons for mobile compatibility.
   }
 
   .leaderboard-col.player-col {
-    text-align: left;
     font-weight: 600;
     padding-left: 10px;
+    justify-content: flex-start;
+  }
+
+  .leaderboard-col.profile-pic-col {
+    padding: 0;
+    justify-content: center;
+  }
+
+  .leaderboard-profile-pic {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: border-color 0.2s ease;
+  }
+
+  .leaderboard-profile-pic:hover {
+    border-color: #44aaff;
+  }
+
+  .leaderboard-profile-pic-fallback {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #44aaff, #6b73ff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 12px;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    transition: border-color 0.2s ease;
+  }
+
+  .leaderboard-profile-pic-fallback:hover {
+    border-color: #44aaff;
+  }
+
+  /* Sortable header styles */
+  .sortable-header {
+    cursor: pointer;
+    user-select: none;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .sortable-header:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #44aaff;
+  }
+
+  .sortable-header::after {
+    content: '';
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+
+  .sortable-header:hover::after {
+    opacity: 0.6;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #44aaff;
+  }
+
+  .sortable-header.sorted-asc:hover::after {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 6px solid #44aaff;
+    border-bottom: none;
+    opacity: 1;
+  }
+
+  .sortable-header.sorted-desc:hover::after {
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 6px solid #44aaff;
+    border-top: none;
+    opacity: 1;
+  }
+
+  .sortable-header.player-col::after {
+    right: 15px;
+  }
+
+  /* Ensure sortable headers maintain center alignment */
+  .leaderboard-col.sortable-header {
+    justify-content: center;
+  }
+
+  /* Player column headers should be left-aligned */
+  .leaderboard-col.player-col.sortable-header {
     justify-content: flex-start;
   }
 
@@ -5942,27 +6655,206 @@ and also configure additional buttons for mobile compatibility.
     line-height: 1.4;
   }
 
+  /* Top 100 Styles - Reuse leaderboard styles */
+  .top100-content {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 600px; /* Match live stats content height */
+  }
+
+  .top100-header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+
+  .top100-subtitle {
+    color: #ccc;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  /* Top 100 Sub-tabs */
+  .top100-sub-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 2px;
+    margin-bottom: 20px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    padding: 4px;
+  }
+
+  .top100-sub-tab {
+    flex: 1;
+    padding: 10px 16px;
+    text-align: center;
+    color: #ccc;
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-radius: 8px;
+    user-select: none;
+  }
+
+  .top100-sub-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+
+  .top100-sub-tab.active {
+    background: rgba(68, 170, 255, 0.2);
+    color: #44aaff;
+    font-weight: 700;
+  }
+
+  .top100-table {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .top100-table-header {
+    display: grid;
+    grid-template-columns: 50px 40px 2fr repeat(8, 1fr);
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 15px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: center;
+  }
+
+  /* Force Top 100 header columns to align exactly like data columns */
+  .top100-table-header .leaderboard-col {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.2em;
+  }
+
+  .top100-table-header .leaderboard-col.rank-col {
+    justify-content: center;
+  }
+
+  .top100-table-header .leaderboard-col.player-col {
+    justify-content: flex-start;
+    padding-left: 10px;
+  }
+
+  .top100-table-header .leaderboard-col.profile-pic-col {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .top100-table-body {
+    max-height: 450px;
+    overflow-y: scroll;
+    /* Hide default scrollbar completely */
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  /* Hide webkit scrollbar but keep functionality */
+  .top100-table-body::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Create a custom overlay scrollbar for top100 */
+  .top100-table {
+    position: relative;
+  }
+
+  /* Custom scrollbar track for top100 */
+  .top100-table::after {
+    content: '';
+    position: absolute;
+    top: 60px; /* Start below the header */
+    right: 4px;
+    width: 4px;
+    height: calc(100% - 60px);
+    background: rgba(68, 170, 255, 0.1);
+    border-radius: 2px;
+    opacity: 0;
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+
+  .top100-table:hover::after {
+    opacity: 1;
+  }
+
+  .top100-player-row {
+    display: grid;
+    grid-template-columns: 50px 40px 2fr repeat(8, 1fr);
+    align-items: center;
+    padding: 12px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease;
+  }
+
+  .top100-player-row-alt {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .top100-player-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .top100-player-row:last-child {
+    border-bottom: none;
+  }
+
+  .top100-footer {
+    text-align: center;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+  }
+
+  .top100-note {
+    color: #999;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
   /* Mobile responsive for leaderboard */
   @media (max-width: 768px) {
     .leaderboard-table-header,
     .leaderboard-player-row {
-      grid-template-columns: 30px 1.5fr repeat(4, 1fr);
+      grid-template-columns: 30px 25px 1.5fr repeat(4, 1fr);
       font-size: 0.75rem;
       padding: 10px 5px;
     }
 
     .leaderboard-table-header {
       /* Hide some columns on mobile */
-      grid-template-columns: 30px 1.5fr 40px 40px 40px 60px;
+      grid-template-columns: 30px 25px 1.5fr 40px 40px 40px 60px;
     }
 
     .leaderboard-player-row {
-      grid-template-columns: 30px 1.5fr 40px 40px 40px 60px;
+      grid-template-columns: 30px 25px 1.5fr 40px 40px 40px 60px;
     }
 
     /* Hide less important columns on mobile */
-    .leaderboard-col:nth-child(n+7) {
+    .leaderboard-col:nth-child(n+8) {
       display: none;
+    }
+
+    /* Make profile pics smaller on mobile */
+    .leaderboard-profile-pic,
+    .leaderboard-profile-pic-fallback {
+      width: 20px;
+      height: 20px;
+      font-size: 10px;
     }
 
     .leaderboard-subtitle {
@@ -5970,6 +6862,27 @@ and also configure additional buttons for mobile compatibility.
     }
 
     .leaderboard-note {
+      font-size: 0.7rem;
+    }
+
+    /* Top 100 mobile responsive */
+    .top100-table-header,
+    .top100-player-row {
+      grid-template-columns: 30px 25px 1.5fr 40px 40px 40px 60px;
+      font-size: 0.75rem;
+      padding: 10px 5px;
+    }
+
+    /* Hide less important columns on mobile for Top 100 */
+    .top100-table .leaderboard-col:nth-child(n+8) {
+      display: none;
+    }
+
+    .top100-subtitle {
+      font-size: 0.9rem;
+    }
+
+    .top100-note {
       font-size: 0.7rem;
     }
   }
