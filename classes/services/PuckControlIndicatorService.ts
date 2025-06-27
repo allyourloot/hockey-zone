@@ -115,6 +115,12 @@ export class PuckControlIndicatorService {
 
       const playerName = playerEntity.player?.username || 'Player';
 
+      // Use a lower y-offset to bring the indicator closer to player's head for all devices
+      // The mobile-specific CSS scaling will handle size differences
+      const yOffset = 1.8; // Positioned closer to player's head for better visibility
+      
+      CONSTANTS.debugLog(`Showing puck control indicator for ${playerName} with y-offset: ${yOffset}`, 'PuckControlIndicatorService');
+
       // Create SceneUI following the same pattern as body-check-indicator
       const sceneUI = new SceneUI({
         templateId: 'puck-control-indicator',
@@ -123,7 +129,7 @@ export class PuckControlIndicatorService {
           visible: true,
           playerName: playerName
         },
-        offset: { x: 0, y: 2.0, z: 0 }, // Position closer above player's head
+        offset: { x: 0, y: yOffset, z: 0 }, // Position adjusted for mobile
         viewDistance: 85, // Increase visibility distance to 100 blocks (from default ~15-20)
       });
       

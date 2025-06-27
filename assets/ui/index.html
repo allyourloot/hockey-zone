@@ -2629,7 +2629,158 @@ and also configure additional buttons for mobile compatibility.
       }
     }
   }
+
+  // ============================================
+  // MOBILE TOUCH HANDLERS FOR SKILL BUTTONS
+  // ============================================
+  
+  // Mobile detection function
+  function isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      || (window.matchMedia && window.matchMedia("(max-width: 768px)").matches)
+      || ('ontouchstart' in window)
+      || (navigator.maxTouchPoints > 0);
+  }
+
+
+  
+    // Mobile touch support with power meter system for Pass/Shot
+  function addMobileTouchSupport(buttonId, inputKey) {
+    const button = document.getElementById(buttonId);
+    if (!button) {
+      console.log(`Button not found: ${buttonId}`);
+      return;
+    }
+    
+    // Add mobile styling including active state styling
+    if (isMobileDevice()) {
+      button.style.webkitTapHighlightColor = 'transparent';
+      button.style.userSelect = 'none';
+      button.style.touchAction = 'manipulation'; // Allow basic touch but prevent zoom/scroll
+    }
+
+    // Check if this button needs power meter (Pass/Shot buttons when controlling puck)
+    const isPassButton = (inputKey === 'ml' && buttonId === 'pass-icon-group');
+    const isShotButton = (inputKey === 'mr' && buttonId === 'shot-icon-group');
+    const needsPowerMeter = isPassButton || isShotButton;
+    
+    if (needsPowerMeter) {
+      
+      // Power meter touch handlers (like desktop mouse system)
+      const handleTouchStart = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        
+        // Check if button is disabled or player doesn't have puck
+        if (button.classList.contains('disabled') || !hasPuck) {
+          return;
+        }
+        
+        button.classList.add('active');
+        
+        // Start power meter locally (like desktop mousedown)
+        if (isShotButton) {
+          showPowerMeter(true); // shooting mode
+        } else if (isPassButton) {
+          showPowerMeter(false); // passing mode  
+        }
+      };
+
+      const handleTouchEnd = (e) => {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        
+        button.classList.remove('active');
+        
+        // Stop power meter and execute action (like desktop mouseup)
+        if (powerMeterVisible) {
+          hidePowerMeter(); // This sends the puck-shoot or puck-pass message
+        }
+      };
+
+      // Add event listeners with preventDefault
+      button.addEventListener('touchstart', handleTouchStart, { passive: false });
+      button.addEventListener('touchend', handleTouchEnd, { passive: false });
+      
+    } else {
+      // Regular input buttons (non-power meter): Stick Check, Hockey Stop, Spin Move, etc.
+      
+      // For non-ml inputs, we need to prevent default to stop Hytopia's screen tap
+      const needsPreventDefault = (inputKey !== 'ml');
+
+      // Touch start handler
+      const handleTouchStart = (e) => {
+        // Only prevent default for non-ml inputs to avoid conflicts
+        if (needsPreventDefault && e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        
+        // Check if button is disabled
+        if (button.classList.contains('disabled')) {
+          return;
+        }
+        
+        button.classList.add('active');
+        
+        // Add a small delay for non-ml inputs to ensure they override default behavior
+        if (needsPreventDefault) {
+          setTimeout(() => {
+            hytopia.pressInput(inputKey, true);
+          }, 10);
+        } else {
+          hytopia.pressInput(inputKey, true);
+        }
+      };
+
+      // Touch end handler
+      const handleTouchEnd = (e) => {
+        if (needsPreventDefault && e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+        
+        button.classList.remove('active');
+        
+        if (button.classList.contains('disabled')) {
+          return;
+        }
+        
+        hytopia.pressInput(inputKey, false);
+      };
+
+      // Set event options based on input type
+      const eventOptions = needsPreventDefault ? { passive: false } : { passive: true };
+
+      // Add event listeners
+      button.addEventListener('touchstart', handleTouchStart, eventOptions);
+      button.addEventListener('touchend', handleTouchEnd, eventOptions);
+    }
+  }
+
+  // Only add mobile touch support if we detect a mobile device or touch capability
+  if (isMobileDevice() || 'ontouchstart' in window) {
+    
+    // Add mobile touch support for all skill buttons
+    // Use the SAME inputs as desktop - let hytopia.pressInput() handle mobile conversion
+    
+    addMobileTouchSupport('pass-icon-group', 'ml');           // Pass (LMB)
+    addMobileTouchSupport('shot-icon-group', 'mr');           // Shot (RMB)
+    addMobileTouchSupport('stick-check-icon-group', 'mr');    // Stick Check (RMB)
+    addMobileTouchSupport('hockey-stop-indicator', 'sp');     // Hockey Stop (SPACE)
+    addMobileTouchSupport('spin-move-indicator', 'r');        // Spin Move (R key)
+    addMobileTouchSupport('body-check-cooldown-indicator', 'ml'); // Body Check (LMB)
+    addMobileTouchSupport('goalie-slide-indicator', 'sp');    // Goalie Slide (SPACE)
+  }
+
+
+
 </script>
+
 
 <div id="root">
   <!-- Power Meter -->
@@ -2640,40 +2791,40 @@ and also configure additional buttons for mobile compatibility.
 
   <!-- Skill Bar Row Overlay (bottom right) -->
   <div class="skill-bar-row" id="skill-bar-row">
-    <div class="pass-shot-icon-group disabled" id="pass-icon-group">
-      <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
-      <div class="pass-shot-label">LMB</div>
+    <div class="skill-button disabled" id="pass-icon-group">
+      <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+      <div class="skill-button-label">LMB</div>
     </div>
-    <div class="pass-shot-icon-group disabled" id="shot-icon-group">
-      <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
-      <div class="pass-shot-label">RMB</div>
+    <div class="skill-button disabled" id="shot-icon-group">
+      <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
+      <div class="skill-button-label">RMB</div>
     </div>
-    <div class="pass-shot-icon-group" id="stick-check-icon-group">
-      <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/stick-check-icon.png" alt="Stick Check" />
-      <div class="pass-shot-label">RMB</div>
+    <div class="skill-button" id="stick-check-icon-group">
+      <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/stick-check-icon.png" alt="Stick Check" />
+      <div class="skill-button-label">RMB</div>
     </div>
-    <div class="hockey-stop-indicator disabled" id="hockey-stop-indicator">
+    <div class="skill-button hockey-stop-indicator disabled" id="hockey-stop-indicator">
       <div class="cooldown-overlay"></div>
-      <img class="hockey-stop-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Hockey Stop" />
-      <div class="skill-input-label">SPACE</div>
+      <img class="skill-button-icon hockey-stop-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Hockey Stop" />
+      <div class="skill-button-label skill-input-label">SPACE</div>
       <div class="cooldown-text" id="cooldown-text"></div>
     </div>
-    <div class="spin-move-indicator disabled" id="spin-move-indicator">
+    <div class="skill-button spin-move-indicator disabled" id="spin-move-indicator">
       <div class="cooldown-overlay"></div>
-      <img class="spin-move-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/spin-icon.png" alt="Spin Move" />
-      <div class="skill-input-label">R</div>
+      <img class="skill-button-icon spin-move-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/spin-icon.png" alt="Spin Move" />
+      <div class="skill-button-label skill-input-label">R</div>
       <div class="cooldown-text" id="spin-cooldown-text"></div>
     </div>
-    <div class="body-check-cooldown-indicator disabled" id="body-check-cooldown-indicator" style="display: none;">
+    <div class="skill-button body-check-cooldown-indicator disabled" id="body-check-cooldown-indicator" style="display: none;">
       <div class="cooldown-overlay"></div>
-      <img class="body-check-cooldown-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/body-check-icon.png" alt="Body Check" />
-      <div class="skill-input-label">LMB</div>
+      <img class="skill-button-icon body-check-cooldown-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/body-check-icon.png" alt="Body Check" />
+      <div class="skill-button-label skill-input-label">LMB</div>
       <div class="cooldown-text" id="body-check-cooldown-text"></div>
     </div>
-    <div class="goalie-slide-indicator disabled" id="goalie-slide-indicator" style="display: none;">
+    <div class="skill-button goalie-slide-indicator disabled" id="goalie-slide-indicator" style="display: none;">
       <div class="cooldown-overlay"></div>
-      <img class="goalie-slide-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Goalie Slide" />
-      <div class="skill-input-label">SPACE</div>
+      <img class="skill-button-icon goalie-slide-icon skill-icon" src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Goalie Slide" />
+      <div class="skill-button-label skill-input-label">SPACE</div>
       <div class="cooldown-text" id="goalie-slide-cooldown-text"></div>
     </div>
   </div>
@@ -3366,13 +3517,13 @@ and also configure additional buttons for mobile compatibility.
   <!-- Pass/Shot Icons Overlay -->
   <div class="pass-shot-overlay" id="pass-shot-overlay" style="display: none;">
     <div class="pass-shot-row">
-      <div class="pass-shot-icon-group">
-        <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
-        <div class="pass-shot-label">LMB</div>
+      <div class="skill-button">
+        <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+        <div class="skill-button-label">LMB</div>
       </div>
-      <div class="pass-shot-icon-group">
-        <img class="pass-shot-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
-        <div class="pass-shot-label">RMB</div>
+      <div class="skill-button">
+        <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
+        <div class="skill-button-label">RMB</div>
       </div>
     </div>
   </div>
@@ -3814,7 +3965,9 @@ and also configure additional buttons for mobile compatibility.
     gap: 18px;
     z-index: 200;
   }
-  .pass-shot-icon-group, .hockey-stop-indicator, .spin-move-indicator, .body-check-cooldown-indicator, .goalie-slide-indicator {
+  
+  /* Unified Skill Button Container */
+  .skill-button {
     margin: 0;
     display: flex;
     flex-direction: column;
@@ -3823,17 +3976,48 @@ and also configure additional buttons for mobile compatibility.
     background: rgba(30, 30, 30, 0.95);
     border-radius: 8px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-    width: 60px;
-    height: 60px;
+    width: 70px;
+    height: 70px;
     position: relative;
     overflow: hidden;
   }
-  .pass-shot-icon-group {
-    margin-bottom: 0 !important;
-    margin-top: 0 !important;
+  
+  /* Unified Skill Button Icon */
+  .skill-button-icon {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    margin: 0 auto 2px auto;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    user-select: none;
+    display: block;
+  }
+  
+  /* Unified Skill Button Label */
+  .skill-button-label {
+    display: block;
+    margin-top: 0;
+    font-size: 0.6rem;
+    color: #fff;
+    padding: 1px 7px 0 7px;
+    text-align: center;
+    font-family: 'Inter', Arial, sans-serif;
+    font-weight: 600;
+    letter-spacing: 1px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+    user-select: none;
+    pointer-events: none;
+    line-height: 1.3;
+    width: fit-content;
+    min-width: 28px;
+    margin-left: auto;
+    margin-right: auto;
+    background: none;
+    border-radius: 0;
   }
   .hockey-stop-icon {
-    font-size: 24px;
     z-index: 2;
     transition: opacity 0.2s ease;
   }
@@ -3897,7 +4081,6 @@ and also configure additional buttons for mobile compatibility.
   }
 
   .spin-move-icon {
-    font-size: 24px;
     z-index: 2;
     transition: opacity 0.2s ease;
   }
@@ -3934,7 +4117,6 @@ and also configure additional buttons for mobile compatibility.
   }
 
   .goalie-slide-icon {
-    font-size: 24px;
     z-index: 2;
     transition: opacity 0.2s ease;
   }
@@ -4089,12 +4271,35 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  /* Mobile-specific adjustments for puck control indicator */
+  body.mobile .puck-control-indicator {
+    transform: scale(0.7); /* Reduce overall size by 30% on mobile */
+  }
+
+  body.mobile .puck-control-base {
+    width: 35px; /* Reduced from 50px */
+    height: 35px; /* Reduced from 50px */
+  }
+
+  body.mobile .puck-control-inner {
+    width: 30px; /* Reduced from 42px */
+    height: 30px; /* Reduced from 42px */
+  }
+
+  body.mobile .puck-control-ripple {
+    width: 30px; /* Reduced from 42px */
+    height: 30px; /* Reduced from 42px */
+  }
+
+  body.mobile .puck-arrow {
+    font-size: 1.3rem; /* Reduced from 1.8rem */
+  }
+
   /* Body Check Cooldown Indicator */
   .body-check-cooldown-indicator {
     /* All positioning handled by .skill-bar-row flexbox */
   }
   .body-check-cooldown-icon {
-    font-size: 24px;
     z-index: 2;
     color: #ff4444;
     transition: opacity 0.2s ease;
@@ -4124,8 +4329,8 @@ and also configure additional buttons for mobile compatibility.
 
   /* Skill UI overlay icons */
   .skill-icon {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     object-fit: contain;
     z-index: 2;
     transition: opacity 0.2s ease;
@@ -4171,108 +4376,207 @@ and also configure additional buttons for mobile compatibility.
     flex-direction: row;
     gap: 18px;
   }
-  .pass-shot-icon-group {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(30, 30, 30, 0.95);
-    border-radius: 8px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
-    width: 60px;
-    height: 60px;
-    margin-bottom: 8px;
-    margin-left: 2px;
-    margin-right: 2px;
-    position: relative;
-    overflow: hidden;
-  }
-  .pass-shot-icon {
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    margin: 0 auto 2px auto;
-    z-index: 2;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-    user-select: none;
-    display: block;
-  }
-  .pass-shot-label {
-    display: block;
-    margin-top: 0;
-    font-size: 0.6rem;
-    color: #fff;
-    padding: 1px 7px 0 7px;
-    text-align: center;
-    font-family: 'Inter', Arial, sans-serif;
-    font-weight: 600;
-    letter-spacing: 1px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.18);
-    user-select: none;
-    pointer-events: none;
-    line-height: 1.3;
-    width: fit-content;
-    min-width: 28px;
-    margin-left: auto;
-    margin-right: auto;
-    background: none;
-    border-radius: 0;
-  }
 
-  .pass-shot-icon-group.disabled .pass-shot-icon,
-  .pass-shot-icon-group.disabled .pass-shot-label,
-  .spin-move-indicator.disabled .spin-move-icon,
-  .spin-move-indicator.disabled .skill-input-label,
-  .hockey-stop-indicator.disabled .hockey-stop-icon,
-  .hockey-stop-indicator.disabled .skill-input-label {
+  .skill-button.disabled .skill-button-icon,
+  .skill-button.disabled .skill-button-label {
     filter: grayscale(1) brightness(0.6);
     color: #aaa !important;
     opacity: 0.7;
   }
 
-  /* Button Press Effects */
-  .pass-shot-icon-group.pressed,
-  .hockey-stop-indicator.pressed,
-  .spin-move-indicator.pressed,
-  .body-check-cooldown-indicator.pressed {
+  /* Button Press Effects - including mobile touch support */
+  .skill-button.pressed,
+  .skill-button.active {
     transform: scale(0.90);
     box-shadow: 0 1px 6px rgba(0,0,0,0.3);
     background: rgba(40, 40, 40, 0.98);
     transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .pass-shot-icon-group.pressed .pass-shot-icon,
-  .hockey-stop-indicator.pressed .hockey-stop-icon,
-  .spin-move-indicator.pressed .spin-move-icon,
-  .body-check-cooldown-indicator.pressed .body-check-cooldown-icon {
+  .skill-button.pressed .skill-button-icon,
+  .skill-button.active .skill-button-icon {
     transform: scale(0.9);
     filter: brightness(1.2);
     transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .pass-shot-icon-group.pressed .pass-shot-label,
-  .hockey-stop-indicator.pressed .skill-input-label,
-  .spin-move-indicator.pressed .skill-input-label,
-  .body-check-cooldown-indicator.pressed .skill-input-label {
+  .skill-button.pressed .skill-button-label,
+  .skill-button.active .skill-button-label {
     color: #fff !important;
     text-shadow: 0 0 8px rgba(255,255,255,0.6);
     transition: all 0.1s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .body-check-cooldown-indicator.disabled .body-check-cooldown-icon,
-  .body-check-cooldown-indicator.disabled .skill-input-label {
-    filter: grayscale(1) brightness(0.6);
-    color: #aaa !important;
-    opacity: 0.7;
+  /* Prevent mobile browser touch highlighting (white background issue) */
+  .skill-button {
+    -webkit-tap-highlight-color: transparent !important;
+    -webkit-touch-callout: none !important;
+    -webkit-user-select: none !important;
+    -ms-touch-action: manipulation !important;
+    touch-action: manipulation !important;
+    outline: none !important;
   }
-  .body-check-cooldown-indicator:not(.disabled) .body-check-cooldown-icon,
-  .body-check-cooldown-indicator:not(.disabled) .skill-input-label,
-  .hockey-stop-indicator:not(.disabled) .hockey-stop-icon,
-  .hockey-stop-indicator:not(.disabled) .skill-input-label {
+
+  /* Enhanced mobile touch feedback */
+  @media (hover: none) and (pointer: coarse) {
+    .skill-button:active {
+      background-color: rgba(60, 60, 60, 0.98) !important;
+      border: 1px solid rgba(255, 255, 255, 0.3) !important;
+    }
+  }
+
+  /* Mobile-specific sizing - 2-row grid layout for touch */
+  @media (hover: none) and (pointer: coarse) {
+    /* ALL skill button containers: slightly smaller but still touch-friendly */
+    .skill-button {
+      width: 52px !important;
+      height: 52px !important;
+      border-radius: 12px !important;
+      min-width: 52px !important;
+      min-height: 52px !important;
+    }
+    
+    /* ALL skill icons: slightly smaller */
+    .skill-button-icon {
+      width: 26px !important;
+      height: 26px !important;
+    }
+    
+    /* Skill bar: 2-row grid layout for better mobile UX */
+    .skill-bar-row {
+      display: grid !important;
+      grid-template-columns: repeat(3, 1fr) !important;
+      grid-template-rows: repeat(2, 1fr) !important;
+      gap: 8px !important;
+      bottom: 20px !important;
+      right: 16px !important;
+      padding: 8px !important;
+      width: auto !important;
+      max-width: 180px !important;
+    }
+    
+    /* Position buttons in grid: Top row = Pass, Shot, Stick Check */
+    #pass-icon-group { grid-column: 1; grid-row: 1; }
+    #shot-icon-group { grid-column: 2; grid-row: 1; }
+    #stick-check-icon-group { grid-column: 3; grid-row: 1; }
+    
+    /* Position buttons in grid: Bottom row = Hockey Stop, Spin Move, Body Check */
+    #hockey-stop-indicator { grid-column: 1; grid-row: 2; }
+    #spin-move-indicator { grid-column: 2; grid-row: 2; }
+    #body-check-cooldown-indicator { grid-column: 3; grid-row: 2; }
+    
+    /* Goalie mode: Show goalie slide in same position as hockey stop */
+    #goalie-slide-indicator { 
+      grid-column: 1; 
+      grid-row: 2; 
+      display: none !important; 
+    }
+    
+    /* When goalie slide is shown, hide hockey stop */
+    .skill-bar-row:has(#goalie-slide-indicator:not([style*="display: none"])) #hockey-stop-indicator {
+      display: none !important;
+    }
+    
+    /* Hide control labels on mobile - not relevant for touch */
+    .skill-button-label {
+      display: none !important;
+    }
+    
+    /* Cooldown text: proportional to larger buttons */
+    .cooldown-text {
+      font-size: 10px !important;
+      font-weight: 700 !important;
+    }
+    
+    /* Music button: compact */
+    .music-button {
+      width: 28px !important;
+      height: 28px !important;
+    }
+    
+    .music-button img {
+      width: 14px !important;
+      height: 14px !important;
+    }
+    
+    /* Music controls: adjust position */
+    .music-controls {
+      bottom: 20px !important;
+      left: 20px !important;
+    }
+    
+    /* Move overlays to right side to avoid HYTOPIA chatbox conflicts */
+    .controls-overlay {
+      align-items: flex-end !important; /* Right-align horizontally */
+      justify-content: center !important; /* Keep vertically centered */
+      padding-right: 20px !important;
+      padding-left: 60px !important; /* Leave space for chatbox */
+    }
+    
+    .controls-container {
+      width: 85% !important;
+      max-width: 450px !important; /* Consistent width for mobile */
+      margin-right: 0 !important;
+    }
+    
+    .live-stats-overlay {
+      align-items: flex-end !important; /* Right-align horizontally */  
+      justify-content: center !important; /* Keep vertically centered */
+      padding-right: 20px !important;
+      padding-left: 60px !important; /* Leave space for chatbox */
+    }
+    
+    .live-stats-container {
+      width: 85% !important;
+      max-width: 450px !important; /* Consistent width across all tabs */
+      min-width: 400px !important; /* Ensure minimum width */
+      margin-right: 0 !important;
+    }
+  }
+
+  .skill-button:not(.disabled) .skill-button-icon,
+  .skill-button:not(.disabled) .skill-button-label {
     filter: none;
     color: #fff !important;
     opacity: 1;
+  }
+
+  /* Mobile-specific improvements for touch controls */
+  @media (hover: none) and (pointer: coarse) {
+    /* Improve touch responsiveness - size handled by main mobile query above */
+    .skill-button {
+      /* Touch responsiveness */
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+      
+      /* CRITICAL: Isolate from default Hytopia touch behavior */
+      pointer-events: auto;
+      position: relative;
+      z-index: 100;
+    }
+
+    /* Remove hover effects on mobile since they don't make sense */
+    .skill-button:hover {
+      transform: none;
+      background: inherit;
+      box-shadow: inherit;
+    }
+
+    /* Enhanced touch feedback for mobile - all skill buttons */
+    .skill-button.active {
+      transform: scale(0.90) !important;
+      background: rgba(255, 255, 255, 0.2) !important;
+      box-shadow: 0 0 20px rgba(255, 255, 255, 0.5) !important;
+      border: 2px solid rgba(255, 255, 255, 0.4) !important;
+    }
+
+    /* Enhance icon feedback on touch - all skill icons */
+    .skill-button.active .skill-button-icon {
+      filter: brightness(1.3) drop-shadow(0 0 8px rgba(255,255,255,0.6)) !important;
+      transform: scale(1.05) !important;
+    }
   }
 
   .goal-label {
@@ -7392,7 +7696,7 @@ and also configure additional buttons for mobile compatibility.
     .crown-icon {
       width: 10px;
       height: 10px;
-      margin-left: 4px;
+      margin-left: 6px;
     }
   }
 
@@ -7562,14 +7866,19 @@ and also configure additional buttons for mobile compatibility.
     .live-stats-overlay {
       padding: 5px;
       z-index: 2500 !important; /* Higher than chatbox */
+      align-items: center !important; /* Keep vertically centered */  
+      justify-content: flex-end !important; /* Right-align horizontally */
+      padding-right: 20px !important;
+      padding-left: 60px !important; /* Leave space for chatbox */
     }
     
     .live-stats-container {
-      width: 70%;
-      max-width: 600px; /* Reasonable max width for readability */
-      max-height: 90vh;
-      min-height: auto; /* Remove fixed height */
+      width: 85%;
+      max-width: 450px; /* Consistent width across all tabs */
+      min-width: 400px; /* Ensure minimum width */
+      height: 85vh; /* Fixed height to prevent resizing between tabs */
       border-radius: 12px;
+      margin-right: 0 !important;
     }
     
     .live-stats-header {
@@ -7792,23 +8101,7 @@ and also configure additional buttons for mobile compatibility.
     }
     
     .pass-shot-row {
-      gap: 12px;
-    }
-    
-    .pass-shot-icon-group {
-      width: 45px;
-      height: 45px;
-      margin-bottom: 6px;
-    }
-    
-    .pass-shot-icon {
-      width: 24px;
-      height: 24px;
-    }
-    
-    .pass-shot-label {
-      font-size: 0.5rem;
-      padding: 1px 4px 0 4px;
+      gap: 4px;
     }
 
     /* Waiting Overlay - More compact */
@@ -7858,19 +8151,7 @@ and also configure additional buttons for mobile compatibility.
       bottom: 80px;
     }
     
-    .skill-bar-row {
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-    
-    .body-check-indicator,
-    .hockey-stop-indicator,
-    .spin-move-indicator,
-    .goalie-slide-indicator {
-      width: 45px;
-      height: 45px;
-    }
-    
+    /* Let the touch-specific media query handle skill button sizing */
     .body-check-text,
     .skill-input-label {
       font-size: 0.5rem;
@@ -7911,12 +8192,12 @@ and also configure additional buttons for mobile compatibility.
     
     .controls-toggle {
       top: 15px;
-      right: 50px;
+      right: 20px;
     }
     
     .stats-toggle {
       top: 15px;
-      right: 95px;
+      right: 70px;
     }
 
     /* Hide text labels completely and ensure no space is reserved */
@@ -8003,6 +8284,14 @@ and also configure additional buttons for mobile compatibility.
 
   /* Additional mobile landscape adjustments for very small heights */
   @media (max-height: 400px) and (orientation: landscape) {
+    /* Stats overlay positioning for very small screens */
+    .live-stats-overlay {
+      align-items: flex-end !important; /* Right-align horizontally */  
+      justify-content: center !important; /* Keep vertically centered */
+      padding-right: 20px !important;
+      padding-left: 60px !important; /* Leave space for chatbox */
+    }
+    
     /* Further compress overlays for very small screens */
     .goal-text {
       font-size: 3rem;
@@ -8025,10 +8314,12 @@ and also configure additional buttons for mobile compatibility.
     }
     
     .live-stats-container {
-      width: 80%;
-      max-width: 500px; /* Smaller max width for very small screens */
+      width: 85%;
+      max-width: 450px; /* Consistent width across all tabs */
+      min-width: 380px; /* Smaller minimum for very small screens */
       max-height: 90vh;
       min-height: auto;
+      margin-right: 0 !important;
     }
     
     .live-stats-header {
@@ -8165,11 +8456,12 @@ and also configure additional buttons for mobile compatibility.
     }
     
     .controls-toggle {
-      right: 40px;
+      right: 10px;
     }
     
     .stats-toggle {
-      right: 80px;
+      right: 50px;
+      margin-right: 4px;
     }
     
     .controls-toggle .controls-icon img,
