@@ -4,33 +4,6 @@ and also configure additional buttons for mobile compatibility.
 -->
 
 <script>
-  // Handle interact button touch / untouch
-  const mobileInteractButton = document.getElementById('mobile-interact-button');
-  mobileInteractButton.addEventListener('touchstart', e => {
-    e.preventDefault(); // Prevents mobile highlight/select/copy popup behaviors
-    mobileInteractButton.classList.add('active'); // more immediate feedback to add/remove active class
-    hytopia.pressInput('ml', true);
-  });
-
-  mobileInteractButton.addEventListener('touchend', e => {
-    e.preventDefault();
-    mobileInteractButton.classList.remove('active');
-    hytopia.pressInput('ml', false);
-  });
-
-  // Handle jump button touch / untouch
-  const mobileJumpButton = document.getElementById('mobile-jump-button');
-  mobileJumpButton.addEventListener('touchstart', e => {
-    e.preventDefault();
-    mobileJumpButton.classList.add('active');
-    hytopia.pressInput(' ', true);
-  });
-
-  mobileJumpButton.addEventListener('touchend', e => {
-    e.preventDefault();
-    mobileJumpButton.classList.remove('active');
-    hytopia.pressInput(' ', false);
-  });
 
   // Audio context activation for background music
   let audioContextActivated = false;
@@ -2145,17 +2118,6 @@ and also configure additional buttons for mobile compatibility.
       <div class="skill-input-label">SPACE</div>
       <div class="cooldown-text" id="goalie-slide-cooldown-text"></div>
     </div>
-  </div>
-
-  <!-- Mobile Controls -->
-  <div class="mobile-controls">
-    <a id="mobile-interact-button" class="mobile-button">
-      <img src="{{CDN_ASSETS_URL}}/icons/target.png" />
-    </a>
-
-    <a id="mobile-jump-button" class="mobile-button">
-      <img src="{{CDN_ASSETS_URL}}/icons/jump.png" />
-    </a>
   </div>
 
   <!-- Music Mute Button -->
@@ -6010,5 +5972,802 @@ and also configure additional buttons for mobile compatibility.
     .leaderboard-note {
       font-size: 0.7rem;
     }
+  }
+
+  /* Mobile Landscape Responsive Styles for All Overlays */
+  /* Target mobile devices in landscape orientation with limited height */
+  @media (max-height: 500px) and (orientation: landscape) {
+    /* Team Selection Overlay */
+    .team-selection-overlay {
+      padding: 10px;
+      max-height: 100vh;
+    }
+    
+    .team-selection-title {
+      font-size: 1.2rem;
+      margin-bottom: 1rem;
+    }
+    
+    .teams-container {
+      gap: 30px;
+    }
+    
+    .team-column {
+      padding: 15px 20px;
+    }
+    
+    .team-name {
+      font-size: 0.8rem;
+      margin-bottom: 10px;
+    }
+    
+    .position-btn {
+      margin: 4px 0;
+      padding: 6px 20px;
+      font-size: 0.8rem;
+      min-height: 32px;
+    }
+    
+    .selected-position-msg {
+      margin-top: 10px;
+      font-size: 0.7rem;
+    }
+    
+    .lock-in-btn {
+      padding: 8px 24px;
+      font-size: 0.8rem;
+      margin-top: -1.1rem !important; /* Override inline style from JavaScript */
+    }
+
+    /* Goal Overlay */
+    .goal-text {
+      font-size: 4rem;
+      margin-bottom: 10px;
+      letter-spacing: 4px;
+    }
+    
+    .goal-subtext {
+      font-size: 1.5rem;
+      letter-spacing: 2px;
+    }
+
+    /* Countdown Overlay */
+    .countdown-text {
+      font-size: 8rem;
+      margin-bottom: 10px;
+      letter-spacing: 4px;
+    }
+    
+    .countdown-text.countdown-go {
+      font-size: 6rem;
+    }
+    
+    .countdown-subtext {
+      font-size: 1.2rem;
+      margin-top: 10px;
+      letter-spacing: 1px;
+    }
+
+    /* Period Break Overlay */
+    .period-break-text {
+      font-size: 2.4rem;
+      margin-bottom: 20px;
+      letter-spacing: 2px;
+    }
+    
+    .period-break-score {
+      gap: 20px;
+      font-size: 1.8rem;
+    }
+    
+    .break-score-vs {
+      font-size: 1.5rem;
+    }
+
+    /* Game Over Overlay */
+    .game-over-overlay {
+      padding: 15px 10px;
+    }
+    
+    .game-over-header {
+      margin-bottom: 20px;
+    }
+    
+    .game-over-text {
+      font-size: 2rem;
+      margin-bottom: 10px;
+      letter-spacing: 2px;
+    }
+    
+    .game-over-winner {
+      font-size: 1.5rem;
+      margin-bottom: 10px;
+      letter-spacing: 1px;
+    }
+    
+    .game-over-final-score {
+      gap: 15px;
+      font-size: 1.2rem;
+    }
+    
+    .final-score-vs {
+      font-size: 1rem;
+    }
+    
+    .box-score-container {
+      gap: 15px;
+      max-width: 95%;
+    }
+
+    .live-team-name {
+      font-size: 0.9rem;
+    }
+
+    .live-period-score {
+      font-size: 0.9rem;
+    }
+
+    .live-total-score .red-total {
+      font-size: 0.9rem;
+    }
+
+    .live-total-score .blue-total {
+      font-size: 0.9rem;
+    }
+    
+    .period-scores-section,
+    .top-performers-section,
+    .player-stats-section {
+      padding: 20px;
+    }
+    
+    .section-title {
+      font-size: 0.9rem;
+      margin-bottom: 15px;
+    }
+    
+    .period-scores-header,
+    .period-scores-row {
+      padding: 20px;
+      font-size: 0.9rem;
+    }
+    
+    .period-scores-row .team-name {
+      font-size: 0.8rem;
+    }
+
+    /* Live Stats Overlay - Mobile Landscape Optimization */
+    .live-stats-overlay {
+      padding: 5px;
+      z-index: 2500 !important; /* Higher than chatbox */
+    }
+    
+    .live-stats-container {
+      width: 70%;
+      max-width: 600px; /* Reasonable max width for readability */
+      max-height: 90vh;
+      min-height: auto; /* Remove fixed height */
+      border-radius: 12px;
+    }
+    
+    .live-stats-header {
+      padding: 10px 15px;
+      flex-shrink: 0;
+    }
+    
+    .live-stats-title {
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+    }
+    
+    .live-stats-close {
+      font-size: 1.2rem;
+      min-width: 30px;
+      min-height: 30px;
+    }
+    
+    .live-stats-tabs {
+      flex-shrink: 0;
+    }
+    
+    .live-stats-tab {
+      padding: 8px 12px;
+      font-size: 0.8rem;
+    }
+    
+    .live-stats-content {
+      padding: 10px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    .live-stats-scores {
+      gap: 15px;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 8px;
+    }
+    
+    .live-stats-team-name {
+      font-size: 0.9rem;
+      letter-spacing: 0.5px;
+    }
+    
+    .live-stats-team-score {
+      font-size: 1.5rem;
+    }
+    
+    .live-stats-period-text {
+      font-size: 0.8rem;
+    }
+    
+    .live-stats-section {
+      margin-bottom: 10px;
+    }
+    
+    .live-stats-section.compact {
+      margin-bottom: 8px;
+    }
+    
+    .live-stats-section-title {
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+    
+    /* Compact grid layout */
+    .live-stats-grid {
+      gap: 8px;
+      display: flex;
+      flex-direction: column; /* Stack vertically on mobile landscape */
+    }
+    
+    .live-stats-left-column,
+    .live-stats-right-column {
+      gap: 8px;
+      width: 100%;
+    }
+    
+    /* Make tables more compact */
+    .live-stats-table-header,
+    .live-player-stat-row {
+      padding: 6px 4px;
+      font-size: 0.7rem;
+    }
+    
+    .live-box-score-header,
+    .live-box-score-row {
+      padding: 6px 4px;
+      font-size: 0.7rem;
+    }
+    
+    /* Compact recent goals */
+    .live-recent-goals.compact {
+      max-height: 100px;
+      padding: 6px;
+      font-size: 0.7rem;
+    }
+    
+    .live-goal-item {
+      padding: 4px 0;
+      font-size: 0.7rem;
+    }
+    
+    /* Compact top performers */
+    .live-top-performers.compact {
+      gap: 8px;
+    }
+    
+    .live-performer {
+      padding: 6px;
+    }
+    
+    .live-performer-label {
+      font-size: 0.7rem;
+    }
+    
+    .live-performer-value {
+      font-size: 0.8rem;
+    }
+
+    .leaderboard-subtitle {
+      font-size: 0.8rem;
+    }
+
+    /* Controls Overlay - Mobile Landscape Optimization */
+    .controls-overlay {
+      padding: 5px;
+      z-index: 2500; /* Higher than chatbox */
+    }
+    
+    .controls-container {
+      width: 70%;
+      max-width: 600px; /* Reasonable max width for controls content */
+      max-height: 88vh;
+      border-radius: 12px;
+    }
+    
+    .controls-header {
+      padding: 10px 15px 0 15px;
+      margin-bottom: 10px;
+      flex-shrink: 0;
+    }
+    
+    .controls-content {
+      padding: 0 15px 15px 15px;
+      flex: 1;
+      overflow-y: auto;
+    }
+    
+    .controls-title {
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    
+    .controls-subtitle {
+      font-size: 0.8rem;
+      margin-bottom: 8px;
+    }
+    
+    .controls-close {
+      top: 10px;
+      right: 10px;
+      font-size: 1.2rem;
+      width: 30px;
+      height: 30px;
+    }
+    
+    .controls-content-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    
+    .controls-section {
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 8px;
+    }
+    
+    .controls-section-title {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+    
+    .control-item {
+      padding: 4px;
+      margin-bottom: 4px;
+    }
+    
+    .control-icon {
+      width: 20px;
+      height: 20px;
+      margin-right: 6px;
+    }
+    
+    .control-icon img {
+      width: 12px;
+      height: 12px;
+    }
+    
+    .control-name {
+      font-size: 0.7rem;
+    }
+    
+    .control-key {
+      font-size: 0.6rem;
+      padding: 1px 3px;
+    }
+    
+    .control-description {
+      font-size: 0.6rem;
+    }
+
+    /* Pass Shot Overlay - Compact layout */
+    .pass-shot-overlay {
+      right: 15px;
+      top: calc(50% - 80px);
+    }
+    
+    .pass-shot-row {
+      gap: 12px;
+    }
+    
+    .pass-shot-icon-group {
+      width: 45px;
+      height: 45px;
+      margin-bottom: 6px;
+    }
+    
+    .pass-shot-icon {
+      width: 24px;
+      height: 24px;
+    }
+    
+    .pass-shot-label {
+      font-size: 0.5rem;
+      padding: 1px 4px 0 4px;
+    }
+
+    /* Waiting Overlay - More compact */
+    .waiting-overlay {
+      top: 15px;
+      right: 15px;
+      padding: 8px 16px;
+      min-width: 150px;
+    }
+    
+    .waiting-message {
+      font-size: 1rem;
+    }
+    
+    .waiting-spinner {
+      width: 20px;
+      height: 20px;
+      border: 3px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+    }
+
+    /* Scoreboard adjustments */
+    .scoreboard {
+      top: 15px;
+      padding: 8px 20px;
+    }
+    
+    .score-number {
+      font-size: 1.5rem;
+    }
+    
+    .team-score {
+      font-size: 1.2rem;
+    }
+    
+    .period {
+      font-size: 0.8rem;
+    }
+    
+    .time {
+      font-size: 0.9rem;
+    }
+
+    /* Skill indicators - more compact positioning */
+    .skill-bar {
+      right: 15px;
+      bottom: 80px;
+    }
+    
+    .skill-bar-row {
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    
+    .body-check-indicator,
+    .hockey-stop-indicator,
+    .spin-move-indicator,
+    .goalie-slide-indicator {
+      width: 45px;
+      height: 45px;
+    }
+    
+    .body-check-text,
+    .skill-input-label {
+      font-size: 0.5rem;
+      padding: 1px 4px 0 4px;
+    }
+
+    /* Power meter adjustments */
+    .power-meter {
+      bottom: 75px;
+      width: 150px;
+      height: 16px;
+    }
+    
+    .power-meter-text {
+      font-size: 10px;
+    }
+
+    /* Music and controls buttons */
+    .music-mute-button {
+      top: auto;
+      bottom: 15px;
+      left: 15px;
+      right: auto;
+      width: 35px;
+      height: 35px;
+    }
+
+    /* Stats and Controls buttons - compact mobile layout */
+    .controls-toggle,
+    .stats-toggle {
+      width: 40px;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    
+    .controls-toggle {
+      top: 15px;
+      right: 50px;
+    }
+    
+    .stats-toggle {
+      top: 15px;
+      right: 95px;
+    }
+
+    /* Hide text labels completely and ensure no space is reserved */
+    .controls-toggle .controls-label,
+    .stats-toggle .stats-label {
+      display: none !important;
+      width: 0;
+      height: 0;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* Center icons properly within buttons */
+    .controls-toggle .controls-icon,
+    .stats-toggle .stats-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    
+    /* Ensure button icons are properly sized and centered */
+    .controls-toggle .controls-icon img,
+    .stats-toggle .stats-icon img {
+      width: 20px;
+      height: 20px;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Scoreboard mobile adjustments */
+    .scoreboard {
+      padding: 4px 20px;
+      font-size: 0.8rem;
+      z-index: 150; /* Lower than team selection overlay (200) but higher than default */
+    }
+    
+    .scoreboard .team-name {
+      font-size: 0.8rem !important;
+      margin-top: 10px !important;
+    }
+    
+    .scoreboard .team-score {
+      font-size: 1.3rem !important;
+    }
+    
+    .scoreboard .period {
+      font-size: 0.7rem;
+      white-space: nowrap !important;
+    }
+    
+    .scoreboard .timer {
+      font-size: 1.2rem;
+      white-space: nowrap !important;
+    }
+    
+    /* Prevent waiting text from wrapping and fix alignment */
+    .waiting-overlay {
+      top: 15px;
+      right: 15px;
+      padding: 6px 12px;
+      min-width: 160px;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    .waiting-message {
+      font-size: 0.9rem;
+      white-space: nowrap !important;
+      text-align: center;
+    }
+
+    /* Team selection overlay z-index fix */
+    .team-selection-overlay {
+      padding: 10px;
+      z-index: 200; /* Higher than scoreboard */
+    }
+  }
+
+  /* Additional mobile landscape adjustments for very small heights */
+  @media (max-height: 400px) and (orientation: landscape) {
+    /* Further compress overlays for very small screens */
+    .goal-text {
+      font-size: 3rem;
+    }
+    
+    .countdown-text {
+      font-size: 6rem;
+    }
+    
+    .countdown-text.countdown-go {
+      font-size: 4rem;
+    }
+    
+    .game-over-text {
+      font-size: 1.5rem;
+    }
+    
+    .period-break-text {
+      font-size: 2rem;
+    }
+    
+    .live-stats-container {
+      width: 80%;
+      max-width: 500px; /* Smaller max width for very small screens */
+      max-height: 90vh;
+      min-height: auto;
+    }
+    
+    .live-stats-header {
+      padding: 8px 12px;
+    }
+    
+    .live-stats-title {
+      font-size: 1rem;
+    }
+    
+    .live-stats-close {
+      min-width: 25px;
+      min-height: 25px;
+      font-size: 1rem;
+    }
+    
+    .live-stats-tab {
+      padding: 6px 10px;
+      font-size: 0.7rem;
+    }
+    
+    .live-stats-content {
+      padding: 8px;
+    }
+    
+    .live-stats-scores {
+      padding: 6px;
+      gap: 10px;
+    }
+    
+    .live-stats-team-score {
+      font-size: 1.1rem;
+    }
+
+    .live-team-name {
+      font-size: 0.8rem;
+    }
+
+    .live-period-score {
+      font-size: 0.8rem;
+    }
+
+    .live-total-score .red-total {
+      font-size: 0.8rem;
+    }
+
+    .live-total-score .blue-total {
+      font-size: 0.8rem;
+    }
+
+    .leaderboard-subtitle {
+      font-size: 0.7rem;
+    }
+    
+    .controls-container {
+      width: 70%;
+      max-width: 500px; /* Smaller max width for very small screens */
+      max-height: 90vh;
+    }
+    
+    .controls-header {
+      padding: 8px 12px 0 12px;
+      margin-bottom: 8px;
+    }
+    
+    .controls-content {
+      padding: 0 12px 12px 12px;
+    }
+    
+    .controls-title {
+      font-size: 1rem;
+    }
+    
+    .controls-close {
+      width: 25px;
+      height: 25px;
+      font-size: 1rem;
+    }
+    
+    .controls-section {
+      padding: 6px;
+      margin-bottom: 8px;
+    }
+    
+    .controls-section-title {
+      font-size: 0.8rem;
+      margin-bottom: 6px;
+    }
+    
+    /* Stack team selection horizontally if needed */
+    .teams-container {
+      gap: 15px;
+    }
+    
+    .team-column {
+      padding: 10px 15px;
+    }
+    
+    .team-selection-title {
+      font-size: 1rem;
+      margin-bottom: 10px;
+    }
+
+    .team-name {
+      font-size: 0.7rem;
+    }
+
+    .selected-position-msg {
+      font-size: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .position-btn {
+      font-size: 0.6rem;
+      min-height: 28px;
+    }
+
+    .lock-in-btn {
+      margin-top: -1rem !important; /* Even tighter spacing for very small screens */
+      padding: 6px 20px;
+      font-size: 0.8rem;
+    }
+
+    /* Further compress UI elements for very small screens */
+    .music-mute-button {
+      width: 30px;
+      height: 30px;
+    }
+    
+    .controls-toggle,
+    .stats-toggle {
+      width: 35px;
+      height: 35px;
+    }
+    
+    .controls-toggle {
+      right: 40px;
+    }
+    
+    .stats-toggle {
+      right: 80px;
+    }
+    
+    .controls-toggle .controls-icon img,
+    .stats-toggle .stats-icon img {
+      width: 18px;
+      height: 18px;
+    }
+    
+    .scoreboard {
+      padding: 2px 8px;
+      font-size: 0.7rem;
+    }
+    
+    .scoreboard .team-name {
+      font-size: 0.7rem !important;
+    }
+    
+    .scoreboard .team-score {
+      font-size: 1.2rem;
+    }
+    
   }
 </style>

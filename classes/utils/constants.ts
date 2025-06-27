@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = true; // Set to true during development, false for production
+export const DEBUG_MODE = false; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
@@ -88,7 +88,7 @@ export const DASH = {
 // SKATING SOUND CONSTANTS
 // =========================
 export const SKATING_SOUND = {
-  VOLUME: 0.1,
+  VOLUME: 0.06,
   MIN_SPEED: 4.0,
   WALK_LOOP_DURATION: 1600, // Slow loop for walking (1.2 seconds)
   RUN_LOOP_DURATION: 1000,   // Fast loop for running (0.6 seconds)
