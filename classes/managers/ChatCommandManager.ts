@@ -91,6 +91,7 @@ export class ChatCommandManager {
     this.registerAssignTeamCommand();
     this.registerTestHitCommand();
     this.registerTestShotCommand();
+    this.registerTestLeaderboardCommand();
   }
   
   /**
@@ -1495,6 +1496,44 @@ export class ChatCommandManager {
           'FF0000'
         );
         console.error('Error in /testshot command:', error);
+      }
+    });
+  }
+
+  /**
+   * Register test leaderboard command
+   */
+  private registerTestLeaderboardCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/testleaderboard', async (player) => {
+      try {
+        // Manually trigger a leaderboard request
+        const PlayerManager = require('./PlayerManager').PlayerManager;
+        if (PlayerManager.instance) {
+          // Call the leaderboard handler directly
+          const playerManager = PlayerManager.instance as any;
+          await playerManager.handleLeaderboardRequest(player);
+          
+          this.world!.chatManager.sendPlayerMessage(
+            player, 
+            '✅ Leaderboard data sent! Check your stats overlay (press K, then click Leaderboard tab).',
+            '00FF00'
+          );
+        } else {
+          this.world!.chatManager.sendPlayerMessage(
+            player, 
+            '❌ PlayerManager not available',
+            'FF0000'
+          );
+        }
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `❌ Error testing leaderboard: ${error}`,
+          'FF0000'
+        );
+        console.error('Error in test leaderboard command:', error);
       }
     });
   }

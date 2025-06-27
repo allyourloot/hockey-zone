@@ -1,0 +1,22 @@
+{
+  "playerStats": {
+    "playerId": "player-9",
+    "playerName": "player-9",
+    "goals": 1,
+    "assists": 0,
+    "saves": 0,
+    "wins": 0,
+    "losses": 1,
+    "gamesPlayed": 1,
+    "shotsOnGoal": 2,
+    "shotsBlocked": 0,
+    "hits": 2,
+    "penaltyMinutes": 0,
+    "winRate": 0,
+    "pointsPerGame": 1,
+    "savesPerGame": 0,
+    "firstGameDate": 1750997806024,
+    "lastGameDate": 1750997806024,
+    "lastUpdated": 1750998205404
+  }
+}

@@ -342,12 +342,80 @@ and also configure additional buttons for mobile compatibility.
     }
   }
 
+  function updateLeaderboard(leaderboardData) {
+    const tableBody = document.getElementById('leaderboard-table-body');
+    tableBody.innerHTML = '';
+
+    if (leaderboardData && leaderboardData.length > 0) {
+      // Sort players by total points (goals + assists)
+      const sortedPlayers = [...leaderboardData].sort((a, b) => {
+        const aPoints = (a.goals || 0) + (a.assists || 0);
+        const bPoints = (b.goals || 0) + (b.assists || 0);
+        return bPoints - aPoints;
+      });
+
+      sortedPlayers.forEach((player, index) => {
+        const row = document.createElement('div');
+        row.className = 'leaderboard-player-row';
+        
+        const points = (player.goals || 0) + (player.assists || 0);
+        const winLossRecord = `${player.wins || 0}-${player.losses || 0}`;
+        
+        row.innerHTML = `
+          <div class="leaderboard-col rank-col">${index + 1}</div>
+          <div class="leaderboard-col player-col">${player.playerName || player.playerId}</div>
+          <div class="leaderboard-col">${player.gamesPlayed || 0}</div>
+          <div class="leaderboard-col">${player.goals || 0}</div>
+          <div class="leaderboard-col">${player.assists || 0}</div>
+          <div class="leaderboard-col">${points}</div>
+          <div class="leaderboard-col">${player.shotsOnGoal || 0}</div>
+          <div class="leaderboard-col">${player.saves || 0}</div>
+          <div class="leaderboard-col">${player.hits || 0}</div>
+          <div class="leaderboard-col">${winLossRecord}</div>
+        `;
+        
+        tableBody.appendChild(row);
+      });
+    } else {
+      const noDataRow = document.createElement('div');
+      noDataRow.className = 'leaderboard-player-row';
+      noDataRow.innerHTML = '<div class="leaderboard-col player-col" style="grid-column: 1 / -1; text-align: center; color: #999;">No leaderboard data available</div>';
+      tableBody.appendChild(noDataRow);
+    }
+  }
+
   // Event listeners for stats overlay
   // Set up controls toggle button click handler
   document.getElementById('controls-toggle').addEventListener('click', toggleControlsOverlay);
   
   document.getElementById('stats-toggle').addEventListener('click', enhancedToggleStatsOverlay);
   document.getElementById('live-stats-close').addEventListener('click', enhancedToggleStatsOverlay);
+
+  // Tab event listeners - set up immediately since DOMContentLoaded may have already fired
+  function setupTabEventListeners() {
+    const liveStatsTab = document.getElementById('live-stats-tab');
+    const leaderboardTab = document.getElementById('leaderboard-tab');
+    
+    if (liveStatsTab && !liveStatsTab.hasAttribute('data-listener-setup')) {
+      liveStatsTab.addEventListener('click', () => {
+        switchStatsTab('live-stats');
+      });
+      liveStatsTab.setAttribute('data-listener-setup', 'true');
+    }
+    
+    if (leaderboardTab && !leaderboardTab.hasAttribute('data-listener-setup')) {
+      leaderboardTab.addEventListener('click', () => {
+        switchStatsTab('leaderboard');
+      });
+      leaderboardTab.setAttribute('data-listener-setup', 'true');
+    }
+  }
+
+  // Set up immediately
+  setupTabEventListeners();
+  
+  // Also set up on DOMContentLoaded as fallback
+  document.addEventListener('DOMContentLoaded', setupTabEventListeners);
 
   // Setup seamless scrolling for the stats content area
   function setupStatsOverlayScrolling() {
@@ -404,6 +472,7 @@ and also configure additional buttons for mobile compatibility.
       // Small delay to ensure DOM is ready
       setTimeout(() => {
         setupStatsOverlayScrolling();
+        setupTabEventListeners(); // Ensure tab listeners are set up
         // Note: setupStatsOverlayEventPrevention is now handled within setupStatsOverlayScrolling
       }, 100);
     }
@@ -883,6 +952,10 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'live-stats-response') {
       // Handle live stats response from server
       updateLiveStats(data);
+    }
+    if (data.type === 'leaderboard-response') {
+      // Handle leaderboard response from server
+      updateLeaderboard(data.leaderboardData);
     }
     if (data.type === 'period-time-adjusted') {
       // Adjust period start time to account for goal celebration pause
@@ -1951,6 +2024,80 @@ and also configure additional buttons for mobile compatibility.
       });
     }
   });
+
+  // Live Stats Overlay functionality
+  let currentStatsTab = 'live-stats'; // Track current tab
+
+  function getCurrentPeriod() {
+    const periodElement = document.querySelector('.period');
+    if (periodElement) {
+      const periodText = periodElement.textContent;
+      if (periodText.includes('1st')) return 1;
+      if (periodText.includes('2nd')) return 2;
+      if (periodText.includes('3rd')) return 3;
+    }
+    return 1; // Default to 1st period
+  }
+
+  function switchStatsTab(tabName) {
+    // Update tab buttons
+    const tabs = document.querySelectorAll('.live-stats-tab');
+    tabs.forEach(tab => {
+      tab.classList.remove('active');
+    });
+    
+    const targetTab = document.getElementById(tabName + '-tab');
+    if (targetTab) {
+      targetTab.classList.add('active');
+    }
+    
+    // Update content visibility
+    const liveStatsContent = document.getElementById('live-stats-content');
+    const leaderboardContent = document.getElementById('leaderboard-content');
+    
+    if (liveStatsContent) {
+      liveStatsContent.style.display = tabName === 'live-stats' ? 'block' : 'none';
+    }
+    if (leaderboardContent) {
+      leaderboardContent.style.display = tabName === 'leaderboard' ? 'block' : 'none';
+    }
+    
+    currentStatsTab = tabName;
+    
+    // Request appropriate data
+    if (tabName === 'live-stats') {
+      hytopia.sendData({ type: 'request-live-stats' });
+    } else if (tabName === 'leaderboard') {
+      hytopia.sendData({ type: 'request-leaderboard' });
+    }
+  }
+
+  function toggleStatsOverlay() {
+    const statsOverlay = document.getElementById('live-stats-overlay');
+    if (isStatsOverlayVisible) {
+      statsOverlay.style.display = 'none';
+      isStatsOverlayVisible = false;
+      // Re-lock pointer when closing stats overlay
+      setTimeout(() => {
+        if (document.pointerLockElement === null) {
+          document.body.requestPointerLock?.();
+        }
+      }, 100);
+    } else {
+      statsOverlay.style.display = 'flex';
+      isStatsOverlayVisible = true;
+      // Unlock pointer to allow interaction with stats
+      if (document.pointerLockElement) {
+        document.exitPointerLock?.();
+      }
+      // Request data for current tab
+      if (currentStatsTab === 'live-stats') {
+        hytopia.sendData({ type: 'request-live-stats' });
+      } else {
+        hytopia.sendData({ type: 'request-leaderboard' });
+      }
+    }
+  }
 </script>
 
 <div id="root">
@@ -2387,7 +2534,7 @@ and also configure additional buttons for mobile compatibility.
   <!-- Enhanced Statistics Scoreboard -->
   <div id="stats-scoreboard" class="stats-scoreboard" style="display: none;">
     <div class="stats-header">
-      <div class="stats-title">Game Statistics</div>
+      <div class="stats-title">Statistics</div>
       <div class="stats-close" id="stats-close">×</div>
     </div>
     
@@ -2502,11 +2649,18 @@ and also configure additional buttons for mobile compatibility.
   <div id="live-stats-overlay" class="live-stats-overlay" style="display: none;">
     <div class="live-stats-container">
       <div class="live-stats-header">
-        <div class="live-stats-title">Live Stats</div>
+        <div class="live-stats-title">Statistics</div>
         <div class="live-stats-close" id="live-stats-close">✕</div>
       </div>
       
-      <div class="live-stats-content">
+      <!-- Tab Navigation -->
+      <div class="live-stats-tabs">
+        <div class="live-stats-tab active" id="live-stats-tab" data-tab="live-stats">Live Stats</div>
+        <div class="live-stats-tab" id="leaderboard-tab" data-tab="leaderboard">Leaderboard</div>
+      </div>
+      
+      <!-- Live Stats Content -->
+      <div class="live-stats-content" id="live-stats-content">
         <!-- Team Scores Section -->
         <div class="live-stats-scores">
           <div class="live-stats-team red">
@@ -2606,6 +2760,35 @@ and also configure additional buttons for mobile compatibility.
               </div>
             </div>
           </div>
+        </div>
+      </div>
+      
+      <!-- Leaderboard Content -->
+      <div class="leaderboard-content" id="leaderboard-content" style="display: none;">
+        <div class="leaderboard-header">
+          <div class="leaderboard-subtitle">Global stats of all players currently in game</div>
+        </div>
+        
+        <div class="leaderboard-table">
+          <div class="leaderboard-table-header">
+            <div class="leaderboard-col rank-col">#</div>
+            <div class="leaderboard-col player-col">Player</div>
+            <div class="leaderboard-col">GP</div>
+            <div class="leaderboard-col">G</div>
+            <div class="leaderboard-col">A</div>
+            <div class="leaderboard-col">P</div>
+            <div class="leaderboard-col">SOG</div>
+            <div class="leaderboard-col">SV</div>
+            <div class="leaderboard-col">H</div>
+            <div class="leaderboard-col">W-L</div>
+          </div>
+          <div class="leaderboard-table-body" id="leaderboard-table-body">
+            <!-- Leaderboard data will be populated here -->
+          </div>
+        </div>
+        
+        <div class="leaderboard-footer">
+          <div class="leaderboard-note">GP: Games Played | G: Goals | A: Assists | P: Points | SOG: Shots on Goal | SV: Saves | H: Hits | W-L: Wins-Losses</div>
         </div>
       </div>
 
@@ -5071,6 +5254,7 @@ and also configure additional buttons for mobile compatibility.
     width: 90%;
     max-width: 900px;
     max-height: 90vh; /* Constrain height to viewport */
+    min-height: 90vh;
     overflow-y: auto; /* Make container scrollable */
     overflow-x: hidden;
     scroll-behavior: smooth;
@@ -5116,6 +5300,38 @@ and also configure additional buttons for mobile compatibility.
   .live-stats-close:hover {
     background: rgba(255, 255, 255, 0.1);
     color: #fff;
+  }
+
+  /* Live Stats Tabs */
+  .live-stats-tabs {
+    display: flex;
+    background: rgba(255, 255, 255, 0.03);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+  }
+
+  .live-stats-tab {
+    flex: 1;
+    padding: 15px 20px;
+    text-align: center;
+    color: #ccc;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 3px solid transparent;
+    user-select: none;
+  }
+
+  .live-stats-tab:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+  }
+
+  .live-stats-tab.active {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.08);
+    border-bottom-color: #44aaff;
   }
 
   .live-stats-content {
@@ -5660,6 +5876,139 @@ and also configure additional buttons for mobile compatibility.
       font-size: 0.7rem;
       min-width: 50px;
       padding: 3px 6px;
+    }
+  }
+
+  /* Leaderboard Styles */
+  .leaderboard-content {
+    padding: 20px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    min-height: 600px; /* Match live stats content height */
+  }
+
+  .leaderboard-header {
+    text-align: center;
+    margin-bottom: 25px;
+  }
+
+  .leaderboard-subtitle {
+    color: #ccc;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .leaderboard-table {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+
+  .leaderboard-table-header {
+    display: grid;
+    grid-template-columns: 50px 2fr repeat(8, 1fr);
+    background: rgba(255, 255, 255, 0.1);
+    color: #ccc;
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 15px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    align-items: center;
+  }
+
+  .leaderboard-table-body {
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
+  .leaderboard-player-row {
+    display: grid;
+    grid-template-columns: 50px 2fr repeat(8, 1fr);
+    align-items: center;
+    padding: 12px 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s ease;
+  }
+
+  .leaderboard-player-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .leaderboard-player-row:last-child {
+    border-bottom: none;
+  }
+
+  .leaderboard-col {
+    color: #fff;
+    font-weight: 500;
+    text-align: center;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.2em;
+  }
+
+  .leaderboard-col.rank-col {
+    font-weight: 700;
+    color: #44aaff;
+    font-size: 1rem;
+  }
+
+  .leaderboard-col.player-col {
+    text-align: left;
+    font-weight: 600;
+    padding-left: 10px;
+    justify-content: flex-start;
+  }
+
+  .leaderboard-footer {
+    text-align: center;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+  }
+
+  .leaderboard-note {
+    color: #999;
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+
+  /* Mobile responsive for leaderboard */
+  @media (max-width: 768px) {
+    .leaderboard-table-header,
+    .leaderboard-player-row {
+      grid-template-columns: 30px 1.5fr repeat(4, 1fr);
+      font-size: 0.75rem;
+      padding: 10px 5px;
+    }
+
+    .leaderboard-table-header {
+      /* Hide some columns on mobile */
+      grid-template-columns: 30px 1.5fr 40px 40px 40px 60px;
+    }
+
+    .leaderboard-player-row {
+      grid-template-columns: 30px 1.5fr 40px 40px 40px 60px;
+    }
+
+    /* Hide less important columns on mobile */
+    .leaderboard-col:nth-child(n+7) {
+      display: none;
+    }
+
+    .leaderboard-subtitle {
+      font-size: 0.9rem;
+    }
+
+    .leaderboard-note {
+      font-size: 0.7rem;
     }
   }
 </style>
