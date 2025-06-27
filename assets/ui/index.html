@@ -705,6 +705,12 @@ and also configure additional buttons for mobile compatibility.
     });
     document.querySelector(`[data-filter="${filter}"]`).classList.add('active');
     
+    // Update dropdown value
+    const dropdown = document.getElementById('top100-dropdown');
+    if (dropdown) {
+      dropdown.value = filter;
+    }
+    
     // Re-sort and update table if we have data
     if (cachedTop100Data) {
       updateTop100(cachedTop100Data);
@@ -813,6 +819,15 @@ and also configure additional buttons for mobile compatibility.
         tab.setAttribute('data-filter-listener', 'true');
       }
     });
+
+    // Setup dropdown event listener
+    const dropdown = document.getElementById('top100-dropdown');
+    if (dropdown && !dropdown.hasAttribute('data-dropdown-listener')) {
+      dropdown.addEventListener('change', (event) => {
+        switchTop100Filter(event.target.value);
+      });
+      dropdown.setAttribute('data-dropdown-listener', 'true');
+    }
   }
 
   // Event listeners for stats overlay
@@ -3303,10 +3318,16 @@ and also configure additional buttons for mobile compatibility.
       <div class="top100-content" id="top100-content" style="display: none;">
         <div class="top100-header">
           <div class="top100-subtitle" id="top100-subtitle">Top 100 scorers globally</div>
+          <!-- Mobile Dropdown for Top 100 Categories -->
+          <select class="top100-dropdown" id="top100-dropdown">
+            <option value="scorers">Top Scorers</option>
+            <option value="goalies">Top Goalies</option>
+            <option value="enforcers">Top Enforcers</option>
+          </select>
         </div>
         
-        <!-- Top 100 Sub-tabs -->
-        <div class="top100-sub-tabs">
+        <!-- Top 100 Sub-tabs (Desktop) -->
+        <div class="top100-sub-tabs" id="top100-sub-tabs">
           <div class="top100-sub-tab active" data-filter="scorers">Top Scorers</div>
           <div class="top100-sub-tab" data-filter="goalies">Top Goalies</div>
           <div class="top100-sub-tab" data-filter="enforcers">Top Enforcers</div>
@@ -6623,7 +6644,7 @@ and also configure additional buttons for mobile compatibility.
   .crown-icon {
     width: 14px;
     height: 14px;
-    margin-left: 6px;
+    margin-left: 9px;
     filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
     vertical-align: middle;
   }
@@ -6765,6 +6786,11 @@ and also configure additional buttons for mobile compatibility.
     background: rgba(68, 170, 255, 0.2);
     color: #44aaff;
     font-weight: 700;
+  }
+
+  /* Hide dropdown by default (desktop) */
+  .top100-dropdown {
+    display: none;
   }
 
   .top100-table {
@@ -6988,9 +7014,15 @@ and also configure additional buttons for mobile compatibility.
     /* Make profile pics smaller on mobile */
     .leaderboard-profile-pic,
     .leaderboard-profile-pic-fallback {
-      width: 20px;
-      height: 20px;
-      font-size: 10px;
+      width: 18px;
+      height: 18px;
+      font-size: 9px;
+    }
+
+    /* Smaller player names on mobile */
+    .leaderboard-col.player-col {
+      font-size: 0.7rem;
+      font-weight: 500;
     }
 
     .leaderboard-subtitle {
@@ -7020,6 +7052,347 @@ and also configure additional buttons for mobile compatibility.
 
     .top100-note {
       font-size: 0.7rem;
+    }
+
+    /* Hide keyboard shortcut on all mobile since no keyboard */
+    .live-stats-shortcut {
+      display: none;
+    }
+  }
+
+  /* Mobile Landscape Optimized Tables */
+  @media (max-height: 600px) and (orientation: landscape) {
+    /* Create scrollable container wrapper */
+    .leaderboard-table,
+    .top100-table {
+      position: relative;
+      background: rgba(0, 0, 0, 0.3);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    /* Make the entire table container scrollable horizontally */
+    .leaderboard-table-container,
+    .top100-table-container {
+      overflow-x: auto;
+      overflow-y: hidden;
+      max-height: 160px; /* Consistent with table height */
+      position: relative;
+    }
+
+    /* If containers don't exist, make tables themselves scrollable */
+    .leaderboard-table {
+      overflow-x: auto;
+      overflow-y: hidden;
+      max-height: 160px; /* Consistent with table height */
+    }
+
+    .top100-table {
+      overflow-x: auto;
+      overflow-y: hidden;  
+      max-height: 160px; /* Consistent with table height */
+    }
+
+    /* Fixed header that scrolls with content */
+    .leaderboard-table-header,
+    .top100-table-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(5px);
+      border-bottom: 2px solid rgba(68, 170, 255, 0.3);
+    }
+
+    /* Restore full grid with all columns visible */
+    .leaderboard-table-header,
+    .leaderboard-player-row,
+    .top100-table-header,
+    .top100-player-row {
+      display: grid;
+      grid-template-columns: 35px 25px 120px 45px 45px 45px 45px 45px 45px 50px 55px;
+      min-width: 560px;
+      font-size: 0.65rem;
+      padding: 6px 4px;
+      align-items: center;
+    }
+
+    /* Override mobile column hiding with higher specificity */
+    .leaderboard-table .leaderboard-col:nth-child(n+8),
+    .top100-table .leaderboard-col:nth-child(n+8) {
+      display: flex !important;
+    }
+
+    /* Limit table body to show ~4 rows on mobile landscape */
+    .leaderboard-table-body,
+    .top100-table-body {
+      max-height: 110px; /* Shows approximately 4 compact rows */
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    /* Ultra-compact styling for landscape */
+    .leaderboard-profile-pic,
+    .leaderboard-profile-pic-fallback {
+      width: 14px;
+      height: 14px;
+      font-size: 7px;
+      border-width: 1px;
+    }
+
+    .leaderboard-col.player-col {
+      font-size: 0.6rem;
+      font-weight: 500;
+      padding-left: 3px;
+    }
+
+    .leaderboard-col {
+      font-size: 0.6rem;
+      padding: 1px;
+    }
+
+    .leaderboard-col.rank-col {
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+
+    /* Compact table rows */
+    .leaderboard-player-row,
+    .top100-player-row {
+      padding: 4px 4px;
+      min-height: 24px;
+    }
+
+    /* Enhanced horizontal scrollbar for all tables */
+    .leaderboard-table::-webkit-scrollbar,
+    .top100-table::-webkit-scrollbar,
+    .leaderboard-table-body::-webkit-scrollbar,
+    .top100-table-body::-webkit-scrollbar {
+      height: 8px;
+      width: 8px;
+      display: block !important;
+    }
+
+    .leaderboard-table::-webkit-scrollbar-track,
+    .top100-table::-webkit-scrollbar-track,
+    .leaderboard-table-body::-webkit-scrollbar-track,
+    .top100-table-body::-webkit-scrollbar-track {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      margin: 0 4px;
+    }
+
+    .leaderboard-table::-webkit-scrollbar-thumb,
+    .top100-table::-webkit-scrollbar-thumb,
+    .leaderboard-table-body::-webkit-scrollbar-thumb,
+    .top100-table-body::-webkit-scrollbar-thumb {
+      background: linear-gradient(90deg, rgba(68, 170, 255, 0.7), rgba(68, 170, 255, 0.9));
+      border-radius: 4px;
+      border: 1px solid rgba(68, 170, 255, 0.3);
+    }
+
+    .leaderboard-table::-webkit-scrollbar-thumb:hover,
+    .top100-table::-webkit-scrollbar-thumb:hover,
+    .leaderboard-table-body::-webkit-scrollbar-thumb:hover,
+    .top100-table-body::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(90deg, rgba(68, 170, 255, 0.9), rgba(68, 170, 255, 1));
+    }
+
+    /* Override default scrollbar hiding for mobile landscape */
+    .leaderboard-table-body,
+    .top100-table-body {
+      scrollbar-width: thin !important; /* Override the 'none' setting */
+      -ms-overflow-style: auto !important; /* Override the 'none' setting */
+    }
+
+    /* Show webkit scrollbars on mobile landscape */
+    .leaderboard-table-body::-webkit-scrollbar,
+    .top100-table-body::-webkit-scrollbar {
+      display: block !important; /* Override the 'none' setting */
+      height: 8px !important;
+      width: 8px !important;
+    }
+
+    /* Force scrollbars to be visible on mobile */
+    .leaderboard-table,
+    .top100-table {
+      scrollbar-width: thin;
+      scrollbar-color: rgba(68, 170, 255, 0.8) rgba(255, 255, 255, 0.1);
+    }
+
+    /* Remove table scroll indicators - will add to headers instead */
+    .leaderboard-table::after,
+    .top100-table::after {
+      display: none;
+    }
+
+    /* Optimize content height for landscape - prevent overlay scrolling */
+    .leaderboard-content,
+    .top100-content {
+      max-height: 85vh; /* More conservative height */
+      min-height: auto;
+      padding: 10px 15px;
+      overflow: hidden; /* Prevent content from causing overlay scroll */
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Make Top 100 header inline with tabs */
+    .top100-header {
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      margin-bottom: 12px;
+      gap: 8px;
+      position: relative;
+    }
+
+    .top100-subtitle {
+      font-size: 0.8rem;
+      margin-bottom: 0;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    /* Add scroll hint next to Top 100 subtitle */
+    .top100-subtitle::after {
+      content: ' ← Swipe →';
+      font-size: 0.55rem;
+      color: rgba(68, 170, 255, 0.6);
+      font-weight: 400;
+      margin-left: 6px;
+    }
+
+    /* Force horizontal scrollbar visibility on tables */
+    .leaderboard-table,
+    .top100-table {
+      overflow-x: scroll !important; /* Force horizontal scrollbar */
+      overflow-y: hidden;
+    }
+
+    /* Ensure scrollbars are always visible on mobile landscape */
+    .leaderboard-table::-webkit-scrollbar,
+    .top100-table::-webkit-scrollbar {
+      -webkit-appearance: none !important;
+      height: 10px !important;
+      background: rgba(255, 255, 255, 0.1) !important;
+      border-radius: 5px !important;
+    }
+
+    .leaderboard-table::-webkit-scrollbar-thumb,
+    .top100-table::-webkit-scrollbar-thumb {
+      background: rgba(68, 170, 255, 0.8) !important;
+      border-radius: 5px !important;
+      border: 1px solid rgba(68, 170, 255, 0.4) !important;
+    }
+
+    /* Hide tabs and show dropdown on mobile landscape */
+    .top100-sub-tabs {
+      display: none;
+    }
+
+    .top100-dropdown {
+      display: block;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      color: #fff;
+      font-size: 0.7rem;
+      font-weight: 500;
+      padding: 4px 8px;
+      cursor: pointer;
+      outline: none;
+      transition: all 0.2s ease;
+      min-width: 120px;
+      flex-shrink: 0;
+      margin-left: auto; /* Push to the right */
+    }
+
+    .top100-dropdown:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(68, 170, 255, 0.5);
+    }
+
+    .top100-dropdown:focus {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(68, 170, 255, 0.8);
+      box-shadow: 0 0 0 2px rgba(68, 170, 255, 0.2);
+    }
+
+    .top100-dropdown option {
+      background: rgba(0, 0, 0, 0.9);
+      color: #fff;
+      padding: 4px;
+    }
+
+    /* Compact leaderboard headers */
+    .leaderboard-subtitle {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+
+    /* Add scroll hint to leaderboard subtitle */
+    .leaderboard-subtitle::after {
+      content: ' ← Swipe →';
+      font-size: 0.55rem;
+      color: rgba(68, 170, 255, 0.6);
+      font-weight: 400;
+      margin-left: 6px;
+    }
+
+    /* Ensure table takes remaining space without overflow */
+    .top100-table {
+      flex: 0 0 auto; /* Don't flex, use fixed size */
+      margin-bottom: 8px;
+      max-height: 160px; /* Fixed height for header + ~4 rows + scrollbar */
+      overflow: hidden;
+    }
+
+    .leaderboard-table {
+      flex: 0 0 auto; /* Don't flex, use fixed size */
+      margin-bottom: 8px;
+      max-height: 160px; /* Fixed height for header + ~4 rows + scrollbar */
+    }
+
+    /* Compact footer */
+    .top100-footer,
+    .leaderboard-footer {
+      margin-top: auto;
+      padding: 8px;
+      flex-shrink: 0;
+    }
+
+    .top100-note,
+    .leaderboard-note {
+      font-size: 0.55rem;
+      line-height: 1.2;
+    }
+
+    /* Hide keyboard shortcut text on mobile landscape - not needed since no keyboard */
+    .live-stats-shortcut {
+      display: none;
+    }
+
+    /* Also hide the footer entirely on mobile landscape to maximize space */
+    .live-stats-footer {
+      display: none;
+    }
+
+    /* Add visual cues for scrollable content */
+    .leaderboard-table,
+    .top100-table {
+      box-shadow: 
+        inset -10px 0 10px -10px rgba(0, 0, 0, 0.3),
+        inset 10px 0 10px -10px rgba(0, 0, 0, 0.3);
+    }
+
+    /* Crown icon smaller */
+    .crown-icon {
+      width: 10px;
+      height: 10px;
+      margin-left: 4px;
     }
   }
 
