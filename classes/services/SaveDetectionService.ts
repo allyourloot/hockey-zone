@@ -127,6 +127,12 @@ export class SaveDetectionService {
       // Record the save
       PlayerStatsManager.instance.recordSave(goalieId, lastTouchedBy, shooterInfo.team);
       
+      // TRACK SHOT ON GOAL: Record that this was a shot on goal (saved)
+      PlayerStatsManager.instance.recordShot(lastTouchedBy, shooterInfo.team, true, true, goalieId).catch(error => {
+        console.error('Error recording shot stat:', error);
+      });
+      CONSTANTS.debugLog(`📊 Recorded shot on goal for ${lastTouchedBy} (saved by ${goalieId})`, 'SaveDetectionService');
+      
       // Notify the game manager to broadcast the save
       gameManager.saveRecorded(goalieId, lastTouchedBy);
       

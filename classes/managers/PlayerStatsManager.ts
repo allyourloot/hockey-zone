@@ -1,6 +1,7 @@
 import { Player } from 'hytopia';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
 import * as CONSTANTS from '../utils/constants';
+import { PersistentPlayerStatsManager } from './PersistentPlayerStatsManager';
 
 export interface PlayerStats {
   playerId: string;
@@ -56,6 +57,7 @@ export interface ShotInfo {
 export class PlayerStatsManager {
   private static _instance: PlayerStatsManager;
   private _playerStats: Map<string, PlayerStats> = new Map();
+  private _playerObjects: Map<string, Player> = new Map(); // Track Player objects for persistence
   private _goals: GoalInfo[] = [];
   private _gameStartTime: number = 0;
   private _periodStartTime: number = 0;
@@ -72,7 +74,7 @@ export class PlayerStatsManager {
   /**
    * Initialize a player's stats
    */
-  public initializePlayer(player: Player, team: HockeyTeam, position: HockeyPosition): void {
+  public async initializePlayer(player: Player, team: HockeyTeam, position: HockeyPosition): Promise<void> {
     const stats: PlayerStats = {
       playerId: player.id,
       playerName: player.username,
@@ -92,21 +94,45 @@ export class PlayerStatsManager {
     };
 
     this._playerStats.set(player.id, stats);
-    CONSTANTS.debugLog(`Initialized stats for ${player.username} (${team} ${position})`, 'PlayerStatsManager');
+    this._playerObjects.set(player.id, player); // Store Player object for persistence
+    
+    // Load persistent stats for this player
+    try {
+      await PersistentPlayerStatsManager.instance.loadPlayerStats(player);
+      CONSTANTS.debugLog(`Initialized stats for ${player.username} (${team} ${position}) and loaded persistent data`, 'PlayerStatsManager');
+    } catch (error) {
+      console.error(`Error loading persistent stats for ${player.username}:`, error);
+      CONSTANTS.debugLog(`Initialized stats for ${player.username} (${team} ${position}) but failed to load persistent data`, 'PlayerStatsManager');
+    }
   }
 
   /**
    * Remove a player's stats
    */
-  public removePlayer(playerId: string): void {
+  public async removePlayer(playerId: string): Promise<void> {
+    // Save persistent stats before removing
+    const player = this._playerObjects.get(playerId);
+    if (player) {
+      try {
+        await PersistentPlayerStatsManager.instance.saveDirtyPlayerStats(player);
+      } catch (error) {
+        console.error('Error saving persistent stats before removing player:', error);
+      }
+    }
+    
     this._playerStats.delete(playerId);
+    this._playerObjects.delete(playerId);
+    
+    // Clear from persistent cache
+    PersistentPlayerStatsManager.instance.clearPlayerFromCache(playerId);
+    
     CONSTANTS.debugLog(`Removed stats for player ${playerId}`, 'PlayerStatsManager');
   }
 
   /**
    * Record a goal with proper attribution
    */
-  public recordGoal(scorerId: string, assistId: string | undefined, team: HockeyTeam, period: number, isOwnGoal: boolean = false): GoalInfo {
+  public async recordGoal(scorerId: string, assistId: string | undefined, team: HockeyTeam, period: number, isOwnGoal: boolean = false): Promise<GoalInfo> {
     const timeInPeriod = this.getCurrentPeriodTime();
     
     const goalInfo: GoalInfo = {
@@ -127,6 +153,16 @@ export class PlayerStatsManager {
       } else {
         scorerStats.plusMinus--;
       }
+      
+      // Update persistent stats for scorer
+      try {
+        const scorerPlayer = this.getPlayerObjectById(scorerId);
+        if (scorerPlayer) {
+          await PersistentPlayerStatsManager.instance.recordGoal(scorerPlayer);
+        }
+      } catch (error) {
+        console.error('Error updating persistent goal stats:', error);
+      }
     }
 
     // Record assist if applicable
@@ -135,6 +171,16 @@ export class PlayerStatsManager {
       if (assistStats && !isOwnGoal) {
         assistStats.assists++;
         assistStats.plusMinus++;
+        
+        // Update persistent stats for assister
+        try {
+          const assistPlayer = this.getPlayerObjectById(assistId);
+          if (assistPlayer) {
+            await PersistentPlayerStatsManager.instance.recordAssist(assistPlayer);
+          }
+        } catch (error) {
+          console.error('Error updating persistent assist stats:', error);
+        }
       }
     }
 
@@ -155,7 +201,7 @@ export class PlayerStatsManager {
   /**
    * Record a shot attempt
    */
-  public recordShot(shooterId: string, team: HockeyTeam, onGoal: boolean, saved: boolean, goalieId?: string): ShotInfo {
+  public async recordShot(shooterId: string, team: HockeyTeam, onGoal: boolean, saved: boolean, goalieId?: string): Promise<ShotInfo> {
     const shotInfo: ShotInfo = {
       shooterId,
       team,
@@ -167,6 +213,16 @@ export class PlayerStatsManager {
     const shooterStats = this._playerStats.get(shooterId);
     if (shooterStats && onGoal) {
       shooterStats.shotsOnGoal++;
+      
+      // Update persistent stats for shooter
+      try {
+        const shooterPlayer = this.getPlayerObjectById(shooterId);
+        if (shooterPlayer) {
+          await PersistentPlayerStatsManager.instance.recordShotOnGoal(shooterPlayer);
+        }
+      } catch (error) {
+        console.error('Error updating persistent shot stats:', error);
+      }
     }
 
     // Record save for goalie
@@ -185,11 +241,82 @@ export class PlayerStatsManager {
   /**
    * Record a hit/body check
    */
-  public recordHit(hitterId: string): void {
+  public async recordHit(hitterId: string): Promise<void> {
     const hitterStats = this._playerStats.get(hitterId);
     if (hitterStats) {
       hitterStats.hits++;
+      
+      // Update persistent stats for hitter
+      try {
+        const hitterPlayer = this.getPlayerObjectById(hitterId);
+        if (hitterPlayer) {
+          await PersistentPlayerStatsManager.instance.recordHit(hitterPlayer);
+        }
+      } catch (error) {
+        console.error('Error updating persistent hit stats:', error);
+      }
+      
       CONSTANTS.debugLog(`Recorded hit by ${hitterStats.playerName} (Total: ${hitterStats.hits})`, 'PlayerStatsManager');
+    }
+  }
+
+  /**
+   * Record wins and losses for players based on game outcome
+   */
+  public async recordGameOutcome(winningTeam: HockeyTeam, isTie: boolean = false): Promise<void> {
+    CONSTANTS.debugLog(`Recording game outcome - Winner: ${isTie ? 'TIE' : winningTeam}`, 'PlayerStatsManager');
+    
+    const promises: Promise<void>[] = [];
+    
+    for (const [playerId, stats] of this._playerStats.entries()) {
+      const player = this.getPlayerObjectById(playerId);
+      if (!player) continue;
+      
+      try {
+        if (isTie) {
+          // In case of tie, just record game played (you could modify this logic)
+          await PersistentPlayerStatsManager.instance.updatePlayerStats(player, {
+            gamesPlayed: (await PersistentPlayerStatsManager.instance.getPlayerStats(player)).gamesPlayed + 1
+          });
+          CONSTANTS.debugLog(`Recorded tie for ${stats.playerName}`, 'PlayerStatsManager');
+        } else if (stats.team === winningTeam) {
+          // Player is on winning team
+          await PersistentPlayerStatsManager.instance.recordWin(player);
+          CONSTANTS.debugLog(`Recorded WIN for ${stats.playerName} (${stats.team} team)`, 'PlayerStatsManager');
+        } else {
+          // Player is on losing team
+          await PersistentPlayerStatsManager.instance.recordLoss(player);
+          CONSTANTS.debugLog(`Recorded LOSS for ${stats.playerName} (${stats.team} team)`, 'PlayerStatsManager');
+        }
+      } catch (error) {
+        console.error(`Error recording game outcome for ${stats.playerName}:`, error);
+      }
+    }
+  }
+
+  /**
+   * Save all player persistent stats (call at game end)
+   */
+  public async saveAllPlayerStats(): Promise<void> {
+    CONSTANTS.debugLog('Saving persistent stats for all players', 'PlayerStatsManager');
+    
+    const savePromises: Promise<boolean>[] = [];
+    
+    for (const [playerId, stats] of this._playerStats.entries()) {
+      const player = this.getPlayerObjectById(playerId);
+      if (player) {
+        savePromises.push(
+          PersistentPlayerStatsManager.instance.saveDirtyPlayerStats(player)
+        );
+      }
+    }
+    
+    try {
+      const results = await Promise.all(savePromises);
+      const successCount = results.filter(Boolean).length;
+      CONSTANTS.debugLog(`Successfully saved persistent stats for ${successCount}/${results.length} players`, 'PlayerStatsManager');
+    } catch (error) {
+      console.error('Error saving persistent stats for players:', error);
     }
   }
 
@@ -198,6 +325,13 @@ export class PlayerStatsManager {
    */
   public getPlayerStats(playerId: string): PlayerStats | undefined {
     return this._playerStats.get(playerId);
+  }
+
+  /**
+   * Get Player object by ID for persistence operations
+   */
+  public getPlayerObjectById(playerId: string): Player | undefined {
+    return this._playerObjects.get(playerId);
   }
 
   /**
@@ -459,12 +593,23 @@ export class PlayerStatsManager {
   /**
    * Record a save by a goalie
    */
-  public recordSave(goalieId: string, shooterId: string, shooterTeam: HockeyTeam): void {
+  public async recordSave(goalieId: string, shooterId: string, shooterTeam: HockeyTeam): Promise<void> {
     const goalieStats = this._playerStats.get(goalieId);
     const shooterStats = this._playerStats.get(shooterId);
     
     if (goalieStats) {
       goalieStats.saves++;
+      
+      // Update persistent stats for goalie
+      try {
+        const goaliePlayer = this.getPlayerObjectById(goalieId);
+        if (goaliePlayer) {
+          await PersistentPlayerStatsManager.instance.recordSave(goaliePlayer);
+        }
+      } catch (error) {
+        console.error('Error updating persistent save stats:', error);
+      }
+      
       CONSTANTS.debugLog(`SAVE! ${goalieStats.playerName} saved shot from ${shooterStats?.playerName || 'Unknown'} (${shooterTeam} team)`, 'PlayerStatsManager');
       CONSTANTS.debugLog(`${goalieStats.playerName} now has ${goalieStats.saves} saves`, 'PlayerStatsManager');
     } else {

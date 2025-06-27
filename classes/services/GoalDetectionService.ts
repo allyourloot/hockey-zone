@@ -301,21 +301,16 @@ export class GoalDetectionService {
       const touchHistory = customProps.get('touchHistory') || [];
       console.log(`[GoalDetectionService] Touch history for assists: ${JSON.stringify(touchHistory)}`);
 
-      if (touchHistory.length < 2) {
-        console.log(`[GoalDetectionService] Not enough touch history for assists`);
-        return {}; // Need at least 2 players (scorer + 1 assist)
+      // For own goals, no assists are awarded
+      if (isOwnGoal) {
+        console.log(`[GoalDetectionService] Own goal - no assists awarded`);
+        return {};
       }
 
       const gameManager = HockeyGameManager.instance;
       const scorerTeamInfo = gameManager.getTeamAndPosition(scorerId);
       
       if (!scorerTeamInfo) {
-        return {};
-      }
-
-      // For own goals, no assists are awarded
-      if (isOwnGoal) {
-        console.log(`[GoalDetectionService] Own goal - no assists awarded`);
         return {};
       }
 
@@ -330,67 +325,43 @@ export class GoalDetectionService {
       
       console.log(`[GoalDetectionService] Recent touches (last 10s): ${JSON.stringify(recentTouches.map((t: any) => `${t.playerId}@${new Date(t.timestamp).toLocaleTimeString()}`))}`);
       
-      if (recentTouches.length < 2) {
-        console.log(`[GoalDetectionService] Not enough recent touches for assists`);
-        return {};
-      }
-      
-      // The touch history array is ordered: [most recent toucher, previous toucher, older toucher]
-      // So touchHistory[0] should be the scorer, and touchHistory[1] would be the potential primary assist
-      
-      const mostRecentTouch = recentTouches[0];
-      if (mostRecentTouch.playerId !== scorerId) {
-        console.log(`[GoalDetectionService] Warning: Most recent touch doesn't match scorer. Recent: ${mostRecentTouch.playerId}, Scorer: ${scorerId}`);
-      }
-      
-      // Check for primary assist (the player who touched the puck immediately before the scorer)
-      if (recentTouches.length >= 2) {
-        const primaryAssistTouch = recentTouches[1];
-        const primaryAssistId = primaryAssistTouch.playerId;
-        const primaryAssistTeamInfo = gameManager.getTeamAndPosition(primaryAssistId);
+      // FIXED: Allow assists even if there's only 1 recent touch (the scorer)
+      // Look through all recent touches to find potential assists
+      for (let i = 0; i < recentTouches.length && assists.length < 2; i++) {
+        const touch = recentTouches[i];
+        const touchPlayerId = touch.playerId;
+        const touchPlayerTeamInfo = gameManager.getTeamAndPosition(touchPlayerId);
+        const timeSinceTouch = currentTime - touch.timestamp;
         
-        // Check if the touch was recent enough to count as an assist (within 5 seconds of goal)
-        const timeSinceAssist = currentTime - primaryAssistTouch.timestamp;
-        
-        // Only award assist if:
-        // 1. Player is on the same team as scorer
-        // 2. Player is not the scorer themselves
-        // 3. Touch was recent enough (within 5 seconds)
-        if (primaryAssistTeamInfo && 
-            primaryAssistTeamInfo.team === scorerTeamInfo.team && 
-            primaryAssistId !== scorerId &&
-            timeSinceAssist < 5000) {
-          assists.push(primaryAssistId);
-          console.log(`[GoalDetectionService] Primary assist awarded to ${primaryAssistId} (${primaryAssistTeamInfo.team} team, ${(timeSinceAssist/1000).toFixed(1)}s ago)`);
-        } else {
-          console.log(`[GoalDetectionService] No primary assist - player ${primaryAssistId} not eligible (team: ${primaryAssistTeamInfo?.team}, time: ${(timeSinceAssist/1000).toFixed(1)}s)`);
+        // Skip if this is the scorer themselves
+        if (touchPlayerId === scorerId) {
+          continue;
         }
-      }
-
-      // Check for secondary assist (only if we already have a primary assist)
-      if (assists.length > 0 && recentTouches.length >= 3) {
-        const secondaryAssistTouch = recentTouches[2];
-        const secondaryAssistId = secondaryAssistTouch.playerId;
-        const secondaryAssistTeamInfo = gameManager.getTeamAndPosition(secondaryAssistId);
         
-        // Check if the touch was recent enough to count as an assist
-        const timeSinceAssist = currentTime - secondaryAssistTouch.timestamp;
-        
-        // Only award secondary assist if:
-        // 1. Player is on the same team as scorer
-        // 2. Player is not the scorer themselves
-        // 3. Player is not the same as the primary assist
-        // 4. Touch was recent enough (within 8 seconds - slightly longer for secondary)
-        if (secondaryAssistTeamInfo && 
-            secondaryAssistTeamInfo.team === scorerTeamInfo.team && 
-            secondaryAssistId !== scorerId &&
-            secondaryAssistId !== assists[0] &&
-            timeSinceAssist < 8000) {
-          assists.push(secondaryAssistId);
-          console.log(`[GoalDetectionService] Secondary assist awarded to ${secondaryAssistId} (${secondaryAssistTeamInfo.team} team, ${(timeSinceAssist/1000).toFixed(1)}s ago)`);
-        } else {
-          console.log(`[GoalDetectionService] No secondary assist - player ${secondaryAssistId} not eligible (time: ${(timeSinceAssist/1000).toFixed(1)}s)`);
+        // Skip if player is not on the same team as scorer
+        if (!touchPlayerTeamInfo || touchPlayerTeamInfo.team !== scorerTeamInfo.team) {
+          continue;
         }
+        
+        // Skip if player is already in assists list
+        if (assists.includes(touchPlayerId)) {
+          continue;
+        }
+        
+        // Check timing - primary assist gets 8 seconds, secondary gets 12 seconds
+        const maxTime = assists.length === 0 ? 8000 : 12000;
+        if (timeSinceTouch > maxTime) {
+          continue;
+        }
+        
+        // Award the assist
+        assists.push(touchPlayerId);
+        const assistType = assists.length === 1 ? 'Primary' : 'Secondary';
+        console.log(`[GoalDetectionService] ${assistType} assist awarded to ${touchPlayerId} (${touchPlayerTeamInfo.team} team, ${(timeSinceTouch/1000).toFixed(1)}s ago)`);
+      }
+      
+      if (assists.length === 0) {
+        console.log(`[GoalDetectionService] No assists awarded - no eligible recent touches from teammates`);
       }
 
       return {

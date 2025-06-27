@@ -13,6 +13,7 @@ import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { WorldInitializer } from '../systems/WorldInitializer';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
 import { AudioManager } from './AudioManager';
+import { PlayerStatsManager } from './PlayerStatsManager';
 
 // Import the IceSkatingController type - we'll need to reference it
 // Note: This creates a circular dependency that we'll resolve in later phases
@@ -84,6 +85,12 @@ export class ChatCommandManager {
     this.registerGameplayMessageCommands();
     this.registerAudioDebugCommands();
     this.registerPuckIndicatorTestCommand();
+    this.registerSpawnInfoCommand();
+    this.registerDebugStatsCommand();
+    this.registerTestPersistCommand();
+    this.registerAssignTeamCommand();
+    this.registerTestHitCommand();
+    this.registerTestShotCommand();
   }
   
   /**
@@ -398,26 +405,6 @@ export class ChatCommandManager {
       console.log('[ChatCommand] Players reset to spawn positions');
     });
 
-    // /spawninfo - Show spawn position information
-    this.world.chatManager.registerCommand('/spawninfo', (player) => {
-      const gameManager = HockeyGameManager.instance;
-      const teamAndPos = gameManager.getTeamAndPosition(player);
-      
-      if (teamAndPos) {
-        const spawnData = PlayerSpawnManager.instance.getSpawnData(teamAndPos.team, teamAndPos.position);
-        const rotationDegrees = Math.round((spawnData.yaw * 180) / Math.PI);
-        this.world!.chatManager.sendPlayerMessage(
-          player,
-          `Your spawn: ${teamAndPos.team} ${teamAndPos.position} at X=${spawnData.position.x}, Y=${spawnData.position.y}, Z=${spawnData.position.z}, Rotation=${rotationDegrees}°`,
-          teamAndPos.team === 'RED' ? 'FF4444' : '44AAFF'
-        );
-      } else {
-        this.world!.chatManager.sendPlayerMessage(player, 'You are not assigned to a team/position!', 'FF0000');
-      }
-      
-      console.log('[ChatCommand] Spawn info requested for player:', player.id);
-    });
-
     // /gamestate - Check current game state  
     this.world.chatManager.registerCommand('/gamestate', (player) => {
       const gameManager = HockeyGameManager.instance;
@@ -541,7 +528,9 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, 'Testing enhanced game over sequence with box score...', '00FF00');
       console.log('[ChatCommand] Testing enhanced game over sequence with box score triggered by', player.id);
       
-      gameManager.endGame();
+              gameManager.endGame().catch(error => {
+          console.error('Error ending game via command:', error);
+        });
     });
 
     // /resetgame - Reset game to lobby with team selection
@@ -1253,6 +1242,259 @@ export class ChatCommandManager {
           'FF0000'
         );
         console.error('[PuckTest] Error:', error);
+      }
+    });
+  }
+
+  /**
+   * Register spawn position information command
+   */
+  private registerSpawnInfoCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/spawninfo', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const teamAndPos = gameManager.getTeamAndPosition(player);
+      
+      if (teamAndPos) {
+        const spawnData = PlayerSpawnManager.instance.getSpawnData(teamAndPos.team, teamAndPos.position);
+        const rotationDegrees = Math.round((spawnData.yaw * 180) / Math.PI);
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Your spawn: ${teamAndPos.team} ${teamAndPos.position} at X=${spawnData.position.x}, Y=${spawnData.position.y}, Z=${spawnData.position.z}, Rotation=${rotationDegrees}°`,
+          teamAndPos.team === 'RED' ? 'FF4444' : '44AAFF'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'You are not assigned to a team/position!', 'FF0000');
+      }
+      
+      console.log('[ChatCommand] Spawn info requested for player:', player.id);
+    });
+  }
+
+  /**
+   * Register debug stats command
+   */
+  private registerDebugStatsCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/debugstats', (player) => {
+      const gameManager = HockeyGameManager.instance;
+      const teamAndPos = gameManager.getTeamAndPosition(player);
+      const { PlayerStatsManager } = require('./PlayerStatsManager');
+      const { PersistentPlayerStatsManager } = require('./PersistentPlayerStatsManager');
+      
+      // Check team assignment
+      if (teamAndPos) {
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `✅ Team: ${teamAndPos.team} ${teamAndPos.position}`,
+          '00FF00'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, '❌ NOT assigned to team/position!', 'FF0000');
+        this.world!.chatManager.sendPlayerMessage(player, 'Use team selection UI or /assignteam command first', 'FFAA00');
+        return;
+      }
+      
+      // Check if player is locked in
+      const isLockedIn = gameManager.lockedIn.has(player.id);
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `${isLockedIn ? '✅' : '❌'} Locked in: ${isLockedIn}`,
+        isLockedIn ? '00FF00' : 'FF0000'
+      );
+      
+      // Check current game stats
+      const currentStats = PlayerStatsManager.instance.getPlayerStats(player.id);
+      if (currentStats) {
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `✅ Current stats: ${currentStats.goals}G ${currentStats.assists}A ${currentStats.saves}S`,
+          '00FF00'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, '❌ No current game stats found!', 'FF0000');
+      }
+      
+      // Check if player object is tracked for persistence
+      const playerObj = PlayerStatsManager.instance.getPlayerObjectById(player.id);
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `${playerObj ? '✅' : '❌'} Player object tracked: ${!!playerObj}`,
+        playerObj ? '00FF00' : 'FF0000'
+      );
+      
+      console.log('[ChatCommand] Debug stats for player:', {
+        id: player.id,
+        username: player.username,
+        teamAndPos,
+        isLockedIn,
+        hasCurrentStats: !!currentStats,
+        hasPlayerObject: !!playerObj
+      });
+    });
+  }
+
+  /**
+   * Register test persistence command
+   */
+  private registerTestPersistCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/testpersist', async (player) => {
+      try {
+        const { PersistentPlayerStatsManager } = require('./PersistentPlayerStatsManager');
+        
+        this.world!.chatManager.sendPlayerMessage(player, 'Testing persistence...', 'FFFF00');
+        
+        // Try to load persistent stats
+        const stats = await PersistentPlayerStatsManager.instance.loadPlayerStats(player);
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `✅ Persistence working! Career: ${stats.goals}G ${stats.assists}A ${stats.saves}S ${stats.wins}W-${stats.losses}L`,
+          '00FF00'
+        );
+        
+        // Test saving
+        await PersistentPlayerStatsManager.instance.updatePlayerStats(player, {
+          goals: stats.goals + 1
+        });
+        
+        const saved = await PersistentPlayerStatsManager.instance.savePlayerStats(player);
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `${saved ? '✅' : '❌'} Test save: ${saved ? 'SUCCESS' : 'FAILED'}`,
+          saved ? '00FF00' : 'FF0000'
+        );
+        
+        console.log('[ChatCommand] Persistence test completed for:', player.username, { stats, saved });
+        
+             } catch (error) {
+         console.error('[ChatCommand] Persistence test error:', error);
+         this.world!.chatManager.sendPlayerMessage(player, `❌ Persistence error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'FF0000');
+       }
+    });
+  }
+
+  /**
+   * Register assign team command
+   */
+  private registerAssignTeamCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/assignteam', (player, args) => {
+      const team = args[0]?.toUpperCase();
+      const position = args[1]?.toUpperCase();
+      
+      if (!team || !position) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /assignteam <RED|BLUE> <GOALIE|DEFENDER1|DEFENDER2|WINGER1|WINGER2|CENTER>', 'FFFF00');
+        return;
+      }
+      
+      if (team !== 'RED' && team !== 'BLUE') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Team must be RED or BLUE', 'FF0000');
+        return;
+      }
+      
+      const validPositions = ['GOALIE', 'DEFENDER1', 'DEFENDER2', 'WINGER1', 'WINGER2', 'CENTER'];
+      if (!validPositions.includes(position)) {
+        this.world!.chatManager.sendPlayerMessage(player, `Position must be one of: ${validPositions.join(', ')}`, 'FF0000');
+        return;
+      }
+      
+      const gameManager = HockeyGameManager.instance;
+      const success = gameManager.assignPlayerToTeam(player, team as any, position as any);
+      
+      if (success) {
+        // Lock the player in immediately
+        gameManager.lockInPlayer(player);
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `✅ Assigned and locked in to ${team} ${position}`,
+          team === 'RED' ? 'FF4444' : '44AAFF'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, '❌ Assignment failed - position may be taken', 'FF0000');
+      }
+      
+      console.log('[ChatCommand] Team assignment:', { player: player.username, team, position, success });
+    });
+  }
+
+  /**
+   * Register test hit command
+   */
+  private registerTestHitCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/testhit', async (player) => {
+      try {
+        // Test hit recording
+        await PlayerStatsManager.instance.recordHit(player.id);
+        
+        // Get current stats
+        const stats = PlayerStatsManager.instance.getPlayerStats(player.id);
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `✅ Test hit recorded! You now have ${stats?.hits || 0} hits total.`,
+          '00FF00'
+        );
+        
+        CONSTANTS.debugLog(`Test hit recorded for player ${player.id}`, 'ChatCommandManager');
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `❌ Error recording test hit: ${error}`,
+          'FF0000'
+        );
+        console.error('Error in /testhit command:', error);
+      }
+    });
+  }
+
+  /**
+   * Register test shot command
+   */
+  private registerTestShotCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/testshot', async (player) => {
+      try {
+        // Get team info
+        const teamInfo = HockeyGameManager.instance.getTeamAndPosition(player.id);
+        if (!teamInfo) {
+          this.world!.chatManager.sendPlayerMessage(
+            player, 
+            `❌ You must be assigned to a team first! Use /assignteam`,
+            'FF0000'
+          );
+          return;
+        }
+        
+        // Test shot on goal recording
+        await PlayerStatsManager.instance.recordShot(player.id, teamInfo.team, true, false);
+        
+        // Get current stats
+        const stats = PlayerStatsManager.instance.getPlayerStats(player.id);
+        
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `✅ Test shot recorded! You now have ${stats?.shotsOnGoal || 0} shots on goal total.`,
+          '00FF00'
+        );
+        
+        CONSTANTS.debugLog(`Test shot recorded for player ${player.id}`, 'ChatCommandManager');
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `❌ Error recording test shot: ${error}`,
+          'FF0000'
+        );
+        console.error('Error in /testshot command:', error);
       }
     });
   }

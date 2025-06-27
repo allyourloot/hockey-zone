@@ -178,16 +178,28 @@ export class HockeyGameManager {
       if (primaryAssistId) {
         CONSTANTS.debugLog(`Recording primary assist for: ${primaryAssistId}`, 'HockeyGameManager');
       }
-      PlayerStatsManager.instance.recordGoal(scorerId, primaryAssistId, team, this._period, isOwnGoal);
       
-      // Debug: Log current stats after goal
-      const scorerStats = PlayerStatsManager.instance.getPlayerStats(scorerId);
-      CONSTANTS.debugLog(`Scorer stats after goal: ${JSON.stringify(scorerStats)}`, 'HockeyGameManager');
+      // TRACK SHOT ON GOAL: Record that this was a shot on goal (resulted in goal)
+      PlayerStatsManager.instance.recordShot(scorerId, team, true, false).catch(error => {
+        console.error('Error recording shot stat:', error);
+      }); // onGoal=true, saved=false
+      CONSTANTS.debugLog(`📊 Recorded shot on goal for ${scorerId} (resulted in goal)`, 'HockeyGameManager');
       
-      if (primaryAssistId) {
-        const assistStats = PlayerStatsManager.instance.getPlayerStats(primaryAssistId);
-        CONSTANTS.debugLog(`Primary assist stats after goal: ${JSON.stringify(assistStats)}`, 'HockeyGameManager');
-      }
+      // Record goal (now async)
+      PlayerStatsManager.instance.recordGoal(scorerId, primaryAssistId, team, this._period, isOwnGoal)
+        .then(goalInfo => {
+          // Debug: Log current stats after goal
+          const scorerStats = PlayerStatsManager.instance.getPlayerStats(scorerId);
+          CONSTANTS.debugLog(`Scorer stats after goal: ${JSON.stringify(scorerStats)}`, 'HockeyGameManager');
+          
+          if (primaryAssistId) {
+            const assistStats = PlayerStatsManager.instance.getPlayerStats(primaryAssistId);
+            CONSTANTS.debugLog(`Primary assist stats after goal: ${JSON.stringify(assistStats)}`, 'HockeyGameManager');
+          }
+        })
+        .catch(error => {
+          console.error('Error recording goal stats:', error);
+        });
     } else {
       CONSTANTS.debugLog('No scorer ID provided for goal - stats not recorded', 'HockeyGameManager');
     }
@@ -728,7 +740,9 @@ export class HockeyGameManager {
       // Start period break sequence
       this.startPeriodBreak(previousPeriod);
     } else {
-      this.endGame();
+      this.endGame().catch(error => {
+        console.error('Error ending game:', error);
+      });
     }
   }
 
@@ -1016,7 +1030,7 @@ export class HockeyGameManager {
     CONSTANTS.debugLog('Lobby reset complete - players should see team selection', 'HockeyGameManager');
   }
 
-  public endGame() {
+  public async endGame() {
     if (this._state === HockeyGameState.GAME_OVER) return;
     this._state = HockeyGameState.GAME_OVER;
     
@@ -1042,6 +1056,22 @@ export class HockeyGameManager {
       const blueScore = this._scores[HockeyTeam.BLUE];
       const winner = redScore > blueScore ? 'RED' : blueScore > redScore ? 'BLUE' : 'TIED';
       const color = winner === 'RED' ? 'FF4444' : winner === 'BLUE' ? '44AAFF' : 'FFFFFF';
+      
+      // Record wins/losses and save persistent stats
+      try {
+        if (winner === 'TIED') {
+          await PlayerStatsManager.instance.recordGameOutcome(HockeyTeam.RED, true);
+        } else {
+          const winningTeam = winner === 'RED' ? HockeyTeam.RED : HockeyTeam.BLUE;
+          await PlayerStatsManager.instance.recordGameOutcome(winningTeam, false);
+        }
+        
+        // Save all persistent stats
+        await PlayerStatsManager.instance.saveAllPlayerStats();
+        CONSTANTS.debugLog('Successfully recorded game outcome and saved persistent stats', 'HockeyGameManager');
+      } catch (error) {
+        console.error('Error recording game outcome or saving persistent stats:', error);
+      }
       
       // Generate box score for enhanced game over display
       const boxScore = PlayerStatsManager.instance.generateBoxScore();
@@ -1113,7 +1143,10 @@ export class HockeyGameManager {
     this._playerIdToPlayer.delete(player.id);
     
     // Remove player stats
-    PlayerStatsManager.instance.removePlayer(player.id);
+    PlayerStatsManager.instance.removePlayer(player.id)
+      .catch(error => {
+        console.error('Error removing player stats:', error);
+      });
   }
 
   public getTeamAndPosition(player: Player | string): { team: HockeyTeam, position: HockeyPosition } | undefined {
@@ -1251,7 +1284,10 @@ export class HockeyGameManager {
     this._playerIdToPlayer.set(player.id, player);
     
     // Initialize player stats now that they're locked in
-    PlayerStatsManager.instance.initializePlayer(player, team, position);
+    PlayerStatsManager.instance.initializePlayer(player, team, position)
+      .catch(error => {
+        console.error('Error initializing player stats:', error);
+      });
     
     CONSTANTS.debugLog(`Player ${player.id} locked in to ${team}-${position}`, 'HGM');
           CONSTANTS.debugLog(`Teams after lock-in: ${JSON.stringify(this._teams)}`, 'HGM');
@@ -1316,6 +1352,15 @@ export class HockeyGameManager {
    */
   public saveRecorded(goalieId: string, shooterId: string): void {
     if (!this._world) return;
+    
+    // Record the save in PlayerStatsManager first
+    const shooterInfo = this.getTeamAndPosition(shooterId);
+    if (shooterInfo?.team) {
+      PlayerStatsManager.instance.recordSave(goalieId, shooterId, shooterInfo.team)
+        .catch(error => {
+          console.error('Error recording save in PlayerStatsManager:', error);
+        });
+    }
     
     const goalieStats = PlayerStatsManager.instance.getPlayerStats(goalieId);
     const shooterStats = PlayerStatsManager.instance.getPlayerStats(shooterId);
