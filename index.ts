@@ -43,6 +43,7 @@ import { WorldInitializer } from './classes/systems/WorldInitializer';
 
 // Import services
 import { GoalDetectionService } from './classes/services/GoalDetectionService';
+import { OffsideDetectionService } from './classes/services/OffsideDetectionService';
 import { PuckControlIndicatorService } from './classes/services/PuckControlIndicatorService';
 
 // Import managers
@@ -99,6 +100,9 @@ startServer(world => {
   // Initialize goal detection service
   const goalDetectionService = GoalDetectionService.instance;
   
+  // Initialize offside detection service
+  const offsideDetectionService = OffsideDetectionService.instance;
+  
   // Initialize player spawn manager
   const playerSpawnManager = PlayerSpawnManager.instance;
   playerSpawnManager.initialize(world);
@@ -143,18 +147,33 @@ startServer(world => {
     }
   }, 50);
 
+  // Start offside detection monitoring loop
+  // Check for offside violations every 100ms (10 times per second) for good performance
+  const offsideDetectionInterval = setInterval(() => {
+    const offsideViolation = offsideDetectionService.checkForOffside(puckRef.current, world);
+    if (offsideViolation) {
+      CONSTANTS.debugLog(`Offside detected! ${offsideViolation.violatingTeam} team violated, faceoff at ${offsideViolation.faceoffLocation}`, 'Main');
+      CONSTANTS.debugLog(`Offside violation: ${offsideViolation.violatingPlayerIds.length} players involved`, 'Main');
+      HockeyGameManager.instance.offsideCalled(offsideViolation);
+    }
+  }, 100);
+
   // Start monitoring when the world is ready
   CONSTANTS.debugLog('Goal detection service initialized', 'Main');
+  CONSTANTS.debugLog('Offside detection service initialized', 'Main');
   CONSTANTS.debugLog('Player spawn manager initialized', 'Main');
   goalDetectionService.startMonitoring();
+  offsideDetectionService.startMonitoring();
 
   // Clean up on server shutdown
   process.on('SIGINT', () => {
     CONSTANTS.debugLog('Shutting down services...', 'Main');
     goalDetectionService.stopMonitoring();
+    offsideDetectionService.stopMonitoring();
     PuckControlIndicatorService.instance.cleanup();
     AudioManager.instance.stop(); // Clean up all audio resources
     clearInterval(goalDetectionInterval);
+    clearInterval(offsideDetectionInterval);
     process.exit(0);
   });
 }); 

@@ -1311,6 +1311,10 @@ and also configure additional buttons for mobile compatibility.
         console.log('Enhanced goal info:', goalMessage);
       }
     }
+    if (data.type === 'offside-called') {
+      // Show offside overlay with team and location info
+      showOffsideOverlay(data.violatingTeam, data.faceoffLocation);
+    }
     if (data.type === 'countdown-update') {
       // Show countdown overlay with subtitle support
       showCountdownOverlay(data.countdown, data.subtitle);
@@ -2040,6 +2044,30 @@ and also configure additional buttons for mobile compatibility.
     setTimeout(() => {
       overlay.style.display = 'none';
     }, 6000);
+  }
+
+  // Offside overlay functionality
+  function showOffsideOverlay(violatingTeam, faceoffLocation) {
+    const overlay = document.getElementById('offside-overlay');
+    const teamText = document.getElementById('offside-team-text');
+    
+    // Set team-specific styling and text
+    teamText.className = 'offside-subtext';
+    if (violatingTeam === 'RED') {
+      teamText.classList.add('red-team');
+      teamText.textContent = 'RED TEAM VIOLATION';
+    } else {
+      teamText.classList.add('blue-team');
+      teamText.textContent = 'BLUE TEAM VIOLATION';
+    }
+    
+    // Show the overlay
+    overlay.style.display = 'flex';
+    
+    // Hide after 2 seconds (shorter than goal celebration)
+    setTimeout(() => {
+      overlay.style.display = 'none';
+    }, 2000);
   }
 
   // Countdown overlay functionality
@@ -3098,6 +3126,12 @@ and also configure additional buttons for mobile compatibility.
   <div id="goal-overlay" class="goal-overlay" style="display: none;">
     <div class="goal-text">GOAL!</div>
     <div class="goal-subtext" id="goal-team-text">RED TEAM SCORES!</div>
+  </div>
+
+  <!-- Offside Overlay -->
+  <div id="offside-overlay" class="offside-overlay" style="display: none;">
+    <div class="offside-text">OFFSIDE!</div>
+    <div class="offside-subtext" id="offside-team-text">RED TEAM VIOLATION</div>
   </div>
 
   <!-- Countdown Overlay -->
@@ -4679,6 +4713,89 @@ and also configure additional buttons for mobile compatibility.
   @keyframes goalSubtextSlide {
     from {
       transform: translateY(50px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* Offside Overlay */
+  .offside-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    animation: offsideOverlayFadeIn 0.3s ease-out;
+  }
+
+  .offside-text {
+    font-size: 7rem;
+    font-weight: 900;
+    color: #FFA500;
+    text-shadow: 0 0 30px rgba(255, 165, 0, 0.8), 0 0 60px rgba(255, 165, 0, 0.4);
+    margin-bottom: 20px;
+    animation: offsideTextPulse 0.6s ease-in-out;
+    letter-spacing: 6px;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+  }
+
+  .offside-subtext {
+    font-size: 2.2rem;
+    font-weight: 700;
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.6);
+    letter-spacing: 3px;
+    animation: offsideSubtextSlide 0.8s ease-out 0.2s both;
+  }
+
+  .offside-subtext.red-team {
+    color: #ff4444;
+    text-shadow: 0 0 20px rgba(255, 68, 68, 0.8), 0 0 40px rgba(255, 68, 68, 0.4);
+  }
+
+  .offside-subtext.blue-team {
+    color: #44aaff;
+    text-shadow: 0 0 20px rgba(68, 170, 255, 0.8), 0 0 40px rgba(68, 170, 255, 0.4);
+  }
+
+  @keyframes offsideOverlayFadeIn {
+    from {
+      opacity: 0;
+      backdrop-filter: blur(0px);
+    }
+    to {
+      opacity: 1;
+      backdrop-filter: blur(3px);
+    }
+  }
+
+  @keyframes offsideTextPulse {
+    0% {
+      transform: scale(0.6);
+      opacity: 0;
+    }
+    50% {
+      transform: scale(1.1);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+  }
+
+  @keyframes offsideSubtextSlide {
+    from {
+      transform: translateY(40px);
       opacity: 0;
     }
     to {

@@ -229,7 +229,7 @@ export class PlayerSpawnManager {
   /**
    * Detach the puck from any player who might be controlling it
    */
-  private detachPuckFromAllPlayers(): void {
+  public detachPuckFromAllPlayers(): void {
     try {
       // Import the IceSkatingController class to access the global puck controller
       const { IceSkatingController } = require('../controllers/IceSkatingController');
@@ -299,6 +299,121 @@ export class PlayerSpawnManager {
     }
     
     return positions;
+  }
+
+  /**
+   * Teleport players to faceoff formation around a specific faceoff dot
+   */
+  public teleportPlayersToFaceoffFormation(
+    teams: Record<HockeyTeam, Record<HockeyPosition, string>>,
+    playerIdToPlayer: Map<string, Player>,
+    faceoffPosition: Vector3Like
+  ): void {
+    if (!this._world) {
+      console.error('[PlayerSpawnManager] Cannot teleport players to faceoff - world not initialized');
+      return;
+    }
+
+    let totalTeleported = 0;
+
+    // Define faceoff formation offsets relative to the faceoff dot
+    const faceoffFormation: Record<HockeyTeam, Record<HockeyPosition, { offset: Vector3Like, yaw: number }>> = {
+      [HockeyTeam.RED]: {
+        [HockeyPosition.CENTER]: { offset: { x: 0, y: 0, z: -1 }, yaw: Math.PI }, // 1 block towards Red side
+        [HockeyPosition.WINGER1]: { offset: { x: 5, y: 0, z: -1 }, yaw: Math.PI }, // Right wing inline with center
+        [HockeyPosition.WINGER2]: { offset: { x: -5, y: 0, z: -1 }, yaw: Math.PI }, // Left wing inline with center
+        [HockeyPosition.DEFENDER1]: { offset: { x: 2, y: 0, z: -4 }, yaw: Math.PI }, // Right defense back
+        [HockeyPosition.DEFENDER2]: { offset: { x: -2, y: 0, z: -4 }, yaw: Math.PI }, // Left defense back
+        [HockeyPosition.GOALIE]: { offset: { x: 0, y: 0, z: -12 }, yaw: Math.PI } // Stay back in net area
+      },
+      [HockeyTeam.BLUE]: {
+        [HockeyPosition.CENTER]: { offset: { x: 0, y: 0, z: 1 }, yaw: 0 }, // 1 block towards Blue side
+        [HockeyPosition.WINGER1]: { offset: { x: -5, y: 0, z: 1 }, yaw: 0 }, // Left wing inline with center
+        [HockeyPosition.WINGER2]: { offset: { x: 5, y: 0, z: 1 }, yaw: 0 }, // Right wing inline with center
+        [HockeyPosition.DEFENDER1]: { offset: { x: -2, y: 0, z: 4 }, yaw: 0 }, // Left defense back (mirrored)
+        [HockeyPosition.DEFENDER2]: { offset: { x: 2, y: 0, z: 4 }, yaw: 0 }, // Right defense back (mirrored)
+        [HockeyPosition.GOALIE]: { offset: { x: 0, y: 0, z: 12 }, yaw: 0 } // Stay back in net area
+      }
+    };
+
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const position of Object.values(HockeyPosition)) {
+        const playerId = teams[team][position];
+        if (playerId) {
+          const player = playerIdToPlayer.get(playerId);
+          if (player) {
+            const formation = faceoffFormation[team][position];
+            const finalPosition = {
+              x: faceoffPosition.x + formation.offset.x,
+              y: faceoffPosition.y + formation.offset.y,
+              z: faceoffPosition.z + formation.offset.z
+            };
+
+            const success = this.teleportPlayerToSpecificPosition(player, finalPosition, formation.yaw);
+            if (success) {
+              totalTeleported++;
+              CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}`, 'PlayerSpawnManager');
+            }
+          } else {
+            console.warn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`);
+          }
+        }
+      }
+    }
+
+    CONSTANTS.debugLog(`Teleported ${totalTeleported} players to faceoff formation around: ${JSON.stringify(faceoffPosition)}`, 'PlayerSpawnManager');
+
+    // Announce the faceoff positioning
+    if (this._world && totalTeleported > 0) {
+      this._world.chatManager.sendBroadcastMessage(
+        `Players positioned for faceoff!`,
+        'FFA500' // Orange referee color
+      );
+    }
+  }
+
+  /**
+   * Teleport a player to a specific position with rotation
+   */
+  private teleportPlayerToSpecificPosition(player: Player, position: Vector3Like, yaw: number): boolean {
+    if (!this._world) {
+      console.error('[PlayerSpawnManager] Cannot teleport player - world not initialized');
+      return false;
+    }
+
+    const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
+
+    if (playerEntities.length === 0) {
+      console.warn(`[PlayerSpawnManager] No entities found for player ${player.id}`);
+      return false;
+    }
+
+    let teleported = false;
+    playerEntities.forEach((entity, index) => {
+      try {
+        // Set position
+        entity.setPosition(position);
+        
+        // Set rotation - convert yaw to quaternion
+        const halfYaw = yaw / 2;
+        entity.setRotation({
+          x: 0,
+          y: Math.sin(halfYaw),
+          z: 0,
+          w: Math.cos(halfYaw),
+        });
+        
+        // Stop any movement
+        entity.setLinearVelocity({ x: 0, y: 0, z: 0 });
+        entity.setAngularVelocity({ x: 0, y: 0, z: 0 });
+        
+        teleported = true;
+      } catch (error) {
+        console.error(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error);
+      }
+    });
+
+    return teleported;
   }
 
   /**

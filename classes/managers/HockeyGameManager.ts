@@ -2,7 +2,9 @@ import { DefaultPlayerEntity, Entity, Player, World, Audio } from 'hytopia';
 import { 
   HockeyGameState, 
   HockeyTeam, 
-  HockeyPosition 
+  HockeyPosition,
+  FaceoffLocation,
+  OffsideViolation 
 } from '../utils/types';
 import type { 
   TeamAssignment, 
@@ -41,6 +43,14 @@ export class HockeyGameManager {
     scorerName?: string;
     assistName?: string;
   } = { isActive: false };
+  
+  // Track ongoing offside state for new players
+  private _offsideState: {
+    isActive: boolean;
+    violatingTeam?: HockeyTeam;
+    faceoffLocation?: FaceoffLocation;
+  } = { isActive: false };
+  
   private _countdownState: {
     isActive: boolean;
     countdown?: number;
@@ -311,6 +321,217 @@ export class HockeyGameManager {
       this.startResumeCountdown();
       
     }, 6000); // 6s celebration before reset
+  }
+
+  /**
+   * Handle offside violation - play whistle, show UI, and set up faceoff
+   * @param violation - The offside violation details
+   */
+  public offsideCalled(violation: OffsideViolation): void {
+    if (this._state === HockeyGameState.GOAL_SCORED) return; // Don't interrupt goal celebrations
+    
+    CONSTANTS.debugLog(`Offside called: ${violation.violatingTeam} at ${violation.faceoffLocation}`, 'HockeyGameManager');
+    
+    // Play referee whistle immediately
+    this.playRefereeWhistle();
+    
+    // Track offside state for new players
+    this._offsideState = {
+      isActive: true,
+      violatingTeam: violation.violatingTeam,
+      faceoffLocation: violation.faceoffLocation
+    };
+    
+    // Broadcast offsides call to all players
+    if (this._world) {
+      // Get all player IDs from teams and convert to Player objects
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
+              // Send offside overlay message
+        allPlayers.forEach((player) => {
+          try {
+            player.ui.sendData({
+              type: 'offside-called',
+              violatingTeam: violation.violatingTeam,
+              faceoffLocation: violation.faceoffLocation
+            });
+          } catch (error) {
+            console.error('Error sending offside message to player:', error);
+          }
+        });
+        
+        // Broadcast chat message
+        this._world.chatManager.sendBroadcastMessage(
+          `OFFSIDE! ${violation.violatingTeam} team violation - Faceoff at ${this.getFaceoffLocationDescription(violation.faceoffLocation)}`,
+          'FFA500' // Orange color for referee calls
+        );
+    }
+    
+    // Reset players and puck to faceoff positions after brief delay
+    setTimeout(() => {
+      this.performOffsideFaceoff(violation.faceoffLocation);
+    }, 2000); // 2s delay to show offside message
+  }
+
+  /**
+   * Perform faceoff positioning after offside call
+   */
+  private performOffsideFaceoff(faceoffLocation: FaceoffLocation): void {
+    if (!this._world) return;
+    
+    CONSTANTS.debugLog(`Performing offside faceoff at: ${faceoffLocation}`, 'HockeyGameManager');
+    
+    // Lock movement during reset
+    this._state = HockeyGameState.GOAL_SCORED; // Reuse goal state for movement lock
+    
+    // Get faceoff position from OffsideDetectionService
+    const { OffsideDetectionService } = require('../services/OffsideDetectionService');
+    const faceoffPosition = OffsideDetectionService.instance.getFaceoffPosition(faceoffLocation);
+    
+    // Position players in faceoff formation around the offside dot
+    const validTeams = this.getValidTeamsForReset();
+    PlayerSpawnManager.instance.teleportPlayersToFaceoffFormation(validTeams, this._playerIdToPlayer, faceoffPosition);
+    
+    // Reset puck to the specific faceoff position instead of center ice
+    const { ChatCommandManager } = require('./ChatCommandManager');
+    const puckEntity = ChatCommandManager.instance.getPuck();
+    
+    if (puckEntity && puckEntity.isSpawned) {
+      // Detach puck from any player first
+      PlayerSpawnManager.instance.detachPuckFromAllPlayers();
+      
+      // Move puck to faceoff position
+      puckEntity.setPosition(faceoffPosition);
+      puckEntity.setLinearVelocity({ x: 0, y: 0, z: 0 });
+      puckEntity.setAngularVelocity({ x: 0, y: 0, z: 0 });
+      CONSTANTS.debugLog(`Puck teleported to faceoff position: ${JSON.stringify(faceoffPosition)}`, 'HockeyGameManager');
+    } else {
+      CONSTANTS.debugError(`Could not reset puck for offside faceoff - puck not found or not spawned`, undefined, 'HockeyGameManager');
+    }
+    
+    // Start faceoff countdown
+    this.startFaceoffCountdown(faceoffLocation);
+  }
+
+  /**
+   * Start countdown before faceoff
+   */
+  private startFaceoffCountdown(faceoffLocation: FaceoffLocation): void {
+    if (!this._world) return;
+    
+    let countdown = 3;
+    
+    // Update countdown state
+    this._countdownState = {
+      isActive: true,
+      countdown: countdown,
+      subtitle: `Faceoff - ${this.getFaceoffLocationDescription(faceoffLocation)}`
+    };
+    
+    const countdownInterval = setInterval(() => {
+      if (countdown > 0) {
+        // Play countdown sound only once at start
+        if (countdown === 3) {
+          this.playCountdownSound();
+        }
+        
+        // Update countdown state
+        this._countdownState.countdown = countdown;
+        
+        // Send countdown update to UI
+        this.broadcastToAllPlayers({
+          type: 'countdown-update',
+          countdown: countdown,
+          subtitle: `Faceoff - ${this.getFaceoffLocationDescription(faceoffLocation)}`
+        });
+        
+        // Chat message as backup
+        this._world!.chatManager.sendBroadcastMessage(
+          `Faceoff in ${countdown}...`,
+          'FFFF00'
+        );
+        countdown--;
+      } else {
+        clearInterval(countdownInterval);
+        
+        // Clear states (faceoff is complete)
+        this._countdownState.isActive = false;
+        this._offsideState.isActive = false;
+        
+        // Send "GO!" to UI
+        this.broadcastToAllPlayers({
+          type: 'countdown-go'
+        });
+        
+        // Play final whistle to start play
+        this.playRefereeWhistle();
+        
+        // Resume normal play
+        this._state = HockeyGameState.IN_PERIOD;
+        
+        // Lock pointer for gameplay
+        if (this._world) {
+          const allPlayerIds = [
+            ...Object.values(this._teams[HockeyTeam.RED]), 
+            ...Object.values(this._teams[HockeyTeam.BLUE])
+          ].filter(Boolean) as string[];
+          
+          const allPlayers = allPlayerIds
+            .map(playerId => this._playerIdToPlayer.get(playerId))
+            .filter(Boolean) as Player[];
+          
+          allPlayers.forEach((player) => {
+            try {
+              player.ui.lockPointer(true);
+            } catch (error) {
+              console.error('Error locking pointer after faceoff:', error);
+            }
+          });
+        }
+        
+        CONSTANTS.debugLog('Faceoff complete - play resumed', 'HockeyGameManager');
+        
+        // Hide countdown overlay after a brief delay
+        setTimeout(() => {
+          this.broadcastToAllPlayers({
+            type: 'countdown-end'
+          });
+        }, 1000);
+      }
+    }, 1000); // 1 second intervals
+  }
+
+  /**
+   * Get human-readable description of faceoff location
+   */
+  private getFaceoffLocationDescription(location: FaceoffLocation): string {
+    switch (location) {
+      case FaceoffLocation.RED_DEFENSIVE_LEFT:
+        return 'Red Defensive Zone (Left)';
+      case FaceoffLocation.RED_DEFENSIVE_RIGHT:
+        return 'Red Defensive Zone (Right)';
+      case FaceoffLocation.RED_NEUTRAL_LEFT:
+        return 'Red Neutral Zone (Left)';
+      case FaceoffLocation.RED_NEUTRAL_RIGHT:
+        return 'Red Neutral Zone (Right)';
+      case FaceoffLocation.BLUE_NEUTRAL_LEFT:
+        return 'Blue Neutral Zone (Left)';
+      case FaceoffLocation.BLUE_NEUTRAL_RIGHT:
+        return 'Blue Neutral Zone (Right)';
+      case FaceoffLocation.BLUE_DEFENSIVE_LEFT:
+        return 'Blue Defensive Zone (Left)';
+      case FaceoffLocation.BLUE_DEFENSIVE_RIGHT:
+        return 'Blue Defensive Zone (Right)';
+      default:
+        return 'Center Ice';
+    }
   }
 
   /**

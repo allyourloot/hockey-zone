@@ -8,10 +8,11 @@ import type { World, PlayerEntity } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
 import { PuckTrailManager } from './PuckTrailManager';
 import { GoalDetectionService } from '../services/GoalDetectionService';
+import { OffsideDetectionService } from '../services/OffsideDetectionService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { WorldInitializer } from '../systems/WorldInitializer';
-import { HockeyTeam, HockeyPosition } from '../utils/types';
+import { HockeyTeam, HockeyPosition, HockeyZone, FaceoffLocation, OffsideViolation } from '../utils/types';
 import { AudioManager } from './AudioManager';
 import { PlayerStatsManager } from './PlayerStatsManager';
 
@@ -76,6 +77,7 @@ export class ChatCommandManager {
     this.registerTrailColorCommand();
     this.registerTestSleepCommand();
     this.registerGoalDetectionCommands();
+    this.registerOffsideCommands();
     this.registerBodyCheckDebugCommand();
     this.registerStickCheckDebugCommand();
     this.registerStatsTestCommands();
@@ -544,6 +546,258 @@ export class ChatCommandManager {
       console.log('[ChatCommand] Game reset to lobby triggered by', player.id);
       
       gameManager.resetToLobby();
+    });
+  }
+
+  /**
+   * Register offside detection debug commands
+   */
+  private registerOffsideCommands(): void {
+    if (!this.world) return;
+
+    // /startoffside - Start offside monitoring
+    this.world.chatManager.registerCommand('/startoffside', (player) => {
+      const offsideService = OffsideDetectionService.instance;
+      offsideService.startMonitoring();
+      this.world!.chatManager.sendPlayerMessage(player, 'Offside monitoring started!', '00FF00');
+      console.log('[ChatCommand] Offside monitoring started by', player.id);
+    });
+
+    // /stopoffside - Stop offside monitoring
+    this.world.chatManager.registerCommand('/stopoffside', (player) => {
+      const offsideService = OffsideDetectionService.instance;
+      offsideService.stopMonitoring();
+      this.world!.chatManager.sendPlayerMessage(player, 'Offside monitoring stopped!', 'FF0000');
+      console.log('[ChatCommand] Offside monitoring stopped by', player.id);
+    });
+
+    // /offsideinfo - Show offside detection debug information
+    this.world.chatManager.registerCommand('/offsideinfo', (player) => {
+      const offsideService = OffsideDetectionService.instance;
+      const debugInfo = offsideService.getDebugInfo();
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Offside Detection Status: ${debugInfo.isActive ? 'ACTIVE' : 'INACTIVE'}`, 
+        debugInfo.isActive ? '00FF00' : 'FF0000'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Zone Boundaries: Red Defensive < ${debugInfo.zoneBoundaries.redDefensiveMax}, Blue Defensive > ${debugInfo.zoneBoundaries.blueDefensiveMin}`, 
+        'FFFF00'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Player History Count: ${debugInfo.playerHistoryCount}`, 
+        'FFFF00'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Faceoff Locations: ${debugInfo.faceoffLocations.length} available`, 
+        'FFFF00'
+      );
+
+      if (this.puck && this.puck.isSpawned) {
+        const pos = this.puck.position;
+        const zone = offsideService.getZoneFromPosition(pos);
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `Puck Position: X=${pos.x.toFixed(2)}, Y=${pos.y.toFixed(2)}, Z=${pos.z.toFixed(2)} (Zone: ${zone})`, 
+          'FFFF00'
+        );
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Puck not found or not spawned!', 'FF0000');
+      }
+
+      console.log('[ChatCommand] Offside detection debug info:', debugInfo);
+    });
+
+    // /myzone - Show what zone the player is currently in
+    this.world.chatManager.registerCommand('/myzone', (player) => {
+      const playerEntities = this.world!.entityManager.getPlayerEntitiesByPlayer(player);
+      if (playerEntities.length === 0) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No player entity found!', 'FF0000');
+        return;
+      }
+
+      const playerPosition = playerEntities[0].position;
+      const offsideService = OffsideDetectionService.instance;
+      const zone = offsideService.getZoneFromPosition(playerPosition);
+      
+      const teamInfo = HockeyGameManager.instance.getTeamAndPosition(player.id);
+      const teamText = teamInfo ? `${teamInfo.team} ${teamInfo.position}` : 'Unassigned';
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Your Position: X=${playerPosition.x.toFixed(2)}, Z=${playerPosition.z.toFixed(2)}`, 
+        '00FF00'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Current Zone: ${zone} (Team: ${teamText})`, 
+        zone === HockeyZone.NEUTRAL ? 'FFFF00' : 
+        zone === HockeyZone.RED_DEFENSIVE ? 'FF4444' : '44AAFF'
+      );
+
+      console.log(`[ChatCommand] Player ${player.id} zone check: ${zone} at ${JSON.stringify(playerPosition)}`);
+    });
+
+    // /faceoffspots - Show all faceoff locations
+    this.world.chatManager.registerCommand('/faceoffspots', (player) => {
+      const offsideService = OffsideDetectionService.instance;
+      const faceoffPositions = offsideService.getAllFaceoffPositions();
+      
+      this.world!.chatManager.sendPlayerMessage(player, '=== FACEOFF LOCATIONS ===', 'FFFF00');
+      
+      Object.entries(faceoffPositions).forEach(([location, position]) => {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `${location}: X=${position.x}, Z=${position.z}`, 
+          location.includes('RED') ? 'FF4444' : '44AAFF'
+        );
+      });
+
+      console.log('[ChatCommand] Faceoff spots displayed for', player.id);
+    });
+
+    // /testoffside - Simulate an offside violation for testing
+    this.world.chatManager.registerCommand('/testoffside', (player, args) => {
+      const team = args[0]?.toUpperCase();
+      const location = args[1]?.toUpperCase();
+      
+      if (team !== 'RED' && team !== 'BLUE') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /testoffside <RED|BLUE> <location>', 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, 'Locations: RED_DEFENSIVE_LEFT, RED_DEFENSIVE_RIGHT, RED_NEUTRAL_LEFT, RED_NEUTRAL_RIGHT, BLUE_NEUTRAL_LEFT, BLUE_NEUTRAL_RIGHT, BLUE_DEFENSIVE_LEFT, BLUE_DEFENSIVE_RIGHT', 'FFFF00');
+        return;
+      }
+      
+      // Default to neutral zone if no location specified
+      let faceoffLocation: FaceoffLocation;
+      if (location && Object.values(FaceoffLocation).includes(location as FaceoffLocation)) {
+        faceoffLocation = location as FaceoffLocation;
+      } else {
+        // Default based on team
+        faceoffLocation = team === 'RED' ? FaceoffLocation.RED_NEUTRAL_LEFT : FaceoffLocation.BLUE_NEUTRAL_LEFT;
+        this.world!.chatManager.sendPlayerMessage(player, `No valid location specified, using default: ${faceoffLocation}`, 'FFFF00');
+      }
+
+      // Create a mock offside violation
+      const violation: OffsideViolation = {
+        violatingTeam: team as HockeyTeam,
+        faceoffLocation: faceoffLocation,
+        timestamp: Date.now(),
+        violatingPlayerIds: [player.id],
+        puckPosition: { x: 0, y: 1, z: 0 },
+        blueLlineCrossedZone: HockeyZone.NEUTRAL
+      };
+
+      // Actually trigger the offside call through HockeyGameManager
+      HockeyGameManager.instance.offsideCalled(violation);
+
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Test offside triggered: ${team} violation, faceoff at ${faceoffLocation}`, 
+        '00FF00'
+      );
+
+      console.log(`[ChatCommand] Test offside triggered: ${team} at ${faceoffLocation} by ${player.id}`);
+    });
+
+    // /resetoffside - Reset offside detection service
+    this.world.chatManager.registerCommand('/resetoffside', (player) => {
+      OffsideDetectionService.instance.reset();
+      this.world!.chatManager.sendPlayerMessage(player, 'Offside detection service reset!', '00FF00');
+      console.log('[ChatCommand] Offside detection service reset by', player.id);
+    });
+
+    // /testfaceoff - Test faceoff formation at closest neutral zone dot
+    this.world.chatManager.registerCommand('/testfaceoff', (player) => {
+      const { OffsideDetectionService } = require('../services/OffsideDetectionService');
+      const { PlayerSpawnManager } = require('./PlayerSpawnManager');
+      const gameManager = HockeyGameManager.instance;
+      
+      // Get player's current position to find closest faceoff dot
+      const playerEntities = this.world!.entityManager.getPlayerEntitiesByPlayer(player);
+      if (playerEntities.length === 0) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No player entity found!', 'FF0000');
+        return;
+      }
+      
+      const playerPos = playerEntities[0].position;
+      
+      // Find closest neutral zone faceoff position
+      const neutralPositions = {
+        RED_NEUTRAL_LEFT: { x: -13.36, y: 1.75, z: -3.75 },
+        RED_NEUTRAL_RIGHT: { x: 14.36, y: 1.75, z: -3.75 },
+        BLUE_NEUTRAL_LEFT: { x: -13.36, y: 1.75, z: 5.4 },
+        BLUE_NEUTRAL_RIGHT: { x: 14.36, y: 1.75, z: 5.25 }
+      };
+      
+      let closestLocation = 'RED_NEUTRAL_LEFT';
+      let shortestDistance = Number.MAX_VALUE;
+      
+      for (const [location, pos] of Object.entries(neutralPositions)) {
+        const distance = Math.sqrt(
+          Math.pow(playerPos.x - pos.x, 2) + Math.pow(playerPos.z - pos.z, 2)
+        );
+        if (distance < shortestDistance) {
+          shortestDistance = distance;
+          closestLocation = location;
+        }
+      }
+      
+      const faceoffPos = neutralPositions[closestLocation as keyof typeof neutralPositions];
+      const validTeams = gameManager.getValidTeamsForReset();
+      
+      // Test the faceoff formation
+      PlayerSpawnManager.instance.teleportPlayersToFaceoffFormation(
+        validTeams, 
+        gameManager['_playerIdToPlayer'], 
+        faceoffPos
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player, 
+        `Testing faceoff formation at ${closestLocation}: X=${faceoffPos.x}, Z=${faceoffPos.z}`, 
+        '00FF00'
+      );
+      console.log(`[ChatCommand] Testing faceoff formation at ${closestLocation} by player:`, player.id);
+    });
+
+    // /offsideon - Show only offside detection logs
+    this.world.chatManager.registerCommand('/offsideon', (player) => {
+      // Set up offside-only log filter
+      (console as any).originalLog = console.log;
+      console.log = (...args: any[]) => {
+        const message = args.join(' ');
+        if (message.includes('OffsideDetectionService') || 
+            message.includes('🔵') || 
+            message.includes('🚨') || 
+            message.includes('✅') || 
+            message.includes('⚠️') || 
+            message.includes('🔍') || 
+            message.includes('📊') || 
+            message.includes('⚪')) {
+          (console as any).originalLog(...args);
+        }
+      };
+      this.world!.chatManager.sendPlayerMessage(player, '🏒 Showing ONLY offside detection logs', '00FF00');
+      console.log('[ChatCommand] Offside-only logging enabled by', player.id);
+    });
+
+    // /offsideoff - Show all logs again
+    this.world.chatManager.registerCommand('/offsideoff', (player) => {
+      // Restore original console.log
+      if ((console as any).originalLog) {
+        console.log = (console as any).originalLog;
+        delete (console as any).originalLog;
+      }
+      this.world!.chatManager.sendPlayerMessage(player, '📝 Showing ALL logs again', '00FF00');
+      console.log('[ChatCommand] Full logging restored by', player.id);
     });
   }
 
@@ -1147,6 +1401,24 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO DEBUG FILTER DISABLED', 'FFFF00');
       this.world!.chatManager.sendPlayerMessage(player, 'All debug logs will show in terminal', 'FFFFFF');
       this.world!.chatManager.sendPlayerMessage(player, 'Use /audioon to enable audio-only mode', 'CCCCCC');
+    });
+
+    // /offsideon - Enable offside-only debug filter (shows only OffsideDetectionService logs)
+    this.world.chatManager.registerCommand('/offsideon', (player) => {
+      const { setOffsideDebugFilter } = require('../utils/constants');
+      setOffsideDebugFilter(true);
+      this.world!.chatManager.sendPlayerMessage(player, '⚪ OFFSIDE DEBUG FILTER ENABLED', '00FF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'Only OffsideDetectionService logs will show in terminal', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, 'Use /offsideoff to disable', 'CCCCCC');
+    });
+
+    // /offsideoff - Disable offside-only debug filter (shows all logs)
+    this.world.chatManager.registerCommand('/offsideoff', (player) => {
+      const { setOffsideDebugFilter } = require('../utils/constants');
+      setOffsideDebugFilter(false);
+      this.world!.chatManager.sendPlayerMessage(player, '⚪ OFFSIDE DEBUG FILTER DISABLED', 'FFFF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'All debug logs will show in terminal', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, 'Use /offsideon to enable offside-only mode', 'CCCCCC');
     });
 
     // /audioplayercount <number> - Manually set player count for scaling testing

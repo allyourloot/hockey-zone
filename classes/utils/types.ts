@@ -255,4 +255,61 @@ export type DashConstants = typeof import('./constants').DASH;
 export type SkatingSound = typeof import('./constants').SKATING_SOUND;
 export type PuckControlConstants = typeof import('./constants').PUCK_CONTROL;
 export type PassShotConstants = typeof import('./constants').PASS_SHOT;
-export type AudioConstants = typeof import('./constants').AUDIO; 
+export type AudioConstants = typeof import('./constants').AUDIO;
+
+// =========================
+// OFFSIDE DETECTION TYPES
+// =========================
+
+// Hockey zone definitions based on blue lines
+export enum HockeyZone {
+  RED_DEFENSIVE = 'RED_DEFENSIVE',    // Z < -6.5 (Red's defensive zone)
+  NEUTRAL = 'NEUTRAL',                // -6.5 <= Z <= 7.5 (Neutral zone)
+  BLUE_DEFENSIVE = 'BLUE_DEFENSIVE'   // Z > 7.5 (Blue's defensive zone)
+}
+
+// Faceoff locations based on red dot positions (ID 103)
+export enum FaceoffLocation {
+  RED_DEFENSIVE_LEFT = 'RED_DEFENSIVE_LEFT',     // (-14,0,-23)
+  RED_DEFENSIVE_RIGHT = 'RED_DEFENSIVE_RIGHT',   // (15,0,-23)
+  RED_NEUTRAL_LEFT = 'RED_NEUTRAL_LEFT',         // (-14,0,-4)
+  RED_NEUTRAL_RIGHT = 'RED_NEUTRAL_RIGHT',       // (15,0,-4)
+  BLUE_NEUTRAL_LEFT = 'BLUE_NEUTRAL_LEFT',       // (-14,0,21)
+  BLUE_NEUTRAL_RIGHT = 'BLUE_NEUTRAL_RIGHT',     // (15,0,21)
+  BLUE_DEFENSIVE_LEFT = 'BLUE_DEFENSIVE_LEFT',   // (-14,0,5)
+  BLUE_DEFENSIVE_RIGHT = 'BLUE_DEFENSIVE_RIGHT'  // (15,0,5)
+}
+
+// Blue line crossing detection
+export interface BlueLLineCrossing {
+  zone: HockeyZone;
+  direction: 'entering' | 'exiting';
+  crossingTeam: HockeyTeam; // Which team's offensive zone was entered
+  puckPosition: Vector3Like;
+  timestamp: number;
+}
+
+// Player position tracking for offsides
+export interface PlayerPositionHistory {
+  playerId: string;
+  team: HockeyTeam;
+  position: Vector3Like;
+  zone: HockeyZone;
+  timestamp: number;
+}
+
+// Offsides violation details
+export interface OffsideViolation {
+  violatingPlayerIds: string[]; // Player IDs who were offside
+  violatingTeam: HockeyTeam;
+  faceoffLocation: FaceoffLocation;
+  puckPosition: Vector3Like;
+  blueLlineCrossedZone: HockeyZone; // Which zone the violation occurred in
+  timestamp: number;
+}
+
+// Zone boundary configuration
+export interface ZoneBoundary {
+  redDefensiveMax: number;  // Z coordinate (anything less is Red defensive)
+  blueDefensiveMin: number; // Z coordinate (anything greater is Blue defensive)
+} 

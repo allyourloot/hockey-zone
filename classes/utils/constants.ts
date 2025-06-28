@@ -6,13 +6,16 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
 
 // NEW: Save detection debug filter for isolating SaveDetectionService logs
 export const SAVE_DEBUG_FILTER = false; // Set to true to show ONLY SaveDetectionService logs
+
+// NEW: Offside detection debug filter for isolating OffsideDetectionService logs
+export const OFFSIDE_DEBUG_FILTER = true; // Set to true to show ONLY OffsideDetectionService logs
 
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
@@ -447,6 +450,12 @@ export function debugLog(message: string, prefix?: string): void {
     return;
   }
   
+  // Offside detection debug filter: only show OffsideDetectionService logs if filter is enabled
+  const offsideFilterEnabled = (globalThis as any).OFFSIDE_DEBUG_FILTER ?? OFFSIDE_DEBUG_FILTER;
+  if (offsideFilterEnabled && prefix !== 'OffsideDetectionService') {
+    return;
+  }
+  
   const logMessage = prefix ? `[${prefix}] ${message}` : message;
   console.log(logMessage);
 }
@@ -469,6 +478,12 @@ export function debugError(message: string, error?: any, prefix?: string): void 
   // Save detection debug filter: only show SaveDetectionService logs if filter is enabled
   const saveFilterEnabled = (globalThis as any).SAVE_DEBUG_FILTER ?? SAVE_DEBUG_FILTER;
   if (saveFilterEnabled && prefix !== 'SaveDetectionService') {
+    return;
+  }
+  
+  // Offside detection debug filter: only show OffsideDetectionService logs if filter is enabled
+  const offsideFilterEnabled = (globalThis as any).OFFSIDE_DEBUG_FILTER ?? OFFSIDE_DEBUG_FILTER;
+  if (offsideFilterEnabled && prefix !== 'OffsideDetectionService') {
     return;
   }
   
@@ -497,6 +512,12 @@ export function debugWarn(message: string, prefix?: string): void {
   // Save detection debug filter: only show SaveDetectionService logs if filter is enabled
   const saveFilterEnabled = (globalThis as any).SAVE_DEBUG_FILTER ?? SAVE_DEBUG_FILTER;
   if (saveFilterEnabled && prefix !== 'SaveDetectionService') {
+    return;
+  }
+  
+  // Offside detection debug filter: only show OffsideDetectionService logs if filter is enabled
+  const offsideFilterEnabled = (globalThis as any).OFFSIDE_DEBUG_FILTER ?? OFFSIDE_DEBUG_FILTER;
+  if (offsideFilterEnabled && prefix !== 'OffsideDetectionService') {
     return;
   }
   
@@ -546,4 +567,26 @@ export function setSaveDebugFilter(enabled: boolean): void {
 // Save detection debug filter shortcuts
 (globalThis as any).setSaveDebugFilter = setSaveDebugFilter;
 (globalThis as any).saveon = () => setSaveDebugFilter(true);
-(globalThis as any).saveoff = () => setSaveDebugFilter(false); 
+(globalThis as any).saveoff = () => setSaveDebugFilter(false);
+
+/**
+ * Toggle the offside detection debug filter at runtime
+ * When enabled, only OffsideDetectionService logs will be shown in the console
+ * @param enabled - Whether to enable offside detection filtering
+ */
+export function setOffsideDebugFilter(enabled: boolean): void {
+  (globalThis as any).OFFSIDE_DEBUG_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('⚪ OFFSIDE DEBUG FILTER ENABLED - Only OffsideDetectionService logs will be shown');
+    console.log('💡 To disable: setOffsideDebugFilter(false) or type "offsideoff" in console');
+  } else {
+    console.log('⚪ OFFSIDE DEBUG FILTER DISABLED - All debug logs will be shown');
+    console.log('💡 To enable: setOffsideDebugFilter(true) or type "offsideon" in console');
+  }
+}
+
+// Offside detection debug filter shortcuts
+(globalThis as any).setOffsideDebugFilter = setOffsideDebugFilter;
+(globalThis as any).offsideon = () => setOffsideDebugFilter(true);
+(globalThis as any).offsideoff = () => setOffsideDebugFilter(false); 
