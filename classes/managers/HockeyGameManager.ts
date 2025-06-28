@@ -407,11 +407,31 @@ export class HockeyGameManager {
       // Detach puck from any player first
       PlayerSpawnManager.instance.detachPuckFromAllPlayers();
       
+      // Check if this is a faceoff dot that needs adjustments for puck position
+      const isBlueNeutralRight = Math.abs(faceoffPosition.x - 14.36) < 0.1 && 
+                                 Math.abs(faceoffPosition.z - 5.25) < 0.1;
+      const isRedNeutralRight = Math.abs(faceoffPosition.x - 14.36) < 0.1 && 
+                                Math.abs(faceoffPosition.z - (-3.75)) < 0.1;
+      const isRedNeutralLeft = Math.abs(faceoffPosition.x - (-13.36)) < 0.1 && 
+                               Math.abs(faceoffPosition.z - (-3.75)) < 0.1;
+      
+      const adjustedPuckPosition = {
+        x: faceoffPosition.x + (isBlueNeutralRight ? 1 : 
+                                isRedNeutralRight ? 1 : 
+                                isRedNeutralLeft ? -0.1 : 0),
+        y: faceoffPosition.y,
+        z: faceoffPosition.z + (isRedNeutralRight ? 0.2 : 
+                                isRedNeutralLeft ? 0.2 : 0)
+      };
+      
       // Move puck to faceoff position
-      puckEntity.setPosition(faceoffPosition);
+      puckEntity.setPosition(adjustedPuckPosition);
       puckEntity.setLinearVelocity({ x: 0, y: 0, z: 0 });
       puckEntity.setAngularVelocity({ x: 0, y: 0, z: 0 });
-      CONSTANTS.debugLog(`Puck teleported to faceoff position: ${JSON.stringify(faceoffPosition)}`, 'HockeyGameManager');
+      const puckAdjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
+                                 isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
+                                 isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
+      CONSTANTS.debugLog(`Puck teleported to faceoff position: ${JSON.stringify(adjustedPuckPosition)}${puckAdjustmentNote}`, 'HockeyGameManager');
     } else {
       CONSTANTS.debugError(`Could not reset puck for offside faceoff - puck not found or not spawned`, undefined, 'HockeyGameManager');
     }

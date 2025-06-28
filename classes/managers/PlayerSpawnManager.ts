@@ -336,6 +336,18 @@ export class PlayerSpawnManager {
       }
     };
 
+    // Check if this is a faceoff dot that needs adjustments
+    const isBlueNeutralRight = Math.abs(faceoffPosition.x - 14.36) < 0.1 && 
+                               Math.abs(faceoffPosition.z - 5.25) < 0.1;
+    const isRedNeutralRight = Math.abs(faceoffPosition.x - 14.36) < 0.1 && 
+                              Math.abs(faceoffPosition.z - (-3.75)) < 0.1;
+    const isRedNeutralLeft = Math.abs(faceoffPosition.x - (-13.36)) < 0.1 && 
+                             Math.abs(faceoffPosition.z - (-3.75)) < 0.1;
+    
+    const xAdjustment = isBlueNeutralRight ? 1 : 
+                        isRedNeutralRight ? 1 : 
+                        isRedNeutralLeft ? -0.1 : 0;
+
     for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
       for (const position of Object.values(HockeyPosition)) {
         const playerId = teams[team][position];
@@ -343,16 +355,21 @@ export class PlayerSpawnManager {
           const player = playerIdToPlayer.get(playerId);
           if (player) {
             const formation = faceoffFormation[team][position];
+            const zAdjustment = isRedNeutralRight ? 0.2 : 
+                                isRedNeutralLeft ? 0.2 : 0;
             const finalPosition = {
-              x: faceoffPosition.x + formation.offset.x,
+              x: faceoffPosition.x + formation.offset.x + xAdjustment,
               y: faceoffPosition.y + formation.offset.y,
-              z: faceoffPosition.z + formation.offset.z
+              z: faceoffPosition.z + formation.offset.z + zAdjustment
             };
 
             const success = this.teleportPlayerToSpecificPosition(player, finalPosition, formation.yaw);
             if (success) {
               totalTeleported++;
-              CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}`, 'PlayerSpawnManager');
+              const adjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
+                                     isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
+                                     isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
+              CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'PlayerSpawnManager');
             }
           } else {
             console.warn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`);
