@@ -211,32 +211,32 @@ export const PLAYER_DEFAULTS = {
 // =========================
 export const POSITION_STATS = {
   DEFENDER: {
-    runVelocity: 11,
+    runVelocity: 10,
     walkVelocity: 6,
     minShotForce: 18,
     maxShotForce: 28,
     passingPower: 1.3,
   },
   WINGER: {
-    runVelocity: 13,
-    walkVelocity: 8,
-    minShotForce: 20,
-    maxShotForce: 32,
-    passingPower: 1.2,
-  },
-  CENTER: {
     runVelocity: 12,
     walkVelocity: 7,
+    minShotForce: 20,
+    maxShotForce: 32,
+    passingPower: 1.1,
+  },
+  CENTER: {
+    runVelocity: 11,
+    walkVelocity: 6,
     minShotForce: 25,
     maxShotForce: 35,
-    passingPower: 1.1,
+    passingPower: 1.0,
   },
   GOALIE: {
     runVelocity: 6,
     walkVelocity: 4,
     minShotForce: 10,
     maxShotForce: 20,
-    passingPower: 1.0,
+    passingPower: 1.1,
   },
 } as const;
 
