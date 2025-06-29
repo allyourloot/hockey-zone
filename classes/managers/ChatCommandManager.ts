@@ -65,10 +65,7 @@ export class ChatCommandManager {
    * Register all chat commands
    */
   private registerAllCommands(): void {
-    if (!this.world) {
-      console.warn('ChatCommandManager: Cannot register commands - world not initialized');
-      return;
-    }
+    if (!this.world) return;
     
     this.registerRocketCommand();
     this.registerPuckCommand();
@@ -94,6 +91,8 @@ export class ChatCommandManager {
     this.registerTestHitCommand();
     this.registerTestShotCommand();
     this.registerTestLeaderboardCommand();
+    this.registerPassDebugCommand();
+    this.registerClearHistoryCommand();
   }
   
   /**
@@ -345,6 +344,246 @@ export class ChatCommandManager {
       
       // Trigger goal with proper attribution
       HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId, assistId);
+    });
+
+    // /puckhistory - Show current puck touch history for debugging
+    this.world.chatManager.registerCommand('/puckhistory', (player) => {
+      if (!this.puck) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No puck found!', 'FF0000');
+        return;
+      }
+
+      try {
+        const customProps = (this.puck as any).customProperties;
+        if (!customProps) {
+          this.world!.chatManager.sendPlayerMessage(player, 'Puck has no custom properties!', 'FF0000');
+          return;
+        }
+
+        const touchHistory = customProps.get('touchHistory') || [];
+        const lastTouchedBy = customProps.get('lastTouchedBy') || 'Unknown';
+        const currentTime = Date.now();
+
+        this.world!.chatManager.sendPlayerMessage(player, `=== PUCK TOUCH HISTORY DEBUG ===`, 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, `Last touched by: ${lastTouchedBy}`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Touch history length: ${touchHistory.length}`, 'FFFFFF');
+        
+        // Show RAW touch history data
+        this.world!.chatManager.sendPlayerMessage(player, `RAW history: ${JSON.stringify(touchHistory)}`, 'CCCCCC');
+
+        if (touchHistory.length === 0) {
+          this.world!.chatManager.sendPlayerMessage(player, 'No touch history found!', 'FF8888');
+        } else {
+          this.world!.chatManager.sendPlayerMessage(player, `Touch history (${touchHistory.length} touches):`, 'FFFFFF');
+          
+          touchHistory.forEach((touch: any, index: number) => {
+            const age = currentTime - touch.timestamp;
+            const ageText = `${(age / 1000).toFixed(1)}s ago`;
+            const timeText = new Date(touch.timestamp).toLocaleTimeString();
+            
+            // Get team info for the player
+            const teamInfo = HockeyGameManager.instance.getTeamAndPosition(touch.playerId);
+            const teamText = teamInfo ? `${teamInfo.team} ${teamInfo.position}` : 'Unknown team';
+            const teamColor = teamInfo?.team === 'RED' ? 'FF4444' : teamInfo?.team === 'BLUE' ? '4444FF' : 'FFFFFF';
+            
+            this.world!.chatManager.sendPlayerMessage(
+              player, 
+              `${index + 1}. ${touch.playerId} (${teamText}) - ${timeText} (${ageText})`, 
+              teamColor
+            );
+          });
+        }
+
+        // Show recent touches (within 45 seconds)
+        const recentTouches = touchHistory.filter((touch: any) => {
+          return (currentTime - touch.timestamp) < 45000;
+        });
+        this.world!.chatManager.sendPlayerMessage(player, `Recent touches (last 45s): ${recentTouches.length}`, 'FFFF00');
+
+        // Show what would happen if we did an assist check now
+        if (recentTouches.length > 0) {
+          const lastTouch = recentTouches[0];
+          const scorer = lastTouch.playerId;
+          const scorerTeam = HockeyGameManager.instance.getTeamAndPosition(scorer)?.team;
+          
+          if (scorerTeam) {
+            this.world!.chatManager.sendPlayerMessage(player, `If ${scorer} scored for ${scorerTeam}:`, '88FF88');
+            
+            const assists: string[] = [];
+            for (let i = 0; i < recentTouches.length && assists.length < 2; i++) {
+              const touch = recentTouches[i];
+              if (touch.playerId === scorer) continue; // Skip scorer
+              
+              const touchPlayerTeam = HockeyGameManager.instance.getTeamAndPosition(touch.playerId)?.team;
+              if (touchPlayerTeam !== scorerTeam) continue; // Skip wrong team
+              if (assists.includes(touch.playerId)) continue; // Skip duplicates
+              
+              const age = currentTime - touch.timestamp;
+              const maxTime = assists.length === 0 ? 30000 : 45000;
+              if (age > maxTime) continue; // Skip too old
+              
+              assists.push(touch.playerId);
+            }
+            
+            this.world!.chatManager.sendPlayerMessage(
+              player, 
+              `- Primary assist: ${assists[0] || 'None'}`, 
+              assists[0] ? '88FF88' : 'FF8888'
+            );
+            this.world!.chatManager.sendPlayerMessage(
+              player, 
+              `- Secondary assist: ${assists[1] || 'None'}`, 
+              assists[1] ? '88FF88' : 'FF8888'
+            );
+          }
+        }
+
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(player, `Error reading touch history: ${error}`, 'FF0000');
+        console.error('Error reading puck touch history:', error);
+      }
+    });
+
+    // /assisttest - Test assist detection logic manually
+    this.world.chatManager.registerCommand('/assisttest', (player, args) => {
+      if (!this.puck) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No puck found!', 'FF0000');
+        return;
+      }
+
+      const scorerId = player.id;
+      const team = args[0]?.toUpperCase();
+      
+      if (team !== 'RED' && team !== 'BLUE') {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /assisttest <RED|BLUE>', 'FFFF00');
+        return;
+      }
+
+      try {
+        this.world!.chatManager.sendPlayerMessage(player, `=== ASSIST TEST RESULTS ===`, 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, `Scorer: ${scorerId} (${team} team)`, 'FFFFFF');
+
+        // First, check the current puck touch history 
+        const customProps = (this.puck as any).customProperties;
+        if (!customProps) {
+          this.world!.chatManager.sendPlayerMessage(player, 'ERROR: Puck has no custom properties!', 'FF0000');
+          return;
+        }
+
+        const touchHistory = customProps.get('touchHistory') || [];
+        const lastTouchedBy = customProps.get('lastTouchedBy');
+        const currentTime = Date.now();
+
+        this.world!.chatManager.sendPlayerMessage(player, `Touch history: ${touchHistory.length} entries`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Last touched by: ${lastTouchedBy || 'Nobody'}`, 'FFFFFF');
+
+        if (touchHistory.length === 0) {
+          this.world!.chatManager.sendPlayerMessage(player, 'ERROR: No touch history found!', 'FF0000');
+          return;
+        }
+
+        // Show current touch history in detail
+        this.world!.chatManager.sendPlayerMessage(player, `Current touch history:`, 'CCCCCC');
+        touchHistory.forEach((touch: any, index: number) => {
+          const age = (currentTime - touch.timestamp) / 1000;
+          const teamInfo = HockeyGameManager.instance.getTeamAndPosition(touch.playerId);
+          const teamText = teamInfo ? `${teamInfo.team} ${teamInfo.position}` : 'Unknown';
+          this.world!.chatManager.sendPlayerMessage(player, `  ${index + 1}. ${touch.playerId} (${teamText}) - ${age.toFixed(1)}s ago`, 'CCCCCC');
+        });
+
+        // Filter for recent touches
+        const recentTouches = touchHistory.filter((touch: any) => {
+          const age = currentTime - touch.timestamp;
+          return age < 45000; // 45 seconds
+        });
+
+        this.world!.chatManager.sendPlayerMessage(player, `Recent touches (within 45s): ${recentTouches.length}`, 'FFFFFF');
+
+        if (recentTouches.length === 0) {
+          this.world!.chatManager.sendPlayerMessage(player, 'ERROR: No recent touches within 45 seconds!', 'FF0000');
+          return;
+        }
+
+        // Simulate assist detection logic step by step
+        const assists: string[] = [];
+        const gameManager = HockeyGameManager.instance;
+        const scorerTeamInfo = gameManager.getTeamAndPosition(scorerId);
+
+        if (!scorerTeamInfo) {
+          this.world!.chatManager.sendPlayerMessage(player, `ERROR: Scorer ${scorerId} not found in teams!`, 'FF0000');
+          return;
+        }
+
+        this.world!.chatManager.sendPlayerMessage(player, `Scorer info: ${scorerTeamInfo.team} ${scorerTeamInfo.position}`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Checking touches for potential assists...`, 'FFFFFF');
+
+        for (let i = 0; i < recentTouches.length && assists.length < 2; i++) {
+          const touch = recentTouches[i];
+          const touchPlayerId = touch.playerId;
+          const touchPlayerTeamInfo = gameManager.getTeamAndPosition(touchPlayerId);
+          const timeSinceTouch = currentTime - touch.timestamp;
+
+          this.world!.chatManager.sendPlayerMessage(player, `Touch ${i + 1}: ${touchPlayerId}`, 'CCCCCC');
+
+          // Check if this is the scorer themselves
+          if (touchPlayerId === scorerId) {
+            this.world!.chatManager.sendPlayerMessage(player, `  ❌ Skipped: is the scorer`, 'FF8888');
+            continue;
+          }
+
+          // Check team
+          if (!touchPlayerTeamInfo) {
+            this.world!.chatManager.sendPlayerMessage(player, `  ❌ Skipped: player not found in teams`, 'FF8888');
+            continue;
+          }
+
+          if (touchPlayerTeamInfo.team !== scorerTeamInfo.team) {
+            this.world!.chatManager.sendPlayerMessage(player, `  ❌ Skipped: wrong team (${touchPlayerTeamInfo.team} vs ${scorerTeamInfo.team})`, 'FF8888');
+            continue;
+          }
+
+          // Check if already in assists
+          if (assists.includes(touchPlayerId)) {
+            this.world!.chatManager.sendPlayerMessage(player, `  ❌ Skipped: already awarded assist`, 'FF8888');
+            continue;
+          }
+
+          // Check timing
+          const maxTime = assists.length === 0 ? 30000 : 45000;
+          if (timeSinceTouch > maxTime) {
+            this.world!.chatManager.sendPlayerMessage(player, `  ❌ Skipped: too old (${(timeSinceTouch/1000).toFixed(1)}s > ${maxTime/1000}s)`, 'FF8888');
+            continue;
+          }
+
+          // Award assist
+          assists.push(touchPlayerId);
+          const assistType = assists.length === 1 ? 'Primary' : 'Secondary';
+          this.world!.chatManager.sendPlayerMessage(player, `  ✅ ${assistType} assist awarded! (${(timeSinceTouch/1000).toFixed(1)}s ago)`, '00FF00');
+        }
+
+        // Final results
+        this.world!.chatManager.sendPlayerMessage(player, `=== FINAL RESULTS ===`, 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, `Primary assist: ${assists[0] || 'None'}`, assists[0] ? '00FF00' : 'FF8888');
+        this.world!.chatManager.sendPlayerMessage(player, `Secondary assist: ${assists[1] || 'None'}`, assists[1] ? '00FF00' : 'FF8888');
+
+        if (assists.length === 0) {
+          this.world!.chatManager.sendPlayerMessage(player, `❌ No assists detected! Check logs above for reasons.`, 'FF8888');
+        } else {
+          this.world!.chatManager.sendPlayerMessage(player, `✅ ${assists.length} assist(s) would be awarded!`, '00FF00');
+        }
+
+        // Now also call the actual method for comparison
+        const goalDetectionService = GoalDetectionService.instance;
+        const actualAssistInfo = (goalDetectionService as any).getAssistInfo(this.puck, scorerId, team, false);
+        
+        this.world!.chatManager.sendPlayerMessage(player, `=== ACTUAL SYSTEM RESULTS ===`, 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, `Actual primary: ${actualAssistInfo.primaryAssist || 'None'}`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Actual secondary: ${actualAssistInfo.secondaryAssist || 'None'}`, 'FFFFFF');
+
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(player, `Error testing assists: ${error}`, 'FF0000');
+        console.error('Error testing assist detection:', error);
+      }
     });
 
     // /testsave - Simulate a save for testing stats
@@ -1806,6 +2045,57 @@ export class ChatCommandManager {
           'FF0000'
         );
         console.error('Error in test leaderboard command:', error);
+      }
+    });
+  }
+
+  // /passdebug - Enable detailed pass sequence debugging
+  private registerPassDebugCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/passdebug', (player, args) => {
+      const action = args[0]?.toLowerCase();
+      
+      if (action === 'on') {
+        // Enable detailed pass debugging
+        (console as any).passDebugEnabled = true;
+        this.world!.chatManager.sendPlayerMessage(player, '🐛 Pass debugging enabled - console will show detailed pass logs', '00FF00');
+        console.log('[ChatCommand] Pass debugging enabled by', player.id);
+      } else if (action === 'off') {
+        // Disable detailed pass debugging  
+        (console as any).passDebugEnabled = false;
+        this.world!.chatManager.sendPlayerMessage(player, '📴 Pass debugging disabled', 'FFAA00');
+        console.log('[ChatCommand] Pass debugging disabled by', player.id);
+      } else {
+        this.world!.chatManager.sendPlayerMessage(player, 'Usage: /passdebug <on|off>', 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, 'Current status: ' + ((console as any).passDebugEnabled ? 'ON' : 'OFF'), 'FFFFFF');
+      }
+    });
+  }
+
+  // /clearhistory - Clear puck touch history for testing
+  private registerClearHistoryCommand(): void {
+    if (!this.world) return;
+
+    this.world.chatManager.registerCommand('/clearhistory', (player) => {
+      if (!this.puck) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No puck found!', 'FF0000');
+        return;
+      }
+
+      try {
+        const customProps = (this.puck as any).customProperties;
+        if (customProps) {
+          customProps.set('touchHistory', []);
+          customProps.set('lastTouchedBy', '');
+          this.world!.chatManager.sendPlayerMessage(player, '✅ Puck touch history cleared!', '00FF00');
+          console.log('[ChatCommand] Puck touch history cleared by', player.id);
+        } else {
+          this.world!.chatManager.sendPlayerMessage(player, 'Puck has no custom properties!', 'FF0000');
+        }
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(player, `Error clearing history: ${error}`, 'FF0000');
+        console.error('Error clearing puck touch history:', error);
       }
     });
   }

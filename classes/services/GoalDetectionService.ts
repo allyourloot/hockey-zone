@@ -295,11 +295,13 @@ export class GoalDetectionService {
     try {
       const customProps = (puckEntity as any).customProperties;
       if (!customProps || !scorerId) {
+        console.log(`[GoalDetectionService] getAssistInfo early return: customProps=${!!customProps}, scorerId=${scorerId}`);
         return {};
       }
 
       const touchHistory = customProps.get('touchHistory') || [];
       console.log(`[GoalDetectionService] Touch history for assists: ${JSON.stringify(touchHistory)}`);
+      console.log(`[GoalDetectionService] Scorer: ${scorerId}, Team: ${scoringTeam}, OwnGoal: ${isOwnGoal}`);
 
       // For own goals, no assists are awarded
       if (isOwnGoal) {
@@ -311,19 +313,23 @@ export class GoalDetectionService {
       const scorerTeamInfo = gameManager.getTeamAndPosition(scorerId);
       
       if (!scorerTeamInfo) {
+        console.log(`[GoalDetectionService] Scorer ${scorerId} not found in teams - no assists`);
         return {};
       }
+
+      console.log(`[GoalDetectionService] Scorer team info: ${JSON.stringify(scorerTeamInfo)}`);
 
       const assists: string[] = [];
       const currentTime = Date.now();
       
-      // Filter recent touches (within 10 seconds) and check for meaningful assists
+      // Filter recent touches (within 45 seconds) and check for meaningful assists  
       const recentTouches = touchHistory.filter((touch: any) => {
         const timeDiff = currentTime - touch.timestamp;
-        return timeDiff < 10000; // 10 seconds
+        return timeDiff < 45000; // 45 seconds - much more generous window for hockey assists
       });
       
-      console.log(`[GoalDetectionService] Recent touches (last 10s): ${JSON.stringify(recentTouches.map((t: any) => `${t.playerId}@${new Date(t.timestamp).toLocaleTimeString()}`))}`);
+      console.log(`[GoalDetectionService] Recent touches (last 45s): ${JSON.stringify(recentTouches.map((t: any) => `${t.playerId}@${new Date(t.timestamp).toLocaleTimeString()}`))}`);
+      console.log(`[GoalDetectionService] Processing ${recentTouches.length} recent touches for assists...`);
       
       // FIXED: Allow assists even if there's only 1 recent touch (the scorer)
       // Look through all recent touches to find potential assists
@@ -333,35 +339,43 @@ export class GoalDetectionService {
         const touchPlayerTeamInfo = gameManager.getTeamAndPosition(touchPlayerId);
         const timeSinceTouch = currentTime - touch.timestamp;
         
+        console.log(`[GoalDetectionService] Touch ${i}: ${touchPlayerId}, ${timeSinceTouch}ms ago`);
+        
         // Skip if this is the scorer themselves
         if (touchPlayerId === scorerId) {
+          console.log(`[GoalDetectionService] Skipping touch ${i}: is scorer`);
           continue;
         }
         
         // Skip if player is not on the same team as scorer
         if (!touchPlayerTeamInfo || touchPlayerTeamInfo.team !== scorerTeamInfo.team) {
+          console.log(`[GoalDetectionService] Skipping touch ${i}: wrong team (${touchPlayerTeamInfo?.team} vs ${scorerTeamInfo.team})`);
           continue;
         }
         
         // Skip if player is already in assists list
         if (assists.includes(touchPlayerId)) {
+          console.log(`[GoalDetectionService] Skipping touch ${i}: already in assists list`);
           continue;
         }
         
-        // Check timing - primary assist gets 8 seconds, secondary gets 12 seconds
-        const maxTime = assists.length === 0 ? 8000 : 12000;
+        // Check timing - primary assist gets 30 seconds, secondary gets 45 seconds (very generous timing for hockey)
+        const maxTime = assists.length === 0 ? 30000 : 45000;
         if (timeSinceTouch > maxTime) {
+          console.log(`[GoalDetectionService] Skipping touch ${i}: too old (${timeSinceTouch}ms > ${maxTime}ms)`);
           continue;
         }
         
         // Award the assist
         assists.push(touchPlayerId);
         const assistType = assists.length === 1 ? 'Primary' : 'Secondary';
-        console.log(`[GoalDetectionService] ${assistType} assist awarded to ${touchPlayerId} (${touchPlayerTeamInfo.team} team, ${(timeSinceTouch/1000).toFixed(1)}s ago)`);
+        console.log(`[GoalDetectionService] ✅ ${assistType} assist awarded to ${touchPlayerId} (${touchPlayerTeamInfo.team} team, ${(timeSinceTouch/1000).toFixed(1)}s ago)`);
       }
       
       if (assists.length === 0) {
-        console.log(`[GoalDetectionService] No assists awarded - no eligible recent touches from teammates`);
+        console.log(`[GoalDetectionService] ❌ No assists awarded - no eligible recent touches from teammates`);
+      } else {
+        console.log(`[GoalDetectionService] ✅ Total assists awarded: ${assists.length} (Primary: ${assists[0] || 'None'}, Secondary: ${assists[1] || 'None'})`);
       }
 
       return {

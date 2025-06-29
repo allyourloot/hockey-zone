@@ -15,7 +15,7 @@ export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManage
 export const SAVE_DEBUG_FILTER = false; // Set to true to show ONLY SaveDetectionService logs
 
 // NEW: Offside detection debug filter for isolating OffsideDetectionService logs
-export const OFFSIDE_DEBUG_FILTER = true; // Set to true to show ONLY OffsideDetectionService logs
+export const OFFSIDE_DEBUG_FILTER = false; // Set to true to show ONLY OffsideDetectionService logs
 
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
@@ -394,6 +394,14 @@ export const COLLISION_GROUPS = {
   
   // Custom collision group for ice floor (value between 1-127)
   ICE_FLOOR: 65,
+} as const;
+
+// =========================
+// OFFSIDE DETECTION CONSTANTS
+// =========================
+export const OFFSIDE_DETECTION = {
+  // Proximity distance for offside calls - only trigger if offside player is within this distance of puck
+  PROXIMITY_DISTANCE: 10.0, // meters - gives players reasonable distance to skate back onside
 } as const;
 
 // =========================

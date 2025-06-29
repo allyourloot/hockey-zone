@@ -1,6 +1,7 @@
 import { World, Player, type Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
 import * as CONSTANTS from '../utils/constants';
+import { IceSkatingController } from '../controllers/IceSkatingController';
 
 interface SpawnData {
   position: Vector3Like;
@@ -14,6 +15,9 @@ interface SpawnData {
 export class PlayerSpawnManager {
   private static _instance: PlayerSpawnManager;
   private _world: World | null = null;
+  
+  // Store player rotations during faceoff for later reuse
+  private _lastFaceoffRotations: Map<string, number> = new Map();
 
   // Spawn positions and rotations based on your measured coordinates
   // Red team faces towards positive Z (Blue goal), Blue team faces towards negative Z (Red goal)
@@ -319,20 +323,20 @@ export class PlayerSpawnManager {
     // Define faceoff formation offsets relative to the faceoff dot
     const faceoffFormation: Record<HockeyTeam, Record<HockeyPosition, { offset: Vector3Like, yaw: number }>> = {
       [HockeyTeam.RED]: {
-        [HockeyPosition.CENTER]: { offset: { x: 0, y: 0, z: -1 }, yaw: Math.PI }, // 1 block towards Red side
-        [HockeyPosition.WINGER1]: { offset: { x: 5, y: 0, z: -1 }, yaw: Math.PI }, // Right wing inline with center
-        [HockeyPosition.WINGER2]: { offset: { x: -5, y: 0, z: -1 }, yaw: Math.PI }, // Left wing inline with center
-        [HockeyPosition.DEFENDER1]: { offset: { x: 2, y: 0, z: -4 }, yaw: Math.PI }, // Right defense back
-        [HockeyPosition.DEFENDER2]: { offset: { x: -2, y: 0, z: -4 }, yaw: Math.PI }, // Left defense back
-        [HockeyPosition.GOALIE]: { offset: { x: 0, y: 0, z: -12 }, yaw: Math.PI } // Stay back in net area
+        [HockeyPosition.CENTER]: { offset: { x: 0, y: 0, z: -1 }, yaw: Math.PI }, // 1 block towards Red side, face Blue center
+        [HockeyPosition.WINGER1]: { offset: { x: 5, y: 0, z: -1 }, yaw: 0 }, // Right wing inline with center, face puck
+        [HockeyPosition.WINGER2]: { offset: { x: -5, y: 0, z: -1 }, yaw: 0 }, // Left wing inline with center, face puck
+        [HockeyPosition.DEFENDER1]: { offset: { x: 2, y: 0, z: -6 }, yaw: 0 }, // Right defense back, face puck
+        [HockeyPosition.DEFENDER2]: { offset: { x: -2, y: 0, z: -6 }, yaw: 0 }, // Left defense back, face puck
+        [HockeyPosition.GOALIE]: { offset: { x: 0, y: 0, z: -12 }, yaw: Math.PI } // Stay back in net area, face up ice
       },
       [HockeyTeam.BLUE]: {
-        [HockeyPosition.CENTER]: { offset: { x: 0, y: 0, z: 1 }, yaw: 0 }, // 1 block towards Blue side
-        [HockeyPosition.WINGER1]: { offset: { x: -5, y: 0, z: 1 }, yaw: 0 }, // Left wing inline with center
-        [HockeyPosition.WINGER2]: { offset: { x: 5, y: 0, z: 1 }, yaw: 0 }, // Right wing inline with center
-        [HockeyPosition.DEFENDER1]: { offset: { x: -2, y: 0, z: 4 }, yaw: 0 }, // Left defense back (mirrored)
-        [HockeyPosition.DEFENDER2]: { offset: { x: 2, y: 0, z: 4 }, yaw: 0 }, // Right defense back (mirrored)
-        [HockeyPosition.GOALIE]: { offset: { x: 0, y: 0, z: 12 }, yaw: 0 } // Stay back in net area
+        [HockeyPosition.CENTER]: { offset: { x: 0, y: 0, z: 1 }, yaw: 0 }, // 1 block towards Blue side, face Red center
+        [HockeyPosition.WINGER1]: { offset: { x: -5, y: 0, z: 1 }, yaw: Math.PI }, // Left wing inline with center, face puck
+        [HockeyPosition.WINGER2]: { offset: { x: 5, y: 0, z: 1 }, yaw: Math.PI }, // Right wing inline with center, face puck
+        [HockeyPosition.DEFENDER1]: { offset: { x: -2, y: 0, z: 6 }, yaw: Math.PI }, // Left defense back, face puck
+        [HockeyPosition.DEFENDER2]: { offset: { x: 2, y: 0, z: 6 }, yaw: Math.PI }, // Right defense back, face puck
+        [HockeyPosition.GOALIE]: { offset: { x: 0, y: 0, z: 12 }, yaw: 0 } // Stay back in net area, face up ice
       }
     };
 
@@ -369,7 +373,7 @@ export class PlayerSpawnManager {
               const adjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
                                      isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
                                      isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
-              CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'PlayerSpawnManager');
+              CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'OffsideDetectionService');
             }
           } else {
             console.warn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`);
@@ -378,7 +382,12 @@ export class PlayerSpawnManager {
       }
     }
 
-    CONSTANTS.debugLog(`Teleported ${totalTeleported} players to faceoff formation around: ${JSON.stringify(faceoffPosition)}`, 'PlayerSpawnManager');
+    CONSTANTS.debugLog(`Teleported ${totalTeleported} players to faceoff formation around: ${JSON.stringify(faceoffPosition)}`, 'OffsideDetectionService');
+
+    // Make all teleported players look at the puck immediately after positioning
+    if (totalTeleported > 0) {
+      this.makePlayersLookAtPuck(teams, playerIdToPlayer);
+    }
 
     // Announce the faceoff positioning
     if (this._world && totalTeleported > 0) {
@@ -453,5 +462,146 @@ export class PlayerSpawnManager {
     }
           CONSTANTS.debugLog('All spawn positions validated successfully', 'PlayerSpawnManager');
     return true;
+  }
+
+  /**
+   * Make all players look at the puck entity for faceoff focus
+   * Sets both camera and physical model to face puck immediately
+   */
+  private makePlayersLookAtPuck(
+    teams: Record<HockeyTeam, Record<HockeyPosition, string>>,
+    playerIdToPlayer: Map<string, Player>
+  ): void {
+    const { ChatCommandManager } = require('./ChatCommandManager');
+    const puckEntity = ChatCommandManager.instance.getPuck();
+    
+    if (!puckEntity || !puckEntity.isSpawned) {
+      CONSTANTS.debugError('Cannot make players look at puck - puck entity not found or not spawned', undefined, 'PlayerSpawnManager');
+      return;
+    }
+
+    let playersLooking = 0;
+
+    // Make both RED and BLUE team players look at the puck
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const position of Object.values(HockeyPosition)) {
+        const playerId = teams[team][position];
+        if (playerId) {
+          const player = playerIdToPlayer.get(playerId);
+          if (player) {
+            try {
+                            // Add delay to ensure teleportation AND puck positioning are complete
+              setTimeout(() => {
+                // Get fresh puck position after it's been moved
+                const currentPuckPosition = puckEntity.position;
+                
+                // Set camera to look at puck
+                player.camera.lookAtEntity(puckEntity);
+                
+                // Set physical model to face puck as well
+                this.rotatePlayerEntityTowardsPuck(player, currentPuckPosition);
+                
+                // Store and preserve the faceoff rotation for 3 seconds after play resumes
+                const playerEntities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
+                if (playerEntities.length > 0) {
+                  const playerEntity = playerEntities[0];
+                  const controller = playerEntity.controller as IceSkatingController;
+                  
+                  // Store the perfect faceoff rotation
+                  setTimeout(() => {
+                    if (playerEntity.isSpawned && controller) {
+                      const faceoffRotation = playerEntity.rotation;
+                      controller.setFaceoffRotation(faceoffRotation);
+                      controller.preserveFaceoffRotation(3000); // Preserve for 3 seconds
+                      CONSTANTS.debugLog(`${team} ${position} (${player.id}) faceoff rotation preserved for 3 seconds`, 'OffsideDetectionService');
+                    }
+                  }, 100); // Small delay to ensure rotation is applied first
+                }
+                
+                CONSTANTS.debugLog(`${team} ${position} (${player.id}) camera AND model set to face puck at (${currentPuckPosition.x.toFixed(1)}, ${currentPuckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
+              }, 300); // Longer delay to ensure both player teleport AND puck positioning are complete
+              
+              playersLooking++;
+            } catch (error) {
+              console.error(`Error setting ${team} ${position} to look at puck:`, error);
+            }
+          } else {
+            console.warn(`[PlayerSpawnManager] Player object not found for ${team} ${position}: ${playerId}`);
+          }
+        }
+      }
+    }
+
+    CONSTANTS.debugLog(`Initiated camera AND model look setup for ${playersLooking} players`, 'OffsideDetectionService');
+  }
+
+  /**
+   * Rotate a player's physical entity to face the puck position
+   */
+  private rotatePlayerEntityTowardsPuck(player: Player, puckPosition: Vector3Like): void {
+    if (!this._world) return;
+
+    const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
+    
+    if (playerEntities.length === 0) {
+      console.warn(`[PlayerSpawnManager] No entities found for player ${player.id} - cannot rotate toward puck`);
+      return;
+    }
+
+    playerEntities.forEach((entity) => {
+      try {
+        const playerPosition = entity.position;
+        
+        // Calculate direction vector from player to puck
+        const dx = puckPosition.x - playerPosition.x;
+        const dz = puckPosition.z - playerPosition.z;
+        
+        // Skip rotation if player is exactly at puck position
+        if (Math.abs(dx) < 0.01 && Math.abs(dz) < 0.01) {
+          CONSTANTS.debugLog(`Player too close to puck for rotation calculation, skipping`, 'OffsideDetectionService');
+          return;
+        }
+        
+        // Calculate yaw angle to face the puck (in radians)
+        // Using Math.atan2(dx, dz) for Hytopia's coordinate system
+        // Add π (180°) to flip direction so players face TOWARD puck instead of away
+        const yaw = Math.atan2(dx, dz) + Math.PI;
+        
+        // Store this rotation for later reuse when play resumes
+        this._lastFaceoffRotations.set(player.id, yaw);
+        
+        // Convert yaw to quaternion for entity rotation
+        const halfYaw = yaw / 2;
+        const rotation = {
+          x: 0,
+          y: Math.sin(halfYaw),
+          z: 0,
+          w: Math.cos(halfYaw),
+        };
+        
+        // Apply the rotation
+        entity.setRotation(rotation);
+        
+        // Convert yaw to degrees for logging
+        const yawDegrees = (yaw * 180 / Math.PI).toFixed(1);
+                 CONSTANTS.debugLog(`Player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) rotated ${yawDegrees}° to face puck at (${puckPosition.x.toFixed(1)}, ${puckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
+      } catch (error) {
+        console.error(`Error rotating player entity toward puck:`, error);
+      }
+    });
+  }
+
+  /**
+   * Get stored faceoff rotations for all players
+   */
+  public getLastFaceoffRotations(): Map<string, number> {
+    return new Map(this._lastFaceoffRotations);
+  }
+
+  /**
+   * Clear stored faceoff rotations
+   */
+  public clearFaceoffRotations(): void {
+    this._lastFaceoffRotations.clear();
   }
 } 

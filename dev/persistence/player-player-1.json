@@ -2,21 +2,21 @@
   "playerStats": {
     "playerId": "player-1",
     "playerName": "player-1",
-    "goals": 6,
-    "assists": 0,
+    "goals": 1,
+    "assists": 3,
     "saves": 0,
-    "wins": 1,
-    "losses": 1,
+    "wins": 2,
+    "losses": 0,
     "gamesPlayed": 2,
-    "shotsOnGoal": 5,
+    "shotsOnGoal": 1,
     "shotsBlocked": 0,
     "hits": 0,
     "penaltyMinutes": 0,
-    "winRate": 50,
-    "pointsPerGame": 3,
+    "winRate": 100,
+    "pointsPerGame": 2,
     "savesPerGame": 0,
-    "firstGameDate": 1750997034194,
-    "lastGameDate": 1750997034194,
-    "lastUpdated": 1750998205397
+    "firstGameDate": 1751171395325,
+    "lastGameDate": 1751171395325,
+    "lastUpdated": 1751172660922
   }
 }

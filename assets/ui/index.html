@@ -1314,6 +1314,14 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'offside-called') {
       // Show offside overlay with team and location info
       showOffsideOverlay(data.violatingTeam, data.faceoffLocation);
+      
+      // Stop the timer when offside is called
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
+        timeWhenGoalScored = timeRemaining; // Store current time for resumption
+        // Timer stopped after offside called
+      }
     }
     if (data.type === 'countdown-update') {
       // Show countdown overlay with subtitle support

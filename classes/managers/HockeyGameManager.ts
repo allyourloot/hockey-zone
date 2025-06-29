@@ -1,4 +1,4 @@
-import { DefaultPlayerEntity, Entity, Player, World, Audio } from 'hytopia';
+import { DefaultPlayerEntity, Entity, Player, World, Audio, PlayerCameraMode } from 'hytopia';
 import { 
   HockeyGameState, 
   HockeyTeam, 
@@ -50,6 +50,13 @@ export class HockeyGameManager {
     violatingTeam?: HockeyTeam;
     faceoffLocation?: FaceoffLocation;
   } = { isActive: false };
+
+  // Store player rotations during faceoff spawn to maintain exact same angles when play resumes
+  private _faceoffPlayerRotations: Map<string, number> = new Map();
+  
+  // Store remaining period time when offsides pauses the backend timer
+  private _pausedPeriodTimeMs: number | null = null;
+  private _offsidePauseStartTime: number | null = null;
   
   private _countdownState: {
     isActive: boolean;
@@ -342,6 +349,23 @@ export class HockeyGameManager {
       faceoffLocation: violation.faceoffLocation
     };
     
+    // Capture the current timer value when offside is called (same as goals)
+    const currentPeriodTime = PlayerStatsManager.instance.getCurrentPeriodTimeRemaining();
+    this._pausedTimerValue = currentPeriodTime;
+    CONSTANTS.debugLog(`Offside called - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
+    
+    // CRITICAL: Pause the backend period timer to prevent period from ending while offsides is active
+    if (this._periodTimer) {
+      clearTimeout(this._periodTimer);
+      this._periodTimer = undefined;
+      
+      // Calculate remaining time in milliseconds for the backend timer
+      this._pausedPeriodTimeMs = currentPeriodTime * 1000; // Convert seconds to milliseconds
+      this._offsidePauseStartTime = Date.now();
+      
+      CONSTANTS.debugLog(`Backend period timer paused - remaining time: ${this._pausedPeriodTimeMs}ms`, 'OffsideDetectionService');
+    }
+    
     // Broadcast offsides call to all players
     if (this._world) {
       // Get all player IDs from teams and convert to Player objects
@@ -353,6 +377,12 @@ export class HockeyGameManager {
       const allPlayers = allPlayerIds
         .map(playerId => this._playerIdToPlayer.get(playerId))
         .filter(Boolean) as Player[];
+      
+      // Broadcast the paused timer value to all existing players
+      this.broadcastToAllPlayers({
+        type: 'timer-pause',
+        pausedTime: this._pausedTimerValue
+      });
       
               // Send offside overlay message
         allPlayers.forEach((player) => {
@@ -386,10 +416,13 @@ export class HockeyGameManager {
   private performOffsideFaceoff(faceoffLocation: FaceoffLocation): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog(`Performing offside faceoff at: ${faceoffLocation}`, 'HockeyGameManager');
+    CONSTANTS.debugLog(`Performing offside faceoff at: ${faceoffLocation}`, 'OffsideDetectionService');
     
     // Lock movement during reset
     this._state = HockeyGameState.GOAL_SCORED; // Reuse goal state for movement lock
+    
+    // Clear any previous faceoff rotations
+    this._faceoffPlayerRotations.clear();
     
     // Get faceoff position from OffsideDetectionService
     const { OffsideDetectionService } = require('../services/OffsideDetectionService');
@@ -398,6 +431,12 @@ export class HockeyGameManager {
     // Position players in faceoff formation around the offside dot
     const validTeams = this.getValidTeamsForReset();
     PlayerSpawnManager.instance.teleportPlayersToFaceoffFormation(validTeams, this._playerIdToPlayer, faceoffPosition);
+    
+    // Store the faceoff rotations from PlayerSpawnManager for later reuse
+    setTimeout(() => {
+      this._faceoffPlayerRotations = PlayerSpawnManager.instance.getLastFaceoffRotations();
+      CONSTANTS.debugLog(`Stored ${this._faceoffPlayerRotations.size} player rotations for faceoff reuse`, 'OffsideDetectionService');
+    }, 400); // Wait for PlayerSpawnManager to finish setting rotations
     
     // Reset puck to the specific faceoff position instead of center ice
     const { ChatCommandManager } = require('./ChatCommandManager');
@@ -431,10 +470,12 @@ export class HockeyGameManager {
       const puckAdjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
                                  isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
                                  isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
-      CONSTANTS.debugLog(`Puck teleported to faceoff position: ${JSON.stringify(adjustedPuckPosition)}${puckAdjustmentNote}`, 'HockeyGameManager');
+      CONSTANTS.debugLog(`Puck teleported to faceoff position: ${JSON.stringify(adjustedPuckPosition)}${puckAdjustmentNote}`, 'OffsideDetectionService');
     } else {
-      CONSTANTS.debugError(`Could not reset puck for offside faceoff - puck not found or not spawned`, undefined, 'HockeyGameManager');
+              CONSTANTS.debugError(`Could not reset puck for offside faceoff - puck not found or not spawned`, undefined, 'OffsideDetectionService');
     }
+    
+
     
     // Start faceoff countdown
     this.startFaceoffCountdown(faceoffLocation);
@@ -485,6 +526,20 @@ export class HockeyGameManager {
         this._countdownState.isActive = false;
         this._offsideState.isActive = false;
         
+        // Clear paused timer value (play is resuming)
+        this._pausedTimerValue = null;
+        
+        // Adjust period start time to account for offside pause
+        // 2s offside overlay + 3s countdown = 5s total pause
+        const pauseDurationMs = 5000;
+        PlayerStatsManager.instance.adjustPeriodStartTime(pauseDurationMs);
+        
+        // Send updated period start time to UI for synchronization
+        this.broadcastToAllPlayers({
+          type: 'period-time-adjusted',
+          pauseDurationMs: pauseDurationMs
+        });
+        
         // Send "GO!" to UI
         this.broadcastToAllPlayers({
           type: 'countdown-go'
@@ -496,7 +551,35 @@ export class HockeyGameManager {
         // Resume normal play
         this._state = HockeyGameState.IN_PERIOD;
         
-        // Lock pointer for gameplay
+        // CRITICAL: Restart the backend period timer with adjusted remaining time
+        if (this._pausedPeriodTimeMs !== null && this._offsidePauseStartTime !== null) {
+          // Calculate actual pause duration (offside overlay + countdown)
+          const actualPauseDuration = Date.now() - this._offsidePauseStartTime;
+          
+          // Remaining time should be the original paused time (we already adjusted UI timing separately)
+          const adjustedRemainingTime = this._pausedPeriodTimeMs;
+          
+          if (adjustedRemainingTime > 0) {
+            // Restart the period timer with adjusted time
+            this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
+            CONSTANTS.debugLog(`Backend period timer restarted - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'OffsideDetectionService');
+          } else {
+            // Time is up, end period immediately
+            CONSTANTS.debugLog('Period time expired during offside - ending period now', 'OffsideDetectionService');
+            setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
+          }
+          
+          // Clear pause tracking
+          this._pausedPeriodTimeMs = null;
+          this._offsidePauseStartTime = null;
+        } else {
+          CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'OffsideDetectionService');
+        }
+        
+        // Players are already correctly oriented from initial faceoff setup - no need to reapply rotations
+        // this.maintainPuckFacingOrientation(); // REMOVED: Was causing incorrect rotations when play resumed
+        
+        // Lock pointer for gameplay and reset cameras
         if (this._world) {
           const allPlayerIds = [
             ...Object.values(this._teams[HockeyTeam.RED]), 
@@ -510,13 +593,34 @@ export class HockeyGameManager {
           allPlayers.forEach((player) => {
             try {
               player.ui.lockPointer(true);
+              
+              // Reset camera back to normal attachment to player entity
+              const playerEntities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
+              if (playerEntities.length > 0) {
+                const playerEntity = playerEntities[0];
+                // Reset camera to normal third-person mode attached to player
+                player.camera.setMode(PlayerCameraMode.THIRD_PERSON);
+                player.camera.setAttachedToEntity(playerEntity);
+                player.camera.setOffset({ x: 0, y: 1, z: 0 });
+                CONSTANTS.debugLog(`Reset camera for player ${player.id} back to normal third-person mode`, 'OffsideDetectionService');
+              }
             } catch (error) {
-              console.error('Error locking pointer after faceoff:', error);
+              console.error('Error setting up player after faceoff:', error);
             }
           });
         }
         
-        CONSTANTS.debugLog('Faceoff complete - play resumed', 'HockeyGameManager');
+                 CONSTANTS.debugLog('Faceoff complete - play resumed', 'OffsideDetectionService');
+        
+        // CRITICAL FIX: Reset offside detection state after faceoff to prevent false positives
+        // Use resetAfterFaceoff() to preserve cooldown timers and prevent immediate re-tracking
+        const { OffsideDetectionService } = require('../services/OffsideDetectionService');
+        const { ChatCommandManager } = require('./ChatCommandManager');
+        const puckEntity = ChatCommandManager.instance.getPuck();
+        
+        // Pass current puck position to prevent false zone entry detection on next frame
+        const currentPuckPosition = puckEntity?.isSpawned ? puckEntity.position : undefined;
+        OffsideDetectionService.instance.resetAfterFaceoff(currentPuckPosition);
         
         // Hide countdown overlay after a brief delay
         setTimeout(() => {
@@ -551,6 +655,137 @@ export class HockeyGameManager {
         return 'Blue Defensive Zone (Right)';
       default:
         return 'Center Ice';
+    }
+  }
+
+  /**
+   * Maintain player orientation toward puck when play resumes after faceoff
+   * Uses stored rotation angles from initial faceoff spawn to avoid recalculation issues
+   */
+  private maintainPuckFacingOrientation(): void {
+    if (!this._world) return;
+
+    // Use stored rotation angles if available, otherwise fallback to recalculation
+    if (this._faceoffPlayerRotations.size > 0) {
+      CONSTANTS.debugLog(`Using stored faceoff rotations for ${this._faceoffPlayerRotations.size} players`, 'OffsideDetectionService');
+      
+      // Get all player IDs from teams
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+
+      // Re-apply stored rotation for each player
+      allPlayers.forEach((player) => {
+        try {
+          const storedYaw = this._faceoffPlayerRotations.get(player.id);
+          if (storedYaw !== undefined) {
+            const playerEntities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
+            
+            playerEntities.forEach((entity) => {
+              try {
+                // Convert stored yaw to quaternion
+                const halfYaw = storedYaw / 2;
+                const rotation = {
+                  x: 0,
+                  y: Math.sin(halfYaw),
+                  z: 0,
+                  w: Math.cos(halfYaw),
+                };
+                
+                // Apply the stored rotation
+                entity.setRotation(rotation);
+                
+                const playerPosition = entity.position;
+                const yawDegrees = (storedYaw * 180 / Math.PI).toFixed(1);
+                                 CONSTANTS.debugLog(`Reapplied stored rotation for player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) - ${yawDegrees}° toward puck`, 'OffsideDetectionService');
+              } catch (error) {
+                console.error('Error reapplying stored rotation for player entity:', error);
+              }
+            });
+          } else {
+                         CONSTANTS.debugLog(`No stored rotation found for player ${player.id}, skipping`, 'OffsideDetectionService');
+          }
+        } catch (error) {
+          console.error('Error reapplying stored rotation for player:', error);
+        }
+      });
+
+             CONSTANTS.debugLog('Reapplied stored puck-facing orientations for all players when play resumed', 'OffsideDetectionService');
+      
+      // Clear stored rotations after use
+      this._faceoffPlayerRotations.clear();
+    } else {
+      // Fallback to recalculation if no stored rotations available
+             CONSTANTS.debugLog('No stored rotations available, falling back to recalculation', 'OffsideDetectionService');
+      
+      const { ChatCommandManager } = require('./ChatCommandManager');
+      const puckEntity = ChatCommandManager.instance.getPuck();
+      
+      if (!puckEntity || !puckEntity.isSpawned) {
+                 CONSTANTS.debugLog('Cannot maintain puck orientation - puck not found', 'OffsideDetectionService');
+        return;
+      }
+
+      const puckPosition = puckEntity.position;
+      
+      // Get all player IDs from teams
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+
+      // Re-apply puck-facing rotation for all players
+      allPlayers.forEach((player) => {
+        try {
+          const playerEntities = this._world!.entityManager.getPlayerEntitiesByPlayer(player);
+          
+          playerEntities.forEach((entity) => {
+            try {
+              const playerPosition = entity.position;
+              
+              // Calculate direction vector from player to puck
+              const dx = puckPosition.x - playerPosition.x;
+              const dz = puckPosition.z - playerPosition.z;
+              
+              // Skip if too close
+              if (Math.abs(dx) < 0.01 && Math.abs(dz) < 0.01) return;
+              
+              // Calculate yaw angle to face the puck
+              const yaw = Math.atan2(dx, dz) + Math.PI;
+              
+              // Convert yaw to quaternion
+              const halfYaw = yaw / 2;
+              const rotation = {
+                x: 0,
+                y: Math.sin(halfYaw),
+                z: 0,
+                w: Math.cos(halfYaw),
+              };
+              
+              // Apply the rotation
+              entity.setRotation(rotation);
+              
+              const yawDegrees = (yaw * 180 / Math.PI).toFixed(1);
+                             CONSTANTS.debugLog(`Recalculated puck orientation for player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) - ${yawDegrees}° toward puck`, 'OffsideDetectionService');
+            } catch (error) {
+              console.error('Error maintaining rotation for player entity:', error);
+            }
+          });
+        } catch (error) {
+          console.error('Error maintaining puck orientation for player:', error);
+        }
+      });
+
+             CONSTANTS.debugLog('Recalculated puck-facing orientation for all players when play resumed', 'OffsideDetectionService');
     }
   }
 
@@ -973,6 +1208,10 @@ export class HockeyGameManager {
         this._periodTimer = undefined;
       }
       
+      // Clear offside pause tracking if period ends naturally
+      this._pausedPeriodTimeMs = null;
+      this._offsidePauseStartTime = null;
+      
       const previousPeriod = this._period;
       this._period++;
       
@@ -1242,6 +1481,10 @@ export class HockeyGameManager {
       this._periodTimer = undefined;
     }
     
+    // Clear offside pause tracking on lobby reset
+    this._pausedPeriodTimeMs = null;
+    this._offsidePauseStartTime = null;
+    
     // Reset player stats
     PlayerStatsManager.instance.resetStats();
     
@@ -1282,6 +1525,10 @@ export class HockeyGameManager {
       clearTimeout(this._periodTimer);
       this._periodTimer = undefined;
     }
+    
+    // Clear offside pause tracking on game end
+    this._pausedPeriodTimeMs = null;
+    this._offsidePauseStartTime = null;
     
     // Stop UI timer immediately when game ends
     this.broadcastToAllPlayers({

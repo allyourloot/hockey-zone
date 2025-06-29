@@ -135,6 +135,8 @@ export class PlayerStatsManager {
   public async recordGoal(scorerId: string, assistId: string | undefined, team: HockeyTeam, period: number, isOwnGoal: boolean = false): Promise<GoalInfo> {
     const timeInPeriod = this.getCurrentPeriodTime();
     
+    console.log(`[PlayerStatsManager] recordGoal called - Scorer: ${scorerId}, Assist: ${assistId || 'None'}, Team: ${team}, Period: ${period}, OwnGoal: ${isOwnGoal}`);
+    
     const goalInfo: GoalInfo = {
       scorerId,
       assistId,
@@ -147,41 +149,62 @@ export class PlayerStatsManager {
     // Record goal for scorer
     const scorerStats = this._playerStats.get(scorerId);
     if (scorerStats) {
+      console.log(`[PlayerStatsManager] Recording goal for scorer ${scorerId} (${scorerStats.playerName}) - Current goals: ${scorerStats.goals}`);
       scorerStats.goals++;
       if (!isOwnGoal) {
         scorerStats.plusMinus++;
       } else {
         scorerStats.plusMinus--;
       }
+      console.log(`[PlayerStatsManager] Scorer stats updated - New goals: ${scorerStats.goals}, +/-: ${scorerStats.plusMinus}`);
       
       // Update persistent stats for scorer
       try {
         const scorerPlayer = this.getPlayerObjectById(scorerId);
         if (scorerPlayer) {
           await PersistentPlayerStatsManager.instance.recordGoal(scorerPlayer);
+          console.log(`[PlayerStatsManager] ✅ Persistent goal stat recorded for ${scorerStats.playerName}`);
+        } else {
+          console.warn(`[PlayerStatsManager] ❌ Could not find player object for scorer ${scorerId}`);
         }
       } catch (error) {
         console.error('Error updating persistent goal stats:', error);
       }
+    } else {
+      console.warn(`[PlayerStatsManager] ❌ Scorer ${scorerId} not found in player stats map!`);
     }
 
     // Record assist if applicable
     if (assistId && assistId !== scorerId) {
+      console.log(`[PlayerStatsManager] Processing assist for ${assistId}...`);
       const assistStats = this._playerStats.get(assistId);
       if (assistStats && !isOwnGoal) {
+        console.log(`[PlayerStatsManager] Recording assist for ${assistId} (${assistStats.playerName}) - Current assists: ${assistStats.assists}`);
         assistStats.assists++;
         assistStats.plusMinus++;
+        console.log(`[PlayerStatsManager] Assist stats updated - New assists: ${assistStats.assists}, +/-: ${assistStats.plusMinus}`);
         
         // Update persistent stats for assister
         try {
           const assistPlayer = this.getPlayerObjectById(assistId);
           if (assistPlayer) {
             await PersistentPlayerStatsManager.instance.recordAssist(assistPlayer);
+            console.log(`[PlayerStatsManager] ✅ Persistent assist stat recorded for ${assistStats.playerName}`);
+          } else {
+            console.warn(`[PlayerStatsManager] ❌ Could not find player object for assister ${assistId}`);
           }
         } catch (error) {
           console.error('Error updating persistent assist stats:', error);
         }
+      } else if (!assistStats) {
+        console.warn(`[PlayerStatsManager] ❌ Assister ${assistId} not found in player stats map!`);
+      } else if (isOwnGoal) {
+        console.log(`[PlayerStatsManager] ❌ No assist awarded - own goal`);
       }
+    } else if (assistId === scorerId) {
+      console.log(`[PlayerStatsManager] ❌ No assist awarded - assist ID same as scorer ID`);
+    } else {
+      console.log(`[PlayerStatsManager] ❌ No assist - no assist ID provided`);
     }
 
     // Update +/- for all players on ice
@@ -195,6 +218,7 @@ export class PlayerStatsManager {
       CONSTANTS.debugLog(`Assist: ${assistStats?.playerName}`, 'PlayerStatsManager');
     }
 
+    console.log(`[PlayerStatsManager] ✅ Goal recording complete - Total goals in game: ${this._goals.length}`);
     return goalInfo;
   }
 
