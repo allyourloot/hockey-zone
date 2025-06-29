@@ -263,7 +263,7 @@ export class PlayerStatsManager {
   }
 
   /**
-   * Record a hit/body check
+   * Record a hit/body check (only when target player was controlling the puck)
    */
   public async recordHit(hitterId: string): Promise<void> {
     const hitterStats = this._playerStats.get(hitterId);
@@ -280,7 +280,7 @@ export class PlayerStatsManager {
         console.error('Error updating persistent hit stats:', error);
       }
       
-      CONSTANTS.debugLog(`Recorded hit by ${hitterStats.playerName} (Total: ${hitterStats.hits})`, 'PlayerStatsManager');
+      CONSTANTS.debugLog(`Recorded hit by ${hitterStats.playerName} against puck-controlling player (Total: ${hitterStats.hits})`, 'PlayerStatsManager');
     }
   }
 

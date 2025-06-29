@@ -1952,7 +1952,7 @@ export class ChatCommandManager {
         
         this.world!.chatManager.sendPlayerMessage(
           player, 
-          `✅ Test hit recorded! You now have ${stats?.hits || 0} hits total.`,
+          `✅ Test hit recorded! You now have ${stats?.hits || 0} hits total. (Note: In-game hits only count when body-checking a puck-controlling player)`,
           '00FF00'
         );
         
