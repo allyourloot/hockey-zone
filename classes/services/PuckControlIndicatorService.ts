@@ -115,9 +115,10 @@ export class PuckControlIndicatorService {
 
       const playerName = playerEntity.player?.username || 'Player';
 
-      // Use a lower y-offset to bring the indicator closer to player's head for all devices
-      // The mobile-specific CSS scaling will handle size differences
-      const yOffset = 1.8; // Positioned closer to player's head for better visibility
+      // Use different y-offsets for desktop vs mobile for better visibility
+      // Desktop gets higher positioning for better visibility above player models
+      // Mobile gets lower positioning to account for smaller screens
+      const yOffset = 2.2; // Higher positioning for better desktop visibility (was 1.8)
       
       CONSTANTS.debugLog(`Showing puck control indicator for ${playerName} with y-offset: ${yOffset}`, 'PuckControlIndicatorService');
 
