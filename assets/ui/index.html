@@ -215,11 +215,11 @@ and also configure additional buttons for mobile compatibility.
     const mostSaves = statsData.mostSaves;
 
     document.getElementById('live-top-scorer').textContent = 
-      topScorer ? `${topScorer.name} (${topScorer.points}pts)` : '--';
+      topScorer && topScorer.points > 0 ? `${topScorer.name} (${topScorer.points}pts)` : '--';
     document.getElementById('live-most-goals').textContent = 
-      mostGoals ? `${mostGoals.name} (${mostGoals.goals}g)` : '--';
+      mostGoals && mostGoals.goals > 0 ? `${mostGoals.name} (${mostGoals.goals}g)` : '--';
     document.getElementById('live-most-saves').textContent = 
-      mostSaves ? `${mostSaves.name} (${mostSaves.saves}sv)` : '--';
+      mostSaves && mostSaves.saves > 0 ? `${mostSaves.name} (${mostSaves.saves}sv)` : '--';
 
     // Update player stats table
     const tableBody = document.getElementById('live-stats-table-body');
@@ -246,6 +246,7 @@ and also configure additional buttons for mobile compatibility.
           <div class="live-stat-col">${points}</div>
           <div class="live-stat-col">${player.shotsOnGoal || 0}</div>
           <div class="live-stat-col">${player.saves || 0}</div>
+          <div class="live-stat-col">${player.hits || 0}</div>
           <div class="live-stat-col">${player.plusMinus >= 0 ? '+' : ''}${player.plusMinus || 0}</div>
         `;
         
@@ -266,7 +267,7 @@ and also configure additional buttons for mobile compatibility.
       // Show last 4 goals (reduced for compactness)
       const recentGoals = statsData.goalHistory.slice(-4).reverse();
       
-      recentGoals.forEach(goal => {
+      recentGoals.forEach((goal, index) => {
         const goalItem = document.createElement('div');
         goalItem.className = 'live-goal-item';
         
@@ -280,14 +281,42 @@ and also configure additional buttons for mobile compatibility.
         const scorerText = goal.scorerName || 'Unknown';
         const assistText = goal.assistName ? ` (${goal.assistName})` : '';
         const teamClass = goal.team === 'RED' ? 'red' : 'blue';
+        const ownGoalText = goal.isOwnGoal ? ' <span class="own-goal-indicator">(OG)</span>' : '';
+        
+        // Calculate score after this goal (use provided scoreAfter or calculate from goal history)
+        let scoreAfterText = '';
+        if (goal.scoreAfter) {
+          // Use provided score if available
+          scoreAfterText = `${goal.scoreAfter.red}R - ${goal.scoreAfter.blue}B`;
+        } else {
+          // Calculate running score up to this goal from the full goal history
+          const goalHistoryIndex = statsData.goalHistory.length - 1 - index; // Convert back to original index
+          let redScore = 0;
+          let blueScore = 0;
+          
+          // Count goals up to and including this goal
+          for (let i = 0; i <= goalHistoryIndex; i++) {
+            const historyGoal = statsData.goalHistory[i];
+            if (historyGoal.team === 'RED') {
+              redScore++;
+            } else if (historyGoal.team === 'BLUE') {
+              blueScore++;
+            }
+          }
+          
+          scoreAfterText = `${redScore}R - ${blueScore}B`;
+        }
         
         goalItem.innerHTML = `
           <div class="live-goal-info">
             <div class="live-goal-time">${periodTimeText}</div>
-            <div class="live-goal-scorer">${scorerText}</div>
+            <div class="live-goal-scorer">${scorerText}${ownGoalText}</div>
             ${assistText ? `<div class="live-goal-assist">${assistText}</div>` : ''}
           </div>
-          <div class="live-goal-team ${teamClass}">${goal.team}</div>
+          <div class="live-goal-right">
+            <div class="live-goal-score">${scoreAfterText}</div>
+            <div class="live-goal-team ${teamClass}">${goal.team}</div>
+          </div>
         `;
         
         recentGoalsContainer.appendChild(goalItem);
@@ -2516,14 +2545,42 @@ and also configure additional buttons for mobile compatibility.
       
       const periodName = goal.period === 1 ? '1st' : goal.period === 2 ? '2nd' : '3rd';
       const timeDisplay = `${Math.floor(goal.timeInPeriod / 60)}:${(goal.timeInPeriod % 60).toString().padStart(2, '0')}`;
+      const ownGoalText = goal.isOwnGoal ? ' <span class="own-goal-indicator">(OG)</span>' : '';
+      
+      // Calculate score after this goal (use provided scoreAfter or calculate from goal history)
+      let scoreAfterText = '';
+      if (goal.scoreAfter) {
+        // Use provided score if available
+        scoreAfterText = `${goal.scoreAfter.red}R - ${goal.scoreAfter.blue}B`;
+      } else {
+        // Calculate running score up to this goal from the full goal history
+        const goalHistoryIndex = goals.length - 1 - index; // Convert back to original index
+        let redScore = 0;
+        let blueScore = 0;
+        
+        // Count goals up to and including this goal
+        for (let i = 0; i <= goalHistoryIndex; i++) {
+          const historyGoal = goals[i];
+          if (historyGoal.team === 'RED') {
+            redScore++;
+          } else if (historyGoal.team === 'BLUE') {
+            blueScore++;
+          }
+        }
+        
+        scoreAfterText = `${redScore}R - ${blueScore}B`;
+      }
       
       goalItem.innerHTML = `
         <div class="goal-info">
           <div class="goal-period">${periodName} ${timeDisplay}</div>
-          <div class="goal-scorer">${goal.scorerName || 'Unknown'}</div>
+          <div class="goal-scorer">${goal.scorerName || 'Unknown'}${ownGoalText}</div>
           ${goal.assistName ? `<div class="goal-assist">Assist: ${goal.assistName}</div>` : ''}
         </div>
-        <div class="goal-team ${goal.team.toLowerCase()}">${goal.team}</div>
+        <div class="goal-right">
+          <div class="goal-score">${scoreAfterText}</div>
+          <div class="goal-team ${goal.team.toLowerCase()}">${goal.team}</div>
+        </div>
       `;
       
       goalsList.appendChild(goalItem);
@@ -3478,6 +3535,7 @@ and also configure additional buttons for mobile compatibility.
                   <div class="live-stat-col">P</div>
                   <div class="live-stat-col">SOG</div>
                   <div class="live-stat-col">SV</div>
+                  <div class="live-stat-col">H</div>
                   <div class="live-stat-col">+/-</div>
                 </div>
                 <div class="live-stats-table-body compact" id="live-stats-table-body">
@@ -6179,6 +6237,25 @@ and also configure additional buttons for mobile compatibility.
     border: 1px solid #44aaff;
   }
 
+  .goal-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .goal-score {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #ccc;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 55px;
+    text-align: center;
+  }
+
   /* Controls Toggle Button */
   .controls-toggle {
     position: fixed;
@@ -6553,7 +6630,7 @@ and also configure additional buttons for mobile compatibility.
 
   .live-stats-table-header {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
     gap: 10px;
     padding: 15px 20px;
     background: rgba(255, 255, 255, 0.1);
@@ -6574,7 +6651,7 @@ and also configure additional buttons for mobile compatibility.
 
   .live-player-stat-row {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr;
+    grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr 1fr 1fr;
     gap: 10px;
     padding: 12px 20px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -6652,6 +6729,25 @@ and also configure additional buttons for mobile compatibility.
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
 
+  .live-goal-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .live-goal-score {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #ccc;
+    font-weight: 600;
+    font-family: 'Courier New', monospace;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-width: 50px;
+    text-align: center;
+  }
+
   .live-goal-item:last-child {
     border-bottom: none;
   }
@@ -6703,6 +6799,18 @@ and also configure additional buttons for mobile compatibility.
     background: rgba(68, 170, 255, 0.2);
     color: #44aaff;
     border: 1px solid #44aaff;
+  }
+
+  .own-goal-indicator {
+    color: #ff8800;
+    font-weight: 700;
+    font-size: 0.8rem;
+    background: rgba(255, 136, 0, 0.15);
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid #ff8800;
+    margin-left: 8px;
+    letter-spacing: 0.5px;
   }
 
   .live-stats-footer {
@@ -6893,7 +7001,7 @@ and also configure additional buttons for mobile compatibility.
 
     .live-stats-table-header,
     .live-player-stat-row {
-      grid-template-columns: 2fr 1fr 1fr 1fr;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr;
       font-size: 0.8rem;
     }
 
@@ -8165,6 +8273,16 @@ k
     .live-goal-item {
       padding: 4px 0;
       font-size: 0.7rem;
+    }
+
+    .live-goal-score {
+      font-size: 0.65rem;
+      padding: 2px 4px;
+      min-width: 40px;
+    }
+
+    .live-goal-right {
+      gap: 8px;
     }
     
     /* Compact top performers */

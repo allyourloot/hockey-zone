@@ -26,7 +26,7 @@ export class PuckBoundaryService {
     Z_MIN: -50,  // Much wider buffer to prevent false triggers
     Z_MAX: 50,   // Much wider buffer to prevent false triggers
     Y_MIN: 0.5,  // Below the floor
-    Y_MAX: 10,   // Reasonable height limit
+    Y_MAX: 15,  // Reasonable height limit
   };
 
   // Cooldown to prevent rapid respawn triggers

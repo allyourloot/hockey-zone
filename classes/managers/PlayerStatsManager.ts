@@ -62,6 +62,10 @@ export class PlayerStatsManager {
   private _goals: GoalInfo[] = [];
   private _gameStartTime: number = 0;
   private _periodStartTime: number = 0;
+  
+  // Track when players join the game for time on ice calculation
+  private _playerJoinTimes: Map<string, number> = new Map();
+  private _totalGameDurationMs: number = 6 * 60 * 1000; // 6 minutes total game time
 
   private constructor() {}
 
@@ -97,6 +101,9 @@ export class PlayerStatsManager {
     this._playerStats.set(player.id, stats);
     this._playerObjects.set(player.id, player); // Store Player object for persistence
     
+    // Track when this player joined the game for time on ice calculation
+    this._playerJoinTimes.set(player.id, Date.now());
+    
     // Load persistent stats for this player
     try {
       await PersistentPlayerStatsManager.instance.loadPlayerStats(player);
@@ -111,6 +118,9 @@ export class PlayerStatsManager {
    * Remove a player's stats
    */
   public async removePlayer(playerId: string): Promise<void> {
+    // Update time on ice before removing
+    this.updatePlayerTimeOnIce(playerId);
+    
     // Save persistent stats before removing
     const player = this._playerObjects.get(playerId);
     if (player) {
@@ -123,6 +133,7 @@ export class PlayerStatsManager {
     
     this._playerStats.delete(playerId);
     this._playerObjects.delete(playerId);
+    this._playerJoinTimes.delete(playerId);
     
     // Clear from persistent cache
     PersistentPlayerStatsManager.instance.clearPlayerFromCache(playerId);
@@ -302,27 +313,37 @@ export class PlayerStatsManager {
   public async recordGameOutcome(winningTeam: HockeyTeam, isTie: boolean = false): Promise<void> {
     CONSTANTS.debugLog(`Recording game outcome - Winner: ${isTie ? 'TIE' : winningTeam}`, 'PlayerStatsManager');
     
-    const promises: Promise<void>[] = [];
+    // Update all players' time on ice before checking qualification
+    this.updateAllPlayersTimeOnIce();
+    
+    // Log GP qualification summary
+    this.logGPQualificationSummary();
     
     for (const [playerId, stats] of this._playerStats.entries()) {
       const player = this.getPlayerObjectById(playerId);
       if (!player) continue;
       
+      // Check if player qualifies for GP based on new criteria
+      const qualifiesForGP = this.doesPlayerQualifyForGP(playerId);
+      
+      if (!qualifiesForGP) {
+        CONSTANTS.debugLog(`❌ ${stats.playerName} did not qualify for GP - no win/loss/GP recorded`, 'PlayerStatsManager');
+        continue;
+      }
+      
       try {
         if (isTie) {
-          // In case of tie, just record game played (you could modify this logic)
-          await PersistentPlayerStatsManager.instance.updatePlayerStats(player, {
-            gamesPlayed: (await PersistentPlayerStatsManager.instance.getPlayerStats(player)).gamesPlayed + 1
-          });
-          CONSTANTS.debugLog(`Recorded tie for ${stats.playerName}`, 'PlayerStatsManager');
+          // Record tie (conditional GP)
+          await PersistentPlayerStatsManager.instance.recordConditionalGamePlayed(player);
+          CONSTANTS.debugLog(`✅ Recorded GP (tie) for ${stats.playerName} - qualified based on play time/contribution`, 'PlayerStatsManager');
         } else if (stats.team === winningTeam) {
-          // Player is on winning team
-          await PersistentPlayerStatsManager.instance.recordWin(player);
-          CONSTANTS.debugLog(`Recorded WIN for ${stats.playerName} (${stats.team} team)`, 'PlayerStatsManager');
+          // Player is on winning team (conditional GP)
+          await PersistentPlayerStatsManager.instance.recordConditionalWin(player);
+          CONSTANTS.debugLog(`✅ Recorded WIN and GP for ${stats.playerName} (${stats.team} team) - qualified based on play time/contribution`, 'PlayerStatsManager');
         } else {
-          // Player is on losing team
-          await PersistentPlayerStatsManager.instance.recordLoss(player);
-          CONSTANTS.debugLog(`Recorded LOSS for ${stats.playerName} (${stats.team} team)`, 'PlayerStatsManager');
+          // Player is on losing team (conditional GP)
+          await PersistentPlayerStatsManager.instance.recordConditionalLoss(player);
+          CONSTANTS.debugLog(`✅ Recorded LOSS and GP for ${stats.playerName} (${stats.team} team) - qualified based on play time/contribution`, 'PlayerStatsManager');
         }
       } catch (error) {
         console.error(`Error recording game outcome for ${stats.playerName}:`, error);
@@ -331,10 +352,39 @@ export class PlayerStatsManager {
   }
 
   /**
+   * Log GP qualification summary for debugging
+   */
+  public logGPQualificationSummary(): void {
+    const summary = this.getPlayTimeSummary();
+    
+    CONSTANTS.debugLog('=== GAMES PLAYED (GP) QUALIFICATION SUMMARY ===', 'PlayerStatsManager');
+    CONSTANTS.debugLog(`Game Duration: ${this._totalGameDurationMs / 60000} minutes`, 'PlayerStatsManager');
+    CONSTANTS.debugLog('Qualification Criteria: 50%+ play time OR <50% play time + contribution (Goal/Assist/Save/Hit)', 'PlayerStatsManager');
+    CONSTANTS.debugLog('', 'PlayerStatsManager');
+    
+    summary.forEach((player, index) => {
+      const status = player.qualifiesForGP ? '✅ QUALIFIED' : '❌ NOT QUALIFIED';
+      const timeMinutes = (player.timeOnIce / 60).toFixed(1);
+      
+      CONSTANTS.debugLog(`${index + 1}. ${player.playerName}`, 'PlayerStatsManager');
+      CONSTANTS.debugLog(`   Time Played: ${timeMinutes} min (${player.percentageOfGame.toFixed(1)}%)`, 'PlayerStatsManager');
+      CONSTANTS.debugLog(`   ${status}: ${player.qualificationReason}`, 'PlayerStatsManager');
+      CONSTANTS.debugLog('', 'PlayerStatsManager');
+    });
+    
+    const qualifiedCount = summary.filter(p => p.qualifiesForGP).length;
+    CONSTANTS.debugLog(`${qualifiedCount}/${summary.length} players qualified for GP this game`, 'PlayerStatsManager');
+    CONSTANTS.debugLog('=== END GP QUALIFICATION SUMMARY ===', 'PlayerStatsManager');
+  }
+
+  /**
    * Save all player persistent stats (call at game end)
    */
   public async saveAllPlayerStats(): Promise<void> {
     CONSTANTS.debugLog('Saving persistent stats for all players', 'PlayerStatsManager');
+    
+    // Update all players' time on ice before saving
+    this.updateAllPlayersTimeOnIce();
     
     const savePromises: Promise<boolean>[] = [];
     
@@ -495,6 +545,7 @@ export class PlayerStatsManager {
    */
   public resetStats(): void {
     this._playerStats.clear();
+    this._playerJoinTimes.clear();
     this._goals = [];
     this._gameStartTime = 0;
     this._periodStartTime = 0;
@@ -624,6 +675,116 @@ export class PlayerStatsManager {
       mostSaves: mostSaves ? { name: mostSaves.playerName, saves: mostSaves.saves } : null,
       teamStats
     };
+  }
+
+  /**
+   * Update a player's time on ice based on when they joined
+   */
+  private updatePlayerTimeOnIce(playerId: string): void {
+    const joinTime = this._playerJoinTimes.get(playerId);
+    const stats = this._playerStats.get(playerId);
+    
+    if (joinTime && stats) {
+      const timePlayedMs = Date.now() - joinTime;
+      const timePlayedSeconds = Math.floor(timePlayedMs / 1000);
+      stats.timeOnIce = timePlayedSeconds;
+      
+      CONSTANTS.debugLog(`Updated time on ice for player ${playerId}: ${timePlayedSeconds} seconds`, 'PlayerStatsManager');
+    }
+  }
+
+  /**
+   * Update all players' time on ice (call this periodically or at game end)
+   */
+  public updateAllPlayersTimeOnIce(): void {
+    for (const playerId of this._playerStats.keys()) {
+      this.updatePlayerTimeOnIce(playerId);
+    }
+  }
+
+  /**
+   * Check if a player qualifies for a Games Played (GP) based on new criteria
+   */
+  private doesPlayerQualifyForGP(playerId: string): boolean {
+    this.updatePlayerTimeOnIce(playerId); // Make sure time on ice is current
+    
+    const stats = this._playerStats.get(playerId);
+    if (!stats) return false;
+
+    // Calculate percentage of game played
+    const timePlayedMs = stats.timeOnIce * 1000;
+    const gamePlayedPercentage = (timePlayedMs / this._totalGameDurationMs) * 100;
+
+    CONSTANTS.debugLog(`GP Qualification check for ${stats.playerName}: ${stats.timeOnIce}s played (${gamePlayedPercentage.toFixed(1)}%)`, 'PlayerStatsManager');
+
+    // Condition 1: Played at least 50% of the game
+    if (gamePlayedPercentage >= 50) {
+      CONSTANTS.debugLog(`✅ ${stats.playerName} qualifies for GP: Played ${gamePlayedPercentage.toFixed(1)}% of game (≥50%)`, 'PlayerStatsManager');
+      return true;
+    }
+
+    // Condition 2: If played less than 50%, must have contributed with at least one stat
+    const hasContribution = stats.goals > 0 || stats.assists > 0 || stats.saves > 0 || stats.hits > 0;
+    
+    if (hasContribution) {
+      CONSTANTS.debugLog(`✅ ${stats.playerName} qualifies for GP: Played ${gamePlayedPercentage.toFixed(1)}% but has contribution (G:${stats.goals} A:${stats.assists} S:${stats.saves} H:${stats.hits})`, 'PlayerStatsManager');
+      return true;
+    }
+
+    CONSTANTS.debugLog(`❌ ${stats.playerName} does NOT qualify for GP: Played ${gamePlayedPercentage.toFixed(1)}% with no contribution`, 'PlayerStatsManager');
+    return false;
+  }
+
+  /**
+   * Get play time summary for all players (for debugging)
+   */
+  public getPlayTimeSummary(): Array<{
+    playerId: string;
+    playerName: string;
+    timeOnIce: number;
+    percentageOfGame: number;
+    qualifiesForGP: boolean;
+    qualificationReason: string;
+  }> {
+    this.updateAllPlayersTimeOnIce();
+    
+    const summary: Array<{
+      playerId: string;
+      playerName: string;
+      timeOnIce: number;
+      percentageOfGame: number;
+      qualifiesForGP: boolean;
+      qualificationReason: string;
+    }> = [];
+
+    for (const [playerId, stats] of this._playerStats.entries()) {
+      const timePlayedMs = stats.timeOnIce * 1000;
+      const gamePlayedPercentage = (timePlayedMs / this._totalGameDurationMs) * 100;
+      const qualifiesForGP = this.doesPlayerQualifyForGP(playerId);
+      
+      let qualificationReason = '';
+      if (gamePlayedPercentage >= 50) {
+        qualificationReason = `Played ${gamePlayedPercentage.toFixed(1)}% of game (≥50%)`;
+      } else {
+        const hasContribution = stats.goals > 0 || stats.assists > 0 || stats.saves > 0 || stats.hits > 0;
+        if (hasContribution) {
+          qualificationReason = `Played ${gamePlayedPercentage.toFixed(1)}% but contributed (G:${stats.goals} A:${stats.assists} S:${stats.saves} H:${stats.hits})`;
+        } else {
+          qualificationReason = `Played ${gamePlayedPercentage.toFixed(1)}% with no contribution`;
+        }
+      }
+
+      summary.push({
+        playerId,
+        playerName: stats.playerName,
+        timeOnIce: stats.timeOnIce,
+        percentageOfGame: gamePlayedPercentage,
+        qualifiesForGP,
+        qualificationReason
+      });
+    }
+
+    return summary.sort((a, b) => b.percentageOfGame - a.percentageOfGame);
   }
 
   /**

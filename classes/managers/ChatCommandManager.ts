@@ -92,6 +92,7 @@ export class ChatCommandManager {
     this.registerTestHitCommand();
     this.registerTestShotCommand();
     this.registerTestLeaderboardCommand();
+    this.registerGPQualificationCommand();
     this.registerPassDebugCommand();
     this.registerClearHistoryCommand();
     this.registerPuckBoundaryCommands();
@@ -2052,6 +2053,58 @@ export class ChatCommandManager {
           'FF0000'
         );
         console.error('Error in test leaderboard command:', error);
+      }
+    });
+  }
+
+  /**
+   * Register GP qualification test command
+   */
+  private registerGPQualificationCommand(): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand('/gpqualify', (player) => {
+      try {
+        const statsManager = PlayerStatsManager.instance;
+        const summary = statsManager.getPlayTimeSummary();
+        
+        this.world!.chatManager.sendPlayerMessage(player, '=== GP QUALIFICATION STATUS ===', 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, 'Criteria: 50%+ play time OR <50% + contribution', 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, '', 'FFFFFF');
+        
+        summary.forEach((playerSummary, index) => {
+          const status = playerSummary.qualifiesForGP ? '✅' : '❌';
+          const timeMinutes = (playerSummary.timeOnIce / 60).toFixed(1);
+          const color = playerSummary.qualifiesForGP ? '00FF00' : 'FF6666';
+          
+          this.world!.chatManager.sendPlayerMessage(
+            player,
+            `${status} ${playerSummary.playerName}: ${timeMinutes}min (${playerSummary.percentageOfGame.toFixed(1)}%)`,
+            color
+          );
+          
+          this.world!.chatManager.sendPlayerMessage(
+            player,
+            `   ${playerSummary.qualificationReason}`,
+            'CCCCCC'
+          );
+        });
+        
+        const qualifiedCount = summary.filter(p => p.qualifiesForGP).length;
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `${qualifiedCount}/${summary.length} players qualify for GP`, 
+          'FFFF00'
+        );
+        
+        CONSTANTS.debugLog(`GP qualification summary requested by ${player.username}`, 'ChatCommandManager');
+      } catch (error) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          `❌ Error getting GP qualification: ${error}`,
+          'FF0000'
+        );
+        console.error('Error in /gpqualify command:', error);
       }
     });
   }

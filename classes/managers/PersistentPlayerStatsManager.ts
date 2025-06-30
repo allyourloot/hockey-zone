@@ -230,6 +230,38 @@ export class PersistentPlayerStatsManager {
   }
 
   /**
+   * Record a conditional win for a player (only if they qualify for GP)
+   */
+  public async recordConditionalWin(player: Player): Promise<void> {
+    const currentStats = await this.getPlayerStats(player);
+    await this.updatePlayerStats(player, { 
+      wins: currentStats.wins + 1,
+      gamesPlayed: currentStats.gamesPlayed + 1
+    });
+  }
+
+  /**
+   * Record a conditional loss for a player (only if they qualify for GP)
+   */
+  public async recordConditionalLoss(player: Player): Promise<void> {
+    const currentStats = await this.getPlayerStats(player);
+    await this.updatePlayerStats(player, { 
+      losses: currentStats.losses + 1,
+      gamesPlayed: currentStats.gamesPlayed + 1
+    });
+  }
+
+  /**
+   * Record a conditional game played for a player (tie game, only if they qualify for GP)
+   */
+  public async recordConditionalGamePlayed(player: Player): Promise<void> {
+    const currentStats = await this.getPlayerStats(player);
+    await this.updatePlayerStats(player, { 
+      gamesPlayed: currentStats.gamesPlayed + 1
+    });
+  }
+
+  /**
    * Save all dirty (modified) player stats
    */
   public async saveAllDirtyStats(): Promise<void> {
