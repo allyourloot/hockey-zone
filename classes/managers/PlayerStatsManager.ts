@@ -52,6 +52,7 @@ export interface ShotInfo {
   onGoal: boolean;
   saved: boolean;
   goalieId?: string;
+  isOwnGoal: boolean;
 }
 
 export class PlayerStatsManager {
@@ -149,27 +150,32 @@ export class PlayerStatsManager {
     // Record goal for scorer
     const scorerStats = this._playerStats.get(scorerId);
     if (scorerStats) {
-      console.log(`[PlayerStatsManager] Recording goal for scorer ${scorerId} (${scorerStats.playerName}) - Current goals: ${scorerStats.goals}`);
-      scorerStats.goals++;
-      if (!isOwnGoal) {
-        scorerStats.plusMinus++;
-      } else {
-        scorerStats.plusMinus--;
-      }
-      console.log(`[PlayerStatsManager] Scorer stats updated - New goals: ${scorerStats.goals}, +/-: ${scorerStats.plusMinus}`);
+      console.log(`[PlayerStatsManager] Recording goal for scorer ${scorerId} (${scorerStats.playerName}) - Current goals: ${scorerStats.goals}, Own Goal: ${isOwnGoal}`);
       
-      // Update persistent stats for scorer
-      try {
-        const scorerPlayer = this.getPlayerObjectById(scorerId);
-        if (scorerPlayer) {
-          await PersistentPlayerStatsManager.instance.recordGoal(scorerPlayer);
-          console.log(`[PlayerStatsManager] ✅ Persistent goal stat recorded for ${scorerStats.playerName}`);
-        } else {
-          console.warn(`[PlayerStatsManager] ❌ Could not find player object for scorer ${scorerId}`);
+      // Only count as a goal if it's NOT an own goal
+      if (!isOwnGoal) {
+        scorerStats.goals++;
+        scorerStats.plusMinus++;
+        
+        // Update persistent stats for scorer (only for actual goals, not own goals)
+        try {
+          const scorerPlayer = this.getPlayerObjectById(scorerId);
+          if (scorerPlayer) {
+            await PersistentPlayerStatsManager.instance.recordGoal(scorerPlayer);
+            console.log(`[PlayerStatsManager] ✅ Persistent goal stat recorded for ${scorerStats.playerName}`);
+          } else {
+            console.warn(`[PlayerStatsManager] ❌ Could not find player object for scorer ${scorerId}`);
+          }
+        } catch (error) {
+          console.error('Error updating persistent goal stats:', error);
         }
-      } catch (error) {
-        console.error('Error updating persistent goal stats:', error);
+      } else {
+        // Own goal - only affects +/- rating, not goal count
+        scorerStats.plusMinus--;
+        console.log(`[PlayerStatsManager] ❌ Own goal - no goal stat recorded for ${scorerStats.playerName}`);
       }
+      
+      console.log(`[PlayerStatsManager] Scorer stats updated - Goals: ${scorerStats.goals}, +/-: ${scorerStats.plusMinus}`);
     } else {
       console.warn(`[PlayerStatsManager] ❌ Scorer ${scorerId} not found in player stats map!`);
     }
@@ -225,20 +231,22 @@ export class PlayerStatsManager {
   /**
    * Record a shot attempt
    */
-  public async recordShot(shooterId: string, team: HockeyTeam, onGoal: boolean, saved: boolean, goalieId?: string): Promise<ShotInfo> {
+  public async recordShot(shooterId: string, team: HockeyTeam, onGoal: boolean, saved: boolean, goalieId?: string, isOwnGoal: boolean = false): Promise<ShotInfo> {
     const shotInfo: ShotInfo = {
       shooterId,
       team,
       onGoal,
       saved,
-      goalieId
+      goalieId,
+      isOwnGoal
     };
 
     const shooterStats = this._playerStats.get(shooterId);
-    if (shooterStats && onGoal) {
+    if (shooterStats && onGoal && !isOwnGoal) {
+      // Only count as shot on goal if it's on goal AND not shooting at own goal
       shooterStats.shotsOnGoal++;
       
-      // Update persistent stats for shooter
+      // Update persistent stats for shooter (only for shots at opponent's goal)
       try {
         const shooterPlayer = this.getPlayerObjectById(shooterId);
         if (shooterPlayer) {
@@ -247,6 +255,10 @@ export class PlayerStatsManager {
       } catch (error) {
         console.error('Error updating persistent shot stats:', error);
       }
+      
+      CONSTANTS.debugLog(`Recorded shot on goal: ${shooterStats.playerName} (Total SOG: ${shooterStats.shotsOnGoal})`, 'PlayerStatsManager');
+    } else if (shooterStats && onGoal && isOwnGoal) {
+      CONSTANTS.debugLog(`Shot at own goal by ${shooterStats.playerName} - not counted as SOG`, 'PlayerStatsManager');
     }
 
     // Record save for goalie
@@ -257,7 +269,7 @@ export class PlayerStatsManager {
       }
     }
 
-    CONSTANTS.debugLog(`Recorded shot: ${shooterStats?.playerName} (${onGoal ? 'on goal' : 'off target'}${saved ? ', saved' : ''})`, 'PlayerStatsManager');
+    CONSTANTS.debugLog(`Recorded shot: ${shooterStats?.playerName} (${onGoal ? 'on goal' : 'off target'}${saved ? ', saved' : ''}${isOwnGoal ? ', own goal' : ''})`, 'PlayerStatsManager');
 
     return shotInfo;
   }

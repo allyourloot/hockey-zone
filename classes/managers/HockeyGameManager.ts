@@ -197,10 +197,10 @@ export class HockeyGameManager {
       }
       
       // TRACK SHOT ON GOAL: Record that this was a shot on goal (resulted in goal)
-      PlayerStatsManager.instance.recordShot(scorerId, team, true, false).catch(error => {
+      PlayerStatsManager.instance.recordShot(scorerId, team, true, false, undefined, isOwnGoal).catch(error => {
         console.error('Error recording shot stat:', error);
-      }); // onGoal=true, saved=false
-      CONSTANTS.debugLog(`📊 Recorded shot on goal for ${scorerId} (resulted in goal)`, 'HockeyGameManager');
+      }); // onGoal=true, saved=false, isOwnGoal passed from method parameter
+      CONSTANTS.debugLog(`📊 Recorded shot on goal for ${scorerId} (resulted in ${isOwnGoal ? 'own goal' : 'goal'})`, 'HockeyGameManager');
       
       // Record goal (now async)
       PlayerStatsManager.instance.recordGoal(scorerId, primaryAssistId, team, this._period, isOwnGoal)

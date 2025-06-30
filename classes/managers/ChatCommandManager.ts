@@ -771,8 +771,8 @@ export class ChatCommandManager {
       // Add some test stats for demonstration
       PlayerStatsManager.instance.recordGoal(player.id, 'RED', 1, 120, false);
       PlayerStatsManager.instance.recordGoal(player.id, 'RED', 2, 45, false);
-      PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false);
-      PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false);
+      PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false, undefined, false);
+      PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false, undefined, false);
       
       this.world!.chatManager.sendPlayerMessage(player, 'Testing enhanced game over sequence with box score...', '00FF00');
       console.log('[ChatCommand] Testing enhanced game over sequence with box score triggered by', player.id);
@@ -1995,7 +1995,7 @@ export class ChatCommandManager {
         }
         
         // Test shot on goal recording
-        await PlayerStatsManager.instance.recordShot(player.id, teamInfo.team, true, false);
+        await PlayerStatsManager.instance.recordShot(player.id, teamInfo.team, true, false, undefined, false);
         
         // Get current stats
         const stats = PlayerStatsManager.instance.getPlayerStats(player.id);
