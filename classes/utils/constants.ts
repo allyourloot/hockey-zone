@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
@@ -15,7 +15,7 @@ export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManage
 export const SAVE_DEBUG_FILTER = false; // Set to true to show ONLY SaveDetectionService logs
 
 // NEW: Offside detection debug filter for isolating OffsideDetectionService logs
-export const OFFSIDE_DEBUG_FILTER = false; // Set to true to show ONLY OffsideDetectionService logs
+export const OFFSIDE_DEBUG_FILTER = true; // Set to true to show ONLY OffsideDetectionService logs
 
 // NEW: Boundary detection debug filter for isolating PuckBoundaryService logs
 export const BOUNDARY_DEBUG_FILTER = false; // Set to true to show ONLY PuckBoundaryService logs
@@ -48,7 +48,7 @@ export const HOCKEY_STOP = {
   DECELERATION: 0.85, // Much more deceleration to nearly stop player (was 0.92)
   TURN_SPEED: 15, // Keep current turn speed
   MIN_SPEED: 8, // Keep the same minimum speed requirement
-  COOLDOWN: 3000, // Keep current cooldown
+  COOLDOWN: 4000, // Keep current cooldown
   MOMENTUM_PRESERVATION: 0.02, // Minimal momentum preservation - almost complete stop (was 0.1)
   SPEED_BOOST: 0.0, // No speed boost at all to prevent any dramatic movement (was 0.02)
   MAX_ANGLE: 15, // Reduced max angle for subtle movement (was 20)
@@ -74,10 +74,11 @@ export const GOALIE_SLIDE = {
 // =========================
 export const SPIN_MOVE = {
   DURATION: 300, // 300ms for one quick spin
-  COOLDOWN: 7000, // 7 seconds cooldown
+  COOLDOWN: 8000, // 7 seconds cooldown
   MIN_SPEED: 8, // Minimum speed required to spin (must be running, not walking)
   MOMENTUM_PRESERVATION: 0.85,
-  BOOST_MULTIPLIER: 1.2, // 20% speed boost after spin
+  BOOST_MULTIPLIER: 1.1, // 10% speed boost after spin
+  BOOST_DURATION: 1000, // 2 seconds boost duration
 } as const;
 
 // =========================
@@ -210,25 +211,36 @@ export const PLAYER_DEFAULTS = {
 } as const;
 
 // =========================
+// GOALIE BALANCE CONSTANTS
+// =========================
+// Goalies are protected from stick checks and body checks, but to prevent them
+// from becoming invincible puck carriers, they must pass within a time limit.
+export const GOALIE_BALANCE = {
+  PUCK_CONTROL_LIMIT: 5000, // 5 seconds - Goalies must pass within this time or auto-pass triggers
+  WARNING_TIME: 2000, // Show warning message when this many milliseconds remain
+  COUNTDOWN_THRESHOLD: 3000, // Start UI countdown timer when this many milliseconds remain
+} as const;
+
+// =========================
 // POSITION-SPECIFIC STATS
 // =========================
 export const POSITION_STATS = {
   DEFENDER: {
-    runVelocity: 10,
-    walkVelocity: 6,
+    runVelocity: 9,
+    walkVelocity: 5,
     minShotForce: 18,
     maxShotForce: 28,
-    passingPower: 1.3,
-  },
-  WINGER: {
-    runVelocity: 12,
-    walkVelocity: 7,
-    minShotForce: 20,
-    maxShotForce: 32,
     passingPower: 1.1,
   },
-  CENTER: {
+  WINGER: {
     runVelocity: 11,
+    walkVelocity: 6,
+    minShotForce: 20,
+    maxShotForce: 32,
+    passingPower: 1.0,
+  },
+  CENTER: {
+    runVelocity: 10,
     walkVelocity: 6,
     minShotForce: 25,
     maxShotForce: 35,

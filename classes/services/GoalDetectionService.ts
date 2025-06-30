@@ -2,6 +2,7 @@ import { Entity, type Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyGameState } from '../utils/types';
 import { HockeyGameManager } from '../managers/HockeyGameManager';
 import { IceSkatingController } from '../controllers/IceSkatingController';
+import { OffsideDetectionService } from './OffsideDetectionService';
 import * as CONSTANTS from '../utils/constants';
 
 /**
@@ -25,6 +26,11 @@ export class GoalDetectionService {
   private _previousPuckPosition: Vector3Like | null = null;
   private _lastGoalTime: number = 0;
   private _goalCooldownMs: number = 8000; // 8 seconds between goals to prevent puck bouncing in net from triggering multiple goals
+  
+  // Prevent goal detection immediately after offside is called
+  private _offsideJustCalled: boolean = false;
+  private _offsideCallTime: number = 0;
+  private _offsideBlockDurationMs: number = 2000; // Block goals for 2 seconds after offside
   
   // Goal zones based on your measured coordinates
   private readonly GOAL_ZONES: Record<string, GoalZone> = {
@@ -95,6 +101,19 @@ export class GoalDetectionService {
       return null;
     }
 
+    // CRITICAL: Block goal detection if offside was just called (prevents dual overlays)
+    if (this._offsideJustCalled) {
+      const timeSinceOffside = currentTime - this._offsideCallTime;
+      if (timeSinceOffside < this._offsideBlockDurationMs) {
+        // Still within block period
+        return null;
+      } else {
+        // Block period expired, clear the flag
+        this._offsideJustCalled = false;
+        console.log(`[GoalDetectionService] Offside block period expired after ${timeSinceOffside}ms - goal detection re-enabled`);
+      }
+    }
+
     const currentPosition = puckEntity.position;
     
     // Store position for next frame comparison
@@ -116,6 +135,14 @@ export class GoalDetectionService {
     if (distance > 10) {
       console.log(`[GoalDetectionService] Ignoring large movement (${distance.toFixed(2)} blocks) - likely teleport/reset`);
       return null;
+    }
+
+    // RECENT OFFSIDE CHECK: Only check if offside was recently called to prevent dual overlays
+    // Don't check delayed tracking here - let OffsideDetectionService handle proximity during normal gameplay
+    const hasRecentOffside = this.checkForRecentOffsideCall();
+    if (hasRecentOffside) {
+      console.log(`[GoalDetectionService] GOAL BLOCKED - Recent offside call prevents goal`);
+      return null; // Block goal detection if offside was recently called
     }
 
     // Check each goal zone for line crossing
@@ -162,6 +189,14 @@ export class GoalDetectionService {
     const crossedGoalLine = this.didCrossLine(prevPos.z, currPos.z, zone.goalLineZ);
     
     if (crossedGoalLine) {
+      // DELAYED OFFSIDE CHECK: Only check for delayed violations during actual goal attempts
+      // This preserves the delayed offside proximity system during normal gameplay
+      const hasDelayedOffsideViolation = this.checkForActiveOffsideViolation(puckEntity);
+      if (hasDelayedOffsideViolation) {
+        console.log(`[GoalDetectionService] GOAL BLOCKED - Delayed offside violation detected during goal attempt`);
+        return null; // Block goal completely if delayed offside violation exists
+      }
+      
       // Check if puck is currently being controlled by a player (carried into goal)
       const isControlledByPlayer = this.isPuckControlledByPlayer(puckEntity);
       if (isControlledByPlayer) {
@@ -228,6 +263,8 @@ export class GoalDetectionService {
   public reset(): void {
     this._previousPuckPosition = null;
     this._lastGoalTime = 0;
+    this._offsideJustCalled = false;
+    this._offsideCallTime = 0;
     console.log('[GoalDetectionService] Service state reset');
   }
 
@@ -287,6 +324,78 @@ export class GoalDetectionService {
     console.log(`[GoalDetectionService] Own goal check: player ${lastTouchedPlayerId} (${playerTeamInfo.team}) vs scoring team (${scoringTeam}) = ${isOwnGoal ? 'OWN GOAL' : 'NORMAL GOAL'}`);
     return isOwnGoal;
   }
+
+  /**
+   * Check if an offside was recently called (to prevent dual overlays)
+   * @returns true if offside was recently called, false otherwise
+   */
+  private checkForRecentOffsideCall(): boolean {
+    // Check if an offside was recently called (within last 3 seconds)
+    // This catches cases where offside was called during blue line crossing but goal still attempted
+    const gameManager = HockeyGameManager.instance;
+    const timeSinceLastOffside = Date.now() - gameManager['_lastOffsideCallTime'];
+    if (timeSinceLastOffside < 3000) { // 3 seconds
+      console.log(`[GoalDetectionService] 🚫 GOAL BLOCKED - Offside was recently called ${timeSinceLastOffside}ms ago`);
+      
+      // Set our own blocking flag to prevent dual overlays
+      this._offsideJustCalled = true;
+      this._offsideCallTime = Date.now();
+      
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Check for any delayed offside violations that would invalidate a goal
+   * This checks the existing delayed offside tracking state and should ONLY be called
+   * during actual goal line crossings to preserve delayed offside proximity gameplay
+   * @param puckEntity - The puck entity
+   * @returns true if there's a delayed offside violation, false otherwise
+   */
+  private checkForActiveOffsideViolation(puckEntity: Entity): boolean {
+    try {
+      const currentPosition = puckEntity.position;
+      
+      // Use the OffsideDetectionService to check for existing delayed offside violations
+      const offsideDetectionService = OffsideDetectionService.instance;
+      const delayedViolation = offsideDetectionService.checkForDelayedOffsideViolation(currentPosition);
+      
+      if (delayedViolation) {
+        console.log(`[GoalDetectionService] 🚨 DELAYED OFFSIDE VIOLATION: ${delayedViolation.violatingTeam} team, ${delayedViolation.violatingPlayerIds.length} players involved`);
+        console.log(`[GoalDetectionService] Players: ${delayedViolation.violatingPlayerIds.join(', ')}`);
+        console.log(`[GoalDetectionService] BLOCKING GOAL and triggering offside immediately`);
+        
+        // CRITICAL: Set flag to prevent goal detection for the next few seconds
+        // This prevents dual overlays if goal detection is called again before offside overlay completes
+        this._offsideJustCalled = true;
+        this._offsideCallTime = Date.now();
+        console.log(`[GoalDetectionService] 🚫 GOAL DETECTION BLOCKED for ${this._offsideBlockDurationMs}ms to prevent dual overlays`);
+        
+        // CRITICAL: Clear the delayed tracking state AFTER we've used it to prevent repeated calls
+        // This must happen before calling offsideCalled to prevent infinite loops
+        offsideDetectionService.clearDelayedTrackingState();
+        
+        // Get the game manager to trigger the offside call
+        const gameManager = HockeyGameManager.instance;
+        gameManager.offsideCalled(delayedViolation);
+        
+        return true; // Block goal detection completely
+      }
+      
+      // Only log occasionally to reduce spam
+      if (Math.random() < 0.01) { // 1% chance to log
+        console.log(`[GoalDetectionService] ✅ No delayed offside violations found - goal can proceed`);
+      }
+      return false;
+    } catch (error) {
+      console.warn('[GoalDetectionService] Error checking for delayed offside violation:', error);
+      return false; // If we can't check, don't block the goal
+    }
+  }
+
+
 
   /**
    * Get assist information from puck touch history

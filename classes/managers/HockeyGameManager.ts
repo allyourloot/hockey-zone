@@ -3,9 +3,9 @@ import {
   HockeyGameState, 
   HockeyTeam, 
   HockeyPosition,
-  FaceoffLocation,
-  OffsideViolation 
+  FaceoffLocation
 } from '../utils/types';
+import type { OffsideViolation } from '../utils/types';
 import type { 
   TeamAssignment, 
   Teams 
@@ -342,12 +342,24 @@ export class HockeyGameManager {
     }, 6000); // 6s celebration before reset
   }
 
+  // Add protection against rapid offside calls
+  private _lastOffsideCallTime: number = 0;
+  private _offsideCallCooldownMs: number = 1000; // 1 second cooldown between offside calls
+
   /**
    * Handle offside violation - play whistle, show UI, and set up faceoff
    * @param violation - The offside violation details
    */
   public offsideCalled(violation: OffsideViolation): void {
     if (this._state === HockeyGameState.GOAL_SCORED) return; // Don't interrupt goal celebrations
+    
+    // Prevent rapid/duplicate offside calls
+    const currentTime = Date.now();
+    if (currentTime - this._lastOffsideCallTime < this._offsideCallCooldownMs) {
+      CONSTANTS.debugLog(`Offside call ignored - too soon after last call (${currentTime - this._lastOffsideCallTime}ms ago)`, 'HockeyGameManager');
+      return;
+    }
+    this._lastOffsideCallTime = currentTime;
     
     CONSTANTS.debugLog(`Offside called: ${violation.violatingTeam} at ${violation.faceoffLocation}`, 'HockeyGameManager');
     
@@ -364,7 +376,7 @@ export class HockeyGameManager {
     // Capture the current timer value when offside is called (same as goals)
     const currentPeriodTime = PlayerStatsManager.instance.getCurrentPeriodTimeRemaining();
     this._pausedTimerValue = currentPeriodTime;
-    CONSTANTS.debugLog(`Offside called - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
+    CONSTANTS.debugLog(`🕐 Offside called - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
     
     // CRITICAL: Pause the backend period timer to prevent period from ending while offsides is active
     if (this._periodTimer) {
@@ -375,7 +387,15 @@ export class HockeyGameManager {
       this._pausedPeriodTimeMs = currentPeriodTime * 1000; // Convert seconds to milliseconds
       this._offsidePauseStartTime = Date.now();
       
-      CONSTANTS.debugLog(`Backend period timer paused - remaining time: ${this._pausedPeriodTimeMs}ms`, 'OffsideDetectionService');
+      CONSTANTS.debugLog(`🕐 Backend period timer paused - remaining time: ${this._pausedPeriodTimeMs}ms (${currentPeriodTime}s)`, 'HockeyGameManager');
+      
+      // Additional debugging to understand timer state
+      const periodStartTime = PlayerStatsManager.instance.getPeriodStartTime();
+      const currentTime = Date.now();
+      const actualElapsed = periodStartTime ? (currentTime - periodStartTime) / 1000 : 0;
+      CONSTANTS.debugLog(`🕐 DEBUG: Period started at ${periodStartTime}, current time ${currentTime}, actual elapsed: ${actualElapsed.toFixed(1)}s`, 'HockeyGameManager');
+    } else {
+      CONSTANTS.debugLog(`🕐 WARNING: No period timer was running when offside called`, 'HockeyGameManager');
     }
     
     // Broadcast offsides call to all players
@@ -499,6 +519,12 @@ export class HockeyGameManager {
   private startFaceoffCountdown(faceoffLocation: FaceoffLocation): void {
     if (!this._world) return;
     
+    // Import OffsideDetectionService for grace period management
+    const { OffsideDetectionService } = require('../services/OffsideDetectionService');
+    
+    // Start the grace period for offside detection during countdown
+    OffsideDetectionService.instance.startCountdownGracePeriod();
+    
     let countdown = 3;
     
     // Update countdown state
@@ -558,6 +584,9 @@ export class HockeyGameManager {
           type: 'countdown-go'
         });
         
+        // End the grace period for offside detection - play is resuming!
+        OffsideDetectionService.instance.endCountdownGracePeriod();
+        
         // Play final whistle to start play
         this.playRefereeWhistle();
         
@@ -574,13 +603,15 @@ export class HockeyGameManager {
             // Remaining time should be the original paused time (we already adjusted UI timing separately)
             const adjustedRemainingTime = this._pausedPeriodTimeMs;
             
+            CONSTANTS.debugLog(`🕐 TIMER RESTART: Paused time: ${this._pausedPeriodTimeMs}ms, Pause duration: ${actualPauseDuration}ms, Adjusted remaining: ${adjustedRemainingTime}ms`, 'HockeyGameManager');
+            
             if (adjustedRemainingTime > 0) {
               // Restart the period timer with adjusted time
               this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
-              CONSTANTS.debugLog(`Backend period timer restarted after offside - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
+              CONSTANTS.debugLog(`🕐 ✅ Backend period timer restarted after offside - remaining time: ${adjustedRemainingTime}ms (${(adjustedRemainingTime/1000).toFixed(1)}s)`, 'HockeyGameManager');
             } else {
               // Time is up, end period immediately
-              CONSTANTS.debugLog('Period time expired during offside - ending period now', 'HockeyGameManager');
+              CONSTANTS.debugLog(`🕐 ❌ Period time expired during offside (${adjustedRemainingTime}ms remaining) - ending period now`, 'HockeyGameManager');
               setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
             }
             
@@ -588,7 +619,7 @@ export class HockeyGameManager {
             this._pausedPeriodTimeMs = null;
             this._offsidePauseStartTime = null;
           } else {
-            CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
+            CONSTANTS.debugLog(`🕐 ❌ No paused period timer found - period timer may not have been running (pausedMs: ${this._pausedPeriodTimeMs}, pauseStart: ${this._offsidePauseStartTime})`, 'HockeyGameManager');
           }
         }, 50); // Small delay to prevent race condition
         
@@ -630,7 +661,6 @@ export class HockeyGameManager {
         
         // CRITICAL FIX: Reset offside detection state after faceoff to prevent false positives
         // Use resetAfterFaceoff() to preserve cooldown timers and prevent immediate re-tracking
-        const { OffsideDetectionService } = require('../services/OffsideDetectionService');
         const { ChatCommandManager } = require('./ChatCommandManager');
         const puckEntity = ChatCommandManager.instance.getPuck();
         

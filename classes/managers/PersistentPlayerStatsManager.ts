@@ -166,27 +166,30 @@ export class PersistentPlayerStatsManager {
    * Record a goal for a player
    */
   public async recordGoal(player: Player): Promise<void> {
-    await this.updatePlayerStats(player, { 
-      goals: (await this.getPlayerStats(player)).goals + 1 
-    });
+    const currentStats = await this.getPlayerStats(player);
+    currentStats.goals += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded goal for ${player.username}: ${currentStats.goals} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
    * Record an assist for a player
    */
   public async recordAssist(player: Player): Promise<void> {
-    await this.updatePlayerStats(player, { 
-      assists: (await this.getPlayerStats(player)).assists + 1 
-    });
+    const currentStats = await this.getPlayerStats(player);
+    currentStats.assists += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded assist for ${player.username}: ${currentStats.assists} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
    * Record a save for a player
    */
   public async recordSave(player: Player): Promise<void> {
-    await this.updatePlayerStats(player, { 
-      saves: (await this.getPlayerStats(player)).saves + 1 
-    });
+    const currentStats = await this.getPlayerStats(player);
+    currentStats.saves += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded save for ${player.username}: ${currentStats.saves} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -194,10 +197,10 @@ export class PersistentPlayerStatsManager {
    */
   public async recordWin(player: Player): Promise<void> {
     const currentStats = await this.getPlayerStats(player);
-    await this.updatePlayerStats(player, { 
-      wins: currentStats.wins + 1,
-      gamesPlayed: currentStats.gamesPlayed + 1
-    });
+    currentStats.wins += 1;
+    currentStats.gamesPlayed += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded win for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -205,28 +208,30 @@ export class PersistentPlayerStatsManager {
    */
   public async recordLoss(player: Player): Promise<void> {
     const currentStats = await this.getPlayerStats(player);
-    await this.updatePlayerStats(player, { 
-      losses: currentStats.losses + 1,
-      gamesPlayed: currentStats.gamesPlayed + 1
-    });
+    currentStats.losses += 1;
+    currentStats.gamesPlayed += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded loss for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
    * Record a shot on goal for a player
    */
   public async recordShotOnGoal(player: Player): Promise<void> {
-    await this.updatePlayerStats(player, { 
-      shotsOnGoal: (await this.getPlayerStats(player)).shotsOnGoal + 1 
-    });
+    const currentStats = await this.getPlayerStats(player);
+    currentStats.shotsOnGoal += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded shot on goal for ${player.username}: ${currentStats.shotsOnGoal} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
    * Record a hit for a player
    */
   public async recordHit(player: Player): Promise<void> {
-    await this.updatePlayerStats(player, { 
-      hits: (await this.getPlayerStats(player)).hits + 1 
-    });
+    const currentStats = await this.getPlayerStats(player);
+    currentStats.hits += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded hit for ${player.username}: ${currentStats.hits} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -234,10 +239,10 @@ export class PersistentPlayerStatsManager {
    */
   public async recordConditionalWin(player: Player): Promise<void> {
     const currentStats = await this.getPlayerStats(player);
-    await this.updatePlayerStats(player, { 
-      wins: currentStats.wins + 1,
-      gamesPlayed: currentStats.gamesPlayed + 1
-    });
+    currentStats.wins += 1;
+    currentStats.gamesPlayed += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded conditional win for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -245,10 +250,10 @@ export class PersistentPlayerStatsManager {
    */
   public async recordConditionalLoss(player: Player): Promise<void> {
     const currentStats = await this.getPlayerStats(player);
-    await this.updatePlayerStats(player, { 
-      losses: currentStats.losses + 1,
-      gamesPlayed: currentStats.gamesPlayed + 1
-    });
+    currentStats.losses += 1;
+    currentStats.gamesPlayed += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded conditional loss for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -256,9 +261,9 @@ export class PersistentPlayerStatsManager {
    */
   public async recordConditionalGamePlayed(player: Player): Promise<void> {
     const currentStats = await this.getPlayerStats(player);
-    await this.updatePlayerStats(player, { 
-      gamesPlayed: currentStats.gamesPlayed + 1
-    });
+    currentStats.gamesPlayed += 1;
+    this._dirtyPlayers.add(player.id);
+    CONSTANTS.debugLog(`Recorded conditional game played for ${player.username}: ${currentStats.gamesPlayed} total games`, 'PersistentPlayerStatsManager');
   }
 
   /**

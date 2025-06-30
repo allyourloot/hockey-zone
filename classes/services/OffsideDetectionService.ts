@@ -25,7 +25,7 @@ export class OffsideDetectionService {
   private _isActive: boolean = false;
   private _previousPuckPosition: Vector3Like | null = null;
   private _lastOffsideTime: number = 0;
-  private _offsideCooldownMs: number = 3000; // 3 seconds between offside calls
+  private _offsideCooldownMs: number = 1500; // 1.5 seconds between offside calls (reduced for rapid scenarios)
   
   // Zone boundaries based on blue line coordinates from map analysis
   private readonly ZONE_BOUNDARIES: ZoneBoundary = {
@@ -61,9 +61,8 @@ export class OffsideDetectionService {
   // Track when an offside was just called to prevent immediate re-tracking at faceoff positions
   private _offsideJustCalled: boolean = false;
   
-  // Track last faceoff reset time for grace period
-  private _lastFaceoffResetTime: number = 0;
-  private readonly FACEOFF_GRACE_PERIOD_MS: number = 3000; // 3 seconds grace period after faceoff
+  // Track countdown state for grace period (instead of fixed timer)
+  private _isCountdownActive: boolean = false;
   
   private constructor() {}
 
@@ -705,8 +704,8 @@ export class OffsideDetectionService {
       return;
     }
 
-    // Grace period after faceoff to prevent false positives during positioning
-    if (currentTime - this._lastFaceoffResetTime < this.FACEOFF_GRACE_PERIOD_MS) {
+    // Grace period during countdown to prevent false positives during positioning
+    if (this._isCountdownActive) {
       return;
     }
 
@@ -912,7 +911,7 @@ export class OffsideDetectionService {
     this._previousPuckPosition = null;
     this._lastOffsideTime = 0;
     this._offsideJustCalled = false;
-    this._lastFaceoffResetTime = 0;
+    this._isCountdownActive = false;
     this._playerPositionHistory.clear();
     this._delayedOffsidePlayers.clear();
     CONSTANTS.debugLog('Offside detection service reset', 'OffsideDetectionService');
@@ -934,21 +933,36 @@ export class OffsideDetectionService {
     // Clear the offside flag to re-enable tracking after faceoff positioning is complete
     this._offsideJustCalled = false;
     
-    // Set grace period timestamp to prevent immediate false positives
-    this._lastFaceoffResetTime = Date.now();
+    // Note: Grace period is now managed by countdown state, not timer
+    this._isCountdownActive = false; // Ensure countdown state is cleared
     
     if (currentPuckPosition) {
-      CONSTANTS.debugLog(`🔄 Offside detection state reset after faceoff completion - tracking re-enabled with puck position (${currentPuckPosition.x.toFixed(1)}, ${currentPuckPosition.z.toFixed(1)}) and ${this.FACEOFF_GRACE_PERIOD_MS}ms grace period`, 'OffsideDetectionService');
+      CONSTANTS.debugLog(`🔄 Offside detection state reset after faceoff completion - tracking fully enabled with puck position (${currentPuckPosition.x.toFixed(1)}, ${currentPuckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
     } else {
-      CONSTANTS.debugLog(`🔄 Offside detection state reset after faceoff completion - tracking re-enabled with ${this.FACEOFF_GRACE_PERIOD_MS}ms grace period`, 'OffsideDetectionService');
+      CONSTANTS.debugLog(`🔄 Offside detection state reset after faceoff completion - tracking fully enabled`, 'OffsideDetectionService');
     }
+  }
+
+  /**
+   * Start countdown grace period (called when faceoff countdown begins)
+   */
+  public startCountdownGracePeriod(): void {
+    this._isCountdownActive = true;
+    CONSTANTS.debugLog(`⏳ Countdown grace period started - offside tracking paused during positioning and countdown`, 'OffsideDetectionService');
+  }
+
+  /**
+   * End countdown grace period (called when "GO!" is announced and play resumes)
+   */
+  public endCountdownGracePeriod(): void {
+    this._isCountdownActive = false;
+    CONSTANTS.debugLog(`▶️ Countdown grace period ended - offside tracking immediately active`, 'OffsideDetectionService');
   }
 
   /**
    * Get debug information about current state
    */
   public getDebugInfo(): any {
-    const currentTime = Date.now();
     return {
       isActive: this._isActive,
       zoneBoundaries: this.ZONE_BOUNDARIES,
@@ -956,9 +970,8 @@ export class OffsideDetectionService {
       playerHistoryCount: this._playerPositionHistory.size,
       lastOffsideTime: this._lastOffsideTime,
       offsideJustCalled: this._offsideJustCalled,
-      lastFaceoffResetTime: this._lastFaceoffResetTime,
-      gracePeriodActive: currentTime - this._lastFaceoffResetTime < this.FACEOFF_GRACE_PERIOD_MS,
-      gracePeriodRemainingMs: Math.max(0, this.FACEOFF_GRACE_PERIOD_MS - (currentTime - this._lastFaceoffResetTime)),
+      isCountdownActive: this._isCountdownActive,
+      gracePeriodActive: this._isCountdownActive,
       currentPlayerZones: this.getCurrentPlayerZones(),
       delayedOffsideTracking: {
         count: this._delayedOffsidePlayers.size,
@@ -985,6 +998,87 @@ export class OffsideDetectionService {
       }
     });
     return zones;
+  }
+
+  /**
+   * Check if there are any existing delayed offside players that would invalidate a goal
+   * This is used by GoalDetectionService to prevent invalid goals
+   * @param puckPosition - Current puck position to determine which zone the goal would be in
+   * @returns OffsideViolation if there are delayed offside players, null otherwise
+   */
+  public checkForDelayedOffsideViolation(puckPosition: Vector3Like): OffsideViolation | null {
+    // Check if there are any players currently in delayed offside tracking
+    if (this._delayedOffsidePlayers.size === 0) {
+      return null; // No delayed offside players
+    }
+
+    // Determine which goal zone the puck is in/approaching
+    const puckZone = this.getZoneFromPosition(puckPosition);
+    
+    CONSTANTS.debugLog(`🔍 DELAYED OFFSIDE CHECK: Puck in ${puckZone}, checking ${this._delayedOffsidePlayers.size} delayed players`, 'OffsideDetectionService');
+    
+    // Check each delayed offside player
+    const currentTime = Date.now();
+    const violatingPlayerIds: string[] = [];
+    let violatingTeam: HockeyTeam | null = null;
+    let violatingZone: HockeyZone | null = null;
+
+    this._delayedOffsidePlayers.forEach((trackingInfo, playerId) => {
+      CONSTANTS.debugLog(`  - Player ${playerId}: ${trackingInfo.team} in ${trackingInfo.zone}`, 'OffsideDetectionService');
+      
+      // Check if this delayed offside player's zone matches where the goal would be scored
+      // Red team scoring in Blue zone, Blue team scoring in Red zone
+      const wouldAffectGoal = 
+        (trackingInfo.team === HockeyTeam.RED && puckZone === HockeyZone.BLUE_DEFENSIVE) ||
+        (trackingInfo.team === HockeyTeam.BLUE && puckZone === HockeyZone.RED_DEFENSIVE) ||
+        (trackingInfo.zone === puckZone); // Player is in the same zone as the puck
+      
+      if (wouldAffectGoal) {
+        violatingPlayerIds.push(playerId);
+        violatingTeam = trackingInfo.team;
+        violatingZone = trackingInfo.zone;
+        CONSTANTS.debugLog(`    → WOULD INVALIDATE GOAL: ${playerId} (${trackingInfo.team}) offside in ${trackingInfo.zone}`, 'OffsideDetectionService');
+      }
+    });
+
+    if (violatingPlayerIds.length > 0 && violatingTeam && violatingZone) {
+      // Determine faceoff location based on the violation zone
+      let faceoffLocation: FaceoffLocation;
+      if (violatingZone === HockeyZone.RED_DEFENSIVE) {
+        faceoffLocation = puckPosition.x < 0 ? FaceoffLocation.RED_NEUTRAL_LEFT : FaceoffLocation.RED_NEUTRAL_RIGHT;
+      } else {
+        faceoffLocation = puckPosition.x < 0 ? FaceoffLocation.BLUE_NEUTRAL_LEFT : FaceoffLocation.BLUE_NEUTRAL_RIGHT;
+      }
+
+      CONSTANTS.debugLog(`🚨 DELAYED OFFSIDE VIOLATION FOUND: ${violatingPlayerIds.length} ${violatingTeam} players would invalidate goal`, 'OffsideDetectionService');
+
+      return {
+        violatingPlayerIds,
+        violatingTeam,
+        faceoffLocation,
+        timestamp: currentTime,
+        puckPosition: { ...puckPosition },
+        blueLlineCrossedZone: violatingZone
+      };
+    }
+
+    CONSTANTS.debugLog(`✅ No delayed offside violations would affect this goal`, 'OffsideDetectionService');
+    return null;
+  }
+
+  /**
+   * Clear the delayed tracking state (used by GoalDetectionService after blocking a goal)
+   * This prevents repeated offside calls while maintaining proper game flow
+   */
+  public clearDelayedTrackingState(): void {
+    const totalClearedPlayers = this._delayedOffsidePlayers.size;
+    this._delayedOffsidePlayers.clear();
+    this._playerPositionHistory.clear();
+    
+    // Set flag to prevent immediate re-tracking until faceoff positioning is complete
+    this._offsideJustCalled = true;
+    
+    CONSTANTS.debugLog(`🧹 DELAYED TRACKING CLEARED: Removed ${totalClearedPlayers} players from tracking to prevent repeated offside calls`, 'OffsideDetectionService');
   }
 
   /**

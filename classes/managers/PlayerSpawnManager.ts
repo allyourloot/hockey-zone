@@ -358,22 +358,33 @@ export class PlayerSpawnManager {
         if (playerId) {
           const player = playerIdToPlayer.get(playerId);
           if (player) {
-            const formation = faceoffFormation[team][position];
-            const zAdjustment = isRedNeutralRight ? 0.2 : 
-                                isRedNeutralLeft ? 0.2 : 0;
-            const finalPosition = {
-              x: faceoffPosition.x + formation.offset.x + xAdjustment,
-              y: faceoffPosition.y + formation.offset.y,
-              z: faceoffPosition.z + formation.offset.z + zAdjustment
-            };
+            // GOALIE FIX: Keep goalies in their default spawn positions during offside resets
+            if (position === HockeyPosition.GOALIE) {
+              const spawnData = this.SPAWN_POSITIONS[team][position];
+              const success = this.teleportPlayerToSpecificPosition(player, spawnData.position, spawnData.yaw);
+              if (success) {
+                totalTeleported++;
+                CONSTANTS.debugLog(`${team} ${position} kept at default spawn position during offside reset: X=${spawnData.position.x}, Z=${spawnData.position.z}`, 'OffsideDetectionService');
+              }
+            } else {
+              // Non-goalies use faceoff formation positioning
+              const formation = faceoffFormation[team][position];
+              const zAdjustment = isRedNeutralRight ? 0.2 : 
+                                  isRedNeutralLeft ? 0.2 : 0;
+              const finalPosition = {
+                x: faceoffPosition.x + formation.offset.x + xAdjustment,
+                y: faceoffPosition.y + formation.offset.y,
+                z: faceoffPosition.z + formation.offset.z + zAdjustment
+              };
 
-            const success = this.teleportPlayerToSpecificPosition(player, finalPosition, formation.yaw);
-            if (success) {
-              totalTeleported++;
-              const adjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
-                                     isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
-                                     isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
-              CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'OffsideDetectionService');
+              const success = this.teleportPlayerToSpecificPosition(player, finalPosition, formation.yaw);
+              if (success) {
+                totalTeleported++;
+                const adjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
+                                       isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
+                                       isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
+                CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'OffsideDetectionService');
+              }
             }
           } else {
             console.warn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`);
