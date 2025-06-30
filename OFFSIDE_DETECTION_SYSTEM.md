@@ -1,8 +1,8 @@
-# Hockey Zone - Offside Detection System
+# FACE-OFF - Offside Detection System
 
 ## Overview
 
-The Hockey Zone game implements a sophisticated offside detection system that mimics real NHL hockey rules. The system handles both immediate and delayed offside scenarios with proximity-based detection to ensure realistic gameplay while maintaining good flow.
+The FACE-OFF game implements a sophisticated offside detection system that mimics real NHL hockey rules. The system handles both immediate and delayed offside scenarios with proximity-based detection to ensure realistic gameplay while maintaining good flow.
 
 **Latest Version**: Includes critical fixes for scenario 3 (puck carrier immediate offside), puck zone validation, and complete state reset after faceoffs.
 
@@ -27,7 +27,7 @@ In hockey, a player is offside if they enter the attacking zone before the puck 
 1. **Immediate Offside**: When a player carries the puck into the zone while teammates are already offside
 2. **Delayed Offside**: When the puck is passed into the zone while players are offside, but play continues until an offside player touches the puck or gets too close to it
 
-### Hockey Zone Implementation
+### FACE-OFF Implementation
 
 Our system implements both types with these key features:
 
@@ -902,7 +902,7 @@ if (filteredHistory.length > this.MAX_POSITION_HISTORY) {
 
 ## Conclusion
 
-The Hockey Zone offside detection system provides a robust, realistic implementation of hockey's most complex rule. The system has been thoroughly tested and debugged to handle all major offside scenarios:
+The FACE-OFF offside detection system provides a robust, realistic implementation of hockey's most complex rule. The system has been thoroughly tested and debugged to handle all major offside scenarios:
 
 ✅ **Scenario 1**: Pass to offside player (immediate)
 ✅ **Scenario 2**: Pass far from offside player (delayed)  

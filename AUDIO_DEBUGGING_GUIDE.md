@@ -1,4 +1,4 @@
-# Hockey Zone Audio Debugging Guide
+# FACE-OFF Audio Debugging Guide
 
 ## 🚨 Audio Degradation Issue
 

@@ -1,12 +1,12 @@
 /**
- * Constants for the Hockey Zone game
+ * Constants for the FACE-OFF game
  * Extracted from IceSkatingController and other components
  */
 
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = true; // Set to true during development, false for production
+export const DEBUG_MODE = false; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs

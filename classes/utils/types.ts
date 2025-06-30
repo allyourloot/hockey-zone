@@ -1,5 +1,5 @@
 /**
- * Type definitions for the Hockey Zone game
+ * Type definitions for the FACE-OFF game
  * Re-exports from hytopia and custom game-specific types
  */
 
@@ -261,7 +261,7 @@ export type AudioConstants = typeof import('./constants').AUDIO;
 // OFFSIDE DETECTION TYPES
 // =========================
 
-// Hockey zone definitions based on blue lines
+// FACE-OFF definitions based on blue lines
 export enum HockeyZone {
   RED_DEFENSIVE = 'RED_DEFENSIVE',    // Z < -6.5 (Red's defensive zone)
   NEUTRAL = 'NEUTRAL',                // -6.5 <= Z <= 7.5 (Neutral zone)

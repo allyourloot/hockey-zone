@@ -173,3 +173,7 @@ dist
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Ignore all .md files in root directory except README.md
+*.md
+!README.md

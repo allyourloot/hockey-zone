@@ -85,7 +85,7 @@ export class WorldInitializer {
     
     try {
       this.world.loadMap(worldMap);
-      CONSTANTS.debugLog('Hockey zone map loaded successfully', 'WorldInitializer');
+      CONSTANTS.debugLog('FACE-OFF map loaded successfully', 'WorldInitializer');
     } catch (error) {
       CONSTANTS.debugError('Failed to load map', error, 'WorldInitializer');
       throw new Error('Failed to load game map');

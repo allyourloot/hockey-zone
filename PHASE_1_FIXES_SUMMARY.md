@@ -1,4 +1,4 @@
-# Phase 1 Fixes Summary - Hockey Zone Goal System
+# Phase 1 Fixes Summary - FACE-OFF Goal System
 
 ## Issues Fixed
 
