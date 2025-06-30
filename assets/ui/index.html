@@ -1462,8 +1462,19 @@ and also configure additional buttons for mobile compatibility.
       if (data.pausedTime !== undefined && data.pausedTime !== null) {
         timeRemaining = data.pausedTime;
         timeWhenGoalScored = data.pausedTime; // Store for resume
+        exactResumeTime = null; // Clear exact resume time when pausing
         updateTimerDisplay();
         // Timer paused at exact goal time
+      }
+    }
+    if (data.type === 'timer-resume') {
+      // Resume timer with exact time (prevents flash of wrong time)
+      if (data.exactTime !== undefined && data.exactTime !== null) {
+        timeRemaining = data.exactTime;
+        exactResumeTime = data.exactTime; // Store exact time to prevent recalculation
+        timeWhenGoalScored = null; // Clear goal time since we're resuming
+        updateTimerDisplay();
+        // Timer resumed at exact specified time
       }
     }
   });
@@ -1664,6 +1675,7 @@ and also configure additional buttons for mobile compatibility.
   let timeRemaining = 120; // 2 minutes in seconds
   let timeWhenGoalScored = null; // Track time when goal was scored for proper resumption
   let periodStartTime = null; // Backend period start time for synchronization
+  let exactResumeTime = null; // Track exact resume time to prevent recalculation conflicts
 
   function startGameTimer(backendStartTime = null) {
     // Clear any existing timer
@@ -1674,6 +1686,7 @@ and also configure additional buttons for mobile compatibility.
     // Use backend start time if provided for synchronization
     periodStartTime = backendStartTime || Date.now();
     timeWhenGoalScored = null; // Clear saved time when starting new timer
+    exactResumeTime = null; // Clear exact resume time when starting new timer
     
     // Calculate initial time remaining based on backend start time
     if (backendStartTime) {
@@ -1711,25 +1724,29 @@ and also configure additional buttons for mobile compatibility.
     // Clear saved time - we'll use backend sync instead
     timeWhenGoalScored = null;
     
-    // Calculate current time based on backend period start time
-    if (periodStartTime) {
+    // CRITICAL FIX: Use exact resume time if available (prevents recalculation conflicts)
+    if (exactResumeTime !== null) {
+      // Use the exact time that was specified by timer-resume event
+      timeRemaining = exactResumeTime;
+      // Clear exact resume time after using it
+      exactResumeTime = null;
+      // Resuming timer with exact time (no recalculation)
+    } else if (periodStartTime) {
+      // Fallback to calculating from backend period start time
       const elapsedMs = Date.now() - periodStartTime;
       const elapsedSeconds = Math.floor(elapsedMs / 1000);
       timeRemaining = Math.max(0, 120 - elapsedSeconds);
-                // Resuming timer with backend sync
+      // Resuming timer with backend sync calculation
     } else {
       timeRemaining = 120;
-              // No backend start time found, starting timer from 2 minutes
+      // No backend start time found, starting timer from 2 minutes
     }
     
     updateTimerDisplay();
     
-    // Start countdown using backend sync (same as startGameTimer)
+    // Start countdown - use simple countdown from current timeRemaining
     timerInterval = setInterval(() => {
-      // Calculate time remaining based on backend start time for accuracy
-      const elapsedMs = Date.now() - periodStartTime;
-      const elapsedSeconds = Math.floor(elapsedMs / 1000);
-      timeRemaining = Math.max(0, 120 - elapsedSeconds);
+      timeRemaining = Math.max(0, timeRemaining - 1);
       updateTimerDisplay();
       
       if (timeRemaining <= 0) {

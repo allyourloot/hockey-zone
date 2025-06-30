@@ -546,10 +546,11 @@ export class HockeyGameManager {
         const pauseDurationMs = 5000;
         PlayerStatsManager.instance.adjustPeriodStartTime(pauseDurationMs);
         
-        // Send updated period start time to UI for synchronization
+        // CRITICAL FIX: Send exact resume time to prevent UI flash
+        const exactResumeTime = this._pausedPeriodTimeMs ? this._pausedPeriodTimeMs / 1000 : 0;
         this.broadcastToAllPlayers({
-          type: 'period-time-adjusted',
-          pauseDurationMs: pauseDurationMs
+          type: 'timer-resume',
+          exactTime: exactResumeTime
         });
         
         // Send "GO!" to UI
@@ -560,33 +561,36 @@ export class HockeyGameManager {
         // Play final whistle to start play
         this.playRefereeWhistle();
         
-        // Resume normal play
-        this._state = HockeyGameState.IN_PERIOD;
-        
-        // CRITICAL: Restart the backend period timer with adjusted remaining time
-        if (this._pausedPeriodTimeMs !== null && this._offsidePauseStartTime !== null) {
-          // Calculate actual pause duration (offside overlay + countdown)
-          const actualPauseDuration = Date.now() - this._offsidePauseStartTime;
+        // Small delay to ensure UI processes timer resume before state change
+        setTimeout(() => {
+          // Resume normal play
+          this._state = HockeyGameState.IN_PERIOD;
           
-          // Remaining time should be the original paused time (we already adjusted UI timing separately)
-          const adjustedRemainingTime = this._pausedPeriodTimeMs;
-          
-          if (adjustedRemainingTime > 0) {
-            // Restart the period timer with adjusted time
-            this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
-            CONSTANTS.debugLog(`Backend period timer restarted after offside - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
+          // CRITICAL: Restart the backend period timer with adjusted remaining time
+          if (this._pausedPeriodTimeMs !== null && this._offsidePauseStartTime !== null) {
+            // Calculate actual pause duration (offside overlay + countdown)
+            const actualPauseDuration = Date.now() - this._offsidePauseStartTime;
+            
+            // Remaining time should be the original paused time (we already adjusted UI timing separately)
+            const adjustedRemainingTime = this._pausedPeriodTimeMs;
+            
+            if (adjustedRemainingTime > 0) {
+              // Restart the period timer with adjusted time
+              this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
+              CONSTANTS.debugLog(`Backend period timer restarted after offside - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
+            } else {
+              // Time is up, end period immediately
+              CONSTANTS.debugLog('Period time expired during offside - ending period now', 'HockeyGameManager');
+              setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
+            }
+            
+            // Clear pause tracking
+            this._pausedPeriodTimeMs = null;
+            this._offsidePauseStartTime = null;
           } else {
-            // Time is up, end period immediately
-            CONSTANTS.debugLog('Period time expired during offside - ending period now', 'HockeyGameManager');
-            setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
+            CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
           }
-          
-          // Clear pause tracking
-          this._pausedPeriodTimeMs = null;
-          this._offsidePauseStartTime = null;
-        } else {
-          CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
-        }
+        }, 50); // Small delay to prevent race condition
         
         // Players are already correctly oriented from initial faceoff setup - no need to reapply rotations
         // this.maintainPuckFacingOrientation(); // REMOVED: Was causing incorrect rotations when play resumed
@@ -983,10 +987,11 @@ export class HockeyGameManager {
         const pauseDurationMs = 9000;
         PlayerStatsManager.instance.adjustPeriodStartTime(pauseDurationMs);
         
-        // Send updated period start time to UI for synchronization
+        // CRITICAL FIX: Send exact resume time to prevent UI flash
+        const exactResumeTime = this._pausedPeriodTimeMs ? this._pausedPeriodTimeMs / 1000 : 0;
         this.broadcastToAllPlayers({
-          type: 'period-time-adjusted',
-          pauseDurationMs: pauseDurationMs
+          type: 'timer-resume',
+          exactTime: exactResumeTime
         });
         
         // Send "GO!" to UI
@@ -1018,46 +1023,49 @@ export class HockeyGameManager {
           });
         }
         
-        // Resume normal play
-        this._state = HockeyGameState.IN_PERIOD;
-        
-        // CRITICAL: Restart the backend period timer with adjusted remaining time
-        if (this._pausedPeriodTimeMs !== null && this._offsidePauseStartTime !== null) {
-          // Calculate actual pause duration (goal celebration + countdown)
-          const actualPauseDuration = Date.now() - this._offsidePauseStartTime;
+        // Small delay to ensure UI processes timer resume before state change
+        setTimeout(() => {
+          // Resume normal play
+          this._state = HockeyGameState.IN_PERIOD;
           
-          // Remaining time should be the original paused time (we already adjusted UI timing separately)
-          const adjustedRemainingTime = this._pausedPeriodTimeMs;
-          
-          if (adjustedRemainingTime > 0) {
-            // Restart the period timer with adjusted time
-            this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
-            CONSTANTS.debugLog(`Backend period timer restarted after goal celebration - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
+          // CRITICAL: Restart the backend period timer with adjusted remaining time
+          if (this._pausedPeriodTimeMs !== null && this._offsidePauseStartTime !== null) {
+            // Calculate actual pause duration (goal celebration + countdown)
+            const actualPauseDuration = Date.now() - this._offsidePauseStartTime;
+            
+            // Remaining time should be the original paused time (we already adjusted UI timing separately)
+            const adjustedRemainingTime = this._pausedPeriodTimeMs;
+            
+            if (adjustedRemainingTime > 0) {
+              // Restart the period timer with adjusted time
+              this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
+              CONSTANTS.debugLog(`Backend period timer restarted after goal celebration - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
+            } else {
+              // Time is up, end period immediately
+              CONSTANTS.debugLog('Period time expired during goal celebration - ending period now', 'HockeyGameManager');
+              setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
+            }
+            
+            // Clear pause tracking
+            this._pausedPeriodTimeMs = null;
+            this._offsidePauseStartTime = null;
           } else {
-            // Time is up, end period immediately
-            CONSTANTS.debugLog('Period time expired during goal celebration - ending period now', 'HockeyGameManager');
-            setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
+            CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
           }
           
-          // Clear pause tracking
-          this._pausedPeriodTimeMs = null;
-          this._offsidePauseStartTime = null;
-        } else {
-          CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
-        }
-        
-        this._world!.chatManager.sendBroadcastMessage(
-          'Play resumed!',
-          '00FF00'
-        );
-        CONSTANTS.debugLog('Play resumed after goal reset', 'HockeyGameManager');
-        
-        // Hide countdown overlay after a brief delay
-        setTimeout(() => {
-          this.broadcastToAllPlayers({
-            type: 'countdown-end'
-          });
-        }, 1000);
+          this._world!.chatManager.sendBroadcastMessage(
+            'Play resumed!',
+            '00FF00'
+          );
+          CONSTANTS.debugLog('Play resumed after goal reset', 'HockeyGameManager');
+          
+          // Hide countdown overlay after a brief delay
+          setTimeout(() => {
+            this.broadcastToAllPlayers({
+              type: 'countdown-end'
+            });
+          }, 1000);
+        }, 50); // Small delay to prevent race condition
       }
     }, 1000);
   }

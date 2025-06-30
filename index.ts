@@ -45,6 +45,7 @@ import { WorldInitializer } from './classes/systems/WorldInitializer';
 import { GoalDetectionService } from './classes/services/GoalDetectionService';
 import { OffsideDetectionService } from './classes/services/OffsideDetectionService';
 import { PuckControlIndicatorService } from './classes/services/PuckControlIndicatorService';
+import { PuckBoundaryService } from './classes/services/PuckBoundaryService';
 
 // Import managers
 import { PlayerSpawnManager } from './classes/managers/PlayerSpawnManager';
@@ -111,6 +112,10 @@ startServer(world => {
   // Initialize puck control indicator service
   PuckControlIndicatorService.instance.initialize(world);
   
+  // Initialize puck boundary service for automatic respawn
+  const puckBoundaryService = PuckBoundaryService.instance;
+  puckBoundaryService.initialize(world);
+  
   // Start goal detection monitoring loop
   // Check for goals every 50ms (20 times per second) for responsive detection
   const goalDetectionInterval = setInterval(() => {
@@ -162,18 +167,43 @@ startServer(world => {
   CONSTANTS.debugLog('Goal detection service initialized', 'Main');
   CONSTANTS.debugLog('Offside detection service initialized', 'Main');
   CONSTANTS.debugLog('Player spawn manager initialized', 'Main');
+  CONSTANTS.debugLog('Puck boundary service initialized', 'Main');
   goalDetectionService.startMonitoring();
   offsideDetectionService.startMonitoring();
+
+  // Set up automatic puck boundary monitoring
+  // Monitor the puck reference and start/stop boundary monitoring as needed
+  const checkPuckBoundaryMonitoring = () => {
+    if (puckRef.current && puckRef.current.isSpawned) {
+      if (!puckBoundaryService.isMonitoring || puckBoundaryService.monitoredPuck !== puckRef.current) {
+        // Start monitoring the current puck
+        puckBoundaryService.startMonitoring(puckRef.current);
+        CONSTANTS.debugLog('Started automatic puck boundary monitoring', 'Main');
+      }
+    } else if (puckBoundaryService.isMonitoring) {
+      // Stop monitoring if puck is gone
+      puckBoundaryService.stopMonitoring();
+      CONSTANTS.debugLog('Stopped puck boundary monitoring (no puck)', 'Main');
+    }
+  };
+
+  // Check puck boundary monitoring every 2 seconds
+  const puckBoundaryMonitoringInterval = setInterval(checkPuckBoundaryMonitoring, 2000);
+  
+  // Initial check
+  setTimeout(checkPuckBoundaryMonitoring, 1000);
 
   // Clean up on server shutdown
   process.on('SIGINT', () => {
     CONSTANTS.debugLog('Shutting down services...', 'Main');
     goalDetectionService.stopMonitoring();
     offsideDetectionService.stopMonitoring();
+    puckBoundaryService.stopMonitoring();
     PuckControlIndicatorService.instance.cleanup();
     AudioManager.instance.stop(); // Clean up all audio resources
     clearInterval(goalDetectionInterval);
     clearInterval(offsideDetectionInterval);
+    clearInterval(puckBoundaryMonitoringInterval);
     process.exit(0);
   });
 }); 

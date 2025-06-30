@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
@@ -16,6 +16,9 @@ export const SAVE_DEBUG_FILTER = false; // Set to true to show ONLY SaveDetectio
 
 // NEW: Offside detection debug filter for isolating OffsideDetectionService logs
 export const OFFSIDE_DEBUG_FILTER = false; // Set to true to show ONLY OffsideDetectionService logs
+
+// NEW: Boundary detection debug filter for isolating PuckBoundaryService logs
+export const BOUNDARY_DEBUG_FILTER = false; // Set to true to show ONLY PuckBoundaryService logs
 
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
@@ -464,6 +467,12 @@ export function debugLog(message: string, prefix?: string): void {
     return;
   }
   
+  // Boundary detection debug filter: only show PuckBoundaryService logs if filter is enabled
+  const boundaryFilterEnabled = (globalThis as any).BOUNDARY_DEBUG_FILTER ?? BOUNDARY_DEBUG_FILTER;
+  if (boundaryFilterEnabled && prefix !== 'PuckBoundaryService') {
+    return;
+  }
+  
   const logMessage = prefix ? `[${prefix}] ${message}` : message;
   console.log(logMessage);
 }
@@ -492,6 +501,12 @@ export function debugError(message: string, error?: any, prefix?: string): void 
   // Offside detection debug filter: only show OffsideDetectionService logs if filter is enabled
   const offsideFilterEnabled = (globalThis as any).OFFSIDE_DEBUG_FILTER ?? OFFSIDE_DEBUG_FILTER;
   if (offsideFilterEnabled && prefix !== 'OffsideDetectionService') {
+    return;
+  }
+  
+  // Boundary detection debug filter: only show PuckBoundaryService logs if filter is enabled
+  const boundaryFilterEnabled = (globalThis as any).BOUNDARY_DEBUG_FILTER ?? BOUNDARY_DEBUG_FILTER;
+  if (boundaryFilterEnabled && prefix !== 'PuckBoundaryService') {
     return;
   }
   
@@ -526,6 +541,12 @@ export function debugWarn(message: string, prefix?: string): void {
   // Offside detection debug filter: only show OffsideDetectionService logs if filter is enabled
   const offsideFilterEnabled = (globalThis as any).OFFSIDE_DEBUG_FILTER ?? OFFSIDE_DEBUG_FILTER;
   if (offsideFilterEnabled && prefix !== 'OffsideDetectionService') {
+    return;
+  }
+  
+  // Boundary detection debug filter: only show PuckBoundaryService logs if filter is enabled
+  const boundaryFilterEnabled = (globalThis as any).BOUNDARY_DEBUG_FILTER ?? BOUNDARY_DEBUG_FILTER;
+  if (boundaryFilterEnabled && prefix !== 'PuckBoundaryService') {
     return;
   }
   
@@ -594,7 +615,29 @@ export function setOffsideDebugFilter(enabled: boolean): void {
   }
 }
 
+/**
+ * Toggle the boundary detection debug filter at runtime
+ * When enabled, only PuckBoundaryService logs will be shown in the console
+ * @param enabled - Whether to enable boundary detection filtering
+ */
+export function setBoundaryDebugFilter(enabled: boolean): void {
+  (globalThis as any).BOUNDARY_DEBUG_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('🚧 BOUNDARY DEBUG FILTER ENABLED - Only PuckBoundaryService logs will be shown');
+    console.log('💡 To disable: setBoundaryDebugFilter(false) or type "boundaryoff" in console');
+  } else {
+    console.log('🚧 BOUNDARY DEBUG FILTER DISABLED - All debug logs will be shown');
+    console.log('💡 To enable: setBoundaryDebugFilter(true) or type "boundaryon" in console');
+  }
+}
+
 // Offside detection debug filter shortcuts
 (globalThis as any).setOffsideDebugFilter = setOffsideDebugFilter;
 (globalThis as any).offsideon = () => setOffsideDebugFilter(true);
-(globalThis as any).offsideoff = () => setOffsideDebugFilter(false); 
+(globalThis as any).offsideoff = () => setOffsideDebugFilter(false);
+
+// Boundary detection debug filter shortcuts
+(globalThis as any).setBoundaryDebugFilter = setBoundaryDebugFilter;
+(globalThis as any).boundaryon = () => setBoundaryDebugFilter(true);
+(globalThis as any).boundaryoff = () => setBoundaryDebugFilter(false); 

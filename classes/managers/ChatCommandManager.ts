@@ -9,6 +9,7 @@ import * as CONSTANTS from '../utils/constants';
 import { PuckTrailManager } from './PuckTrailManager';
 import { GoalDetectionService } from '../services/GoalDetectionService';
 import { OffsideDetectionService } from '../services/OffsideDetectionService';
+import { PuckBoundaryService } from '../services/PuckBoundaryService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { WorldInitializer } from '../systems/WorldInitializer';
@@ -93,6 +94,7 @@ export class ChatCommandManager {
     this.registerTestLeaderboardCommand();
     this.registerPassDebugCommand();
     this.registerClearHistoryCommand();
+    this.registerPuckBoundaryCommands();
   }
   
   /**
@@ -156,6 +158,8 @@ export class ChatCommandManager {
         this.puck.despawn();
         // Remove trail effect when despawning
         PuckTrailManager.instance.removeTrail();
+        // Stop boundary monitoring for old puck
+        PuckBoundaryService.instance.stopMonitoring();
       }
 
       // Create new puck entity
@@ -174,12 +178,15 @@ export class ChatCommandManager {
           // Attach trail effect to the new puck
           PuckTrailManager.instance.attachTrailToPuck(this.puck);
           
+          // Start boundary monitoring for automatic respawn
+          PuckBoundaryService.instance.startMonitoring(this.puck);
+          
           this.world!.chatManager.sendPlayerMessage(
             player, 
-            `Puck spawned at Y=${spawnPos.y} with trail!`, 
+            `Puck spawned at Y=${spawnPos.y} with trail and boundary monitoring!`, 
             '00FF00'
           );
-          console.log('[SpawnPuck] Success - puck spawned with trail at Y:', spawnPos.y);
+          console.log('[SpawnPuck] Success - puck spawned with trail and boundary monitoring at Y:', spawnPos.y);
         } catch (error) {
           this.world!.chatManager.sendPlayerMessage(player, `Error spawning puck: ${error}`, 'FF0000');
           console.error('[SpawnPuck] Error creating/spawning puck:', error);
@@ -2097,6 +2104,117 @@ export class ChatCommandManager {
         this.world!.chatManager.sendPlayerMessage(player, `Error clearing history: ${error}`, 'FF0000');
         console.error('Error clearing puck touch history:', error);
       }
+    });
+  }
+
+  /**
+   * Register puck boundary debugging commands
+   */
+  private registerPuckBoundaryCommands(): void {
+    if (!this.world) return;
+    
+    // Command to check boundary service status
+    this.world.chatManager.registerCommand('/boundaryinfo', (player) => {
+      const service = PuckBoundaryService.instance;
+      const limits = service.getBoundaryLimits();
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Boundary monitoring: ${service.isMonitoring ? 'ON' : 'OFF'}`,
+        service.isMonitoring ? '00FF00' : 'FF0000'
+      );
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Limits: X(${limits.X_MIN} to ${limits.X_MAX}) Z(${limits.Z_MIN} to ${limits.Z_MAX}) Y(${limits.Y_MIN} to ${limits.Y_MAX})`,
+        '00FFFF'
+      );
+      
+      if (service.monitoredPuck) {
+        const pos = service.monitoredPuck.position;
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Puck position: X=${pos.x.toFixed(2)} Y=${pos.y.toFixed(2)} Z=${pos.z.toFixed(2)}`,
+          '00FFFF'
+        );
+      }
+    });
+    
+    // Command to test boundary violation (teleport puck out of bounds)
+    this.world.chatManager.registerCommand('/testboundary', (player) => {
+      if (!this.puck || !this.puck.isSpawned) {
+        this.world!.chatManager.sendPlayerMessage(player, 'No puck spawned!', 'FF0000');
+        return;
+      }
+      
+      // Teleport puck outside boundary
+      const testPosition = { x: 50, y: 2, z: 50 }; // Way outside bounds
+      this.puck.setPosition(testPosition);
+      this.puck.setLinearVelocity({ x: 0, y: 0, z: 0 });
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Puck teleported to out-of-bounds position: ${JSON.stringify(testPosition)}`,
+        'FFA500'
+      );
+    });
+    
+    // Command to adjust boundary limits for testing
+    this.world.chatManager.registerCommand('/setboundary', (player, args) => {
+      if (args.length !== 2) {
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          'Usage: /setboundary <dimension> <value> (e.g., /setboundary X_MAX 30)',
+          'FF0000'
+        );
+        return;
+      }
+      
+      const dimension = args[0].toUpperCase();
+      const value = parseFloat(args[1]);
+      
+      if (isNaN(value)) {
+        this.world!.chatManager.sendPlayerMessage(player, 'Invalid value!', 'FF0000');
+        return;
+      }
+      
+      const validDimensions = ['X_MIN', 'X_MAX', 'Z_MIN', 'Z_MAX', 'Y_MIN', 'Y_MAX'];
+      if (!validDimensions.includes(dimension)) {
+        this.world!.chatManager.sendPlayerMessage(
+          player,
+          `Invalid dimension! Use: ${validDimensions.join(', ')}`,
+          'FF0000'
+        );
+        return;
+      }
+      
+      const service = PuckBoundaryService.instance;
+      service.updateBoundaryLimits({ [dimension]: value });
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        `Boundary ${dimension} set to ${value}`,
+        '00FF00'
+      );
+    });
+    
+    // Command to reset boundary limits to defaults
+    this.world.chatManager.registerCommand('/resetboundary', (player) => {
+      const service = PuckBoundaryService.instance;
+      service.updateBoundaryLimits({
+        X_MIN: -26,
+        X_MAX: 26,
+        Z_MIN: -41,
+        Z_MAX: 41,
+        Y_MIN: 0.5,
+        Y_MAX: 10,
+      });
+      
+      this.world!.chatManager.sendPlayerMessage(
+        player,
+        'Boundary limits reset to defaults',
+        '00FF00'
+      );
     });
   }
 }
