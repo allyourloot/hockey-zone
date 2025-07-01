@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = true; // Set to true during development, false for production
+export const DEBUG_MODE = false; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
@@ -15,7 +15,7 @@ export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManage
 export const SAVE_DEBUG_FILTER = false; // Set to true to show ONLY SaveDetectionService logs
 
 // NEW: Offside detection debug filter for isolating OffsideDetectionService logs
-export const OFFSIDE_DEBUG_FILTER = true; // Set to true to show ONLY OffsideDetectionService logs
+export const OFFSIDE_DEBUG_FILTER = false; // Set to true to show ONLY OffsideDetectionService logs
 
 // NEW: Boundary detection debug filter for isolating PuckBoundaryService logs
 export const BOUNDARY_DEBUG_FILTER = false; // Set to true to show ONLY PuckBoundaryService logs

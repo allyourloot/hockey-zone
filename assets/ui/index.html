@@ -2998,7 +2998,7 @@ and also configure additional buttons for mobile compatibility.
           
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/pass.png" alt="Pass" />
             </div>
             <div class="control-info">
               <div class="control-name">Pass <span class="control-key">LMB</span></div>
@@ -3008,7 +3008,7 @@ and also configure additional buttons for mobile compatibility.
 
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Shot" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/shot.png" alt="Shot" />
             </div>
             <div class="control-info">
               <div class="control-name">Shoot <span class="control-key">RMB</span></div>
@@ -3018,7 +3018,7 @@ and also configure additional buttons for mobile compatibility.
 
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/spin-icon.png" alt="Spin Move" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/spin-move.png" alt="Spin Move" />
             </div>
             <div class="control-info">
               <div class="control-name">Spin Move <span class="control-key">R</span></div>
@@ -3043,7 +3043,7 @@ and also configure additional buttons for mobile compatibility.
           
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/stick-check-icon.png" alt="Stick Check" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/stick-check.png" alt="Stick Check" />
             </div>
             <div class="control-info">
               <div class="control-name">Stick Check <span class="control-key">RMB</span></div>
@@ -3053,7 +3053,7 @@ and also configure additional buttons for mobile compatibility.
 
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/body-check-icon.png" alt="Body Check" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/body-check.png" alt="Body Check" />
             </div>
             <div class="control-info">
               <div class="control-name">Body Check <span class="control-key">LMB</span></div>
@@ -3068,7 +3068,7 @@ and also configure additional buttons for mobile compatibility.
           
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Hockey Stop" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/hockey-stop.png" alt="Hockey Stop" />
             </div>
             <div class="control-info">
               <div class="control-name">Hockey Stop <span class="control-key">SPACE</span></div>
@@ -3078,7 +3078,7 @@ and also configure additional buttons for mobile compatibility.
 
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/hockey-stop-icon.png" alt="Goalie Slide" />
+              <img src="{{CDN_ASSETS_URL}}/ui/moves/goalie-slide.png" alt="Goalie Slide" />
             </div>
             <div class="control-info">
               <div class="control-name">Goalie Slide <span class="control-key">SPACE</span></div>
@@ -3103,7 +3103,7 @@ and also configure additional buttons for mobile compatibility.
 
           <div class="control-item">
             <div class="control-icon">
-              <img src="{{CDN_ASSETS_URL}}/icons/target.png" alt="Controls" />
+              <img src="{{CDN_ASSETS_URL}}/ui/icons/keyboard.svg" alt="Controls" />
             </div>
             <div class="control-info">
               <div class="control-name">Controls Help <span class="control-key">C</span></div>
@@ -3453,7 +3453,7 @@ and also configure additional buttons for mobile compatibility.
   <!-- Controls Toggle Button -->
   <div id="controls-toggle" class="controls-toggle">
     <div class="controls-icon">
-      <img src="{{CDN_ASSETS_URL}}/icons/controls-icon.svg" alt="Controls" />
+      <img src="{{CDN_ASSETS_URL}}/ui/icons/keyboard.svg" alt="Controls" />
     </div>
     <div class="controls-label">CONTROLS <img class="controls-keyboard-icon" src="{{CDN_ASSETS_URL}}/ui/inputs/keyboard_c.svg" alt="C" /></div>
   </div>
@@ -3669,11 +3669,11 @@ and also configure additional buttons for mobile compatibility.
   <div class="pass-shot-overlay" id="pass-shot-overlay" style="display: none;">
     <div class="pass-shot-row">
       <div class="skill-button">
-        <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/pass-icon.png" alt="Pass" />
+        <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/ui/moves/pass.png" alt="Pass" />
         <div class="skill-button-label">LMB</div>
       </div>
       <div class="skill-button">
-        <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/icons/wrist-shot-icon.png" alt="Wrist Shot" />
+        <img class="skill-button-icon" src="{{CDN_ASSETS_URL}}/ui/moves/shot.png" alt="Wrist Shot" />
         <div class="skill-button-label">RMB</div>
       </div>
     </div>
@@ -5412,8 +5412,6 @@ and also configure additional buttons for mobile compatibility.
     width: 32px;
     height: 32px;
     margin-right: 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -5421,8 +5419,8 @@ and also configure additional buttons for mobile compatibility.
   }
 
   .control-icon img {
-    width: 20px;
-    height: 20px;
+    width: 32px;
+    height: 32px;
     filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
   }
 
@@ -5573,8 +5571,8 @@ and also configure additional buttons for mobile compatibility.
     }
     
     .control-icon img {
-      width: 16px;
-      height: 16px;
+      width: 28px;
+      height: 28px;
     }
     
     .control-name {
@@ -8523,8 +8521,8 @@ k
     }
     
     .control-icon img {
-      width: 12px;
-      height: 12px;
+      width: 20px;
+      height: 20px;
     }
     
     .control-name {
