@@ -14,6 +14,7 @@ import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { AudioManager } from './AudioManager';
 import { PlayerStatsManager } from './PlayerStatsManager';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 
 export class HockeyGameManager {
   private static _instance: HockeyGameManager;
@@ -109,9 +110,9 @@ export class HockeyGameManager {
       this._playerIdToPlayer.forEach((player) => {
         try {
           player.ui.lockPointer(false); // Unlock pointer for team selection
-          CONSTANTS.debugLog(`Unlocked pointer for player ${player.id} during team selection`, 'HockeyGameManager');
+          debugLog(`Unlocked pointer for player ${player.id} during team selection`, 'HockeyGameManager');
         } catch (error) {
-          console.error('Error unlocking pointer for player during team selection:', error);
+          debugError('Error unlocking pointer for player during team selection:', error, 'HockeyGameManager');
         }
       });
     }
@@ -176,7 +177,7 @@ export class HockeyGameManager {
             period: this._period
           });
         } catch (error) {
-          console.error('Error sending period start to player:', error);
+          debugError('Error sending period start to player:', error, 'HockeyGameManager');
         }
       });
     }
@@ -191,34 +192,34 @@ export class HockeyGameManager {
     
     // Record goal in stats if we have scorer info
     if (scorerId) {
-      CONSTANTS.debugLog(`Recording goal for scorer: ${scorerId}, team: ${team}, period: ${this._period}`, 'HockeyGameManager');
+      debugLog(`Recording goal for scorer: ${scorerId}, team: ${team}, period: ${this._period}`, 'HockeyGameManager');
       if (primaryAssistId) {
-        CONSTANTS.debugLog(`Recording primary assist for: ${primaryAssistId}`, 'HockeyGameManager');
+        debugLog(`Recording primary assist for: ${primaryAssistId}`, 'HockeyGameManager');
       }
       
       // TRACK SHOT ON GOAL: Record that this was a shot on goal (resulted in goal)
       PlayerStatsManager.instance.recordShot(scorerId, team, true, false, undefined, isOwnGoal).catch(error => {
-        console.error('Error recording shot stat:', error);
+        debugError('Error recording shot stat:', error, 'HockeyGameManager');
       }); // onGoal=true, saved=false, isOwnGoal passed from method parameter
-      CONSTANTS.debugLog(`📊 Recorded shot on goal for ${scorerId} (resulted in ${isOwnGoal ? 'own goal' : 'goal'})`, 'HockeyGameManager');
+      debugLog(`📊 Recorded shot on goal for ${scorerId} (resulted in ${isOwnGoal ? 'own goal' : 'goal'})`, 'HockeyGameManager');
       
       // Record goal (now async)
       PlayerStatsManager.instance.recordGoal(scorerId, primaryAssistId, team, this._period, isOwnGoal)
         .then(goalInfo => {
           // Debug: Log current stats after goal
           const scorerStats = PlayerStatsManager.instance.getPlayerStats(scorerId);
-          CONSTANTS.debugLog(`Scorer stats after goal: ${JSON.stringify(scorerStats)}`, 'HockeyGameManager');
+          debugLog(`Scorer stats after goal: ${JSON.stringify(scorerStats)}`, 'HockeyGameManager');
           
           if (primaryAssistId) {
             const assistStats = PlayerStatsManager.instance.getPlayerStats(primaryAssistId);
-            CONSTANTS.debugLog(`Primary assist stats after goal: ${JSON.stringify(assistStats)}`, 'HockeyGameManager');
+            debugLog(`Primary assist stats after goal: ${JSON.stringify(assistStats)}`, 'HockeyGameManager');
           }
         })
         .catch(error => {
-          console.error('Error recording goal stats:', error);
+          debugError('Error recording goal stats:', error, 'HockeyGameManager');
         });
     } else {
-      CONSTANTS.debugLog('No scorer ID provided for goal - stats not recorded', 'HockeyGameManager');
+      debugLog('No scorer ID provided for goal - stats not recorded', 'HockeyGameManager');
     }
     
     // DON'T lock movement yet - allow celebration time
@@ -256,7 +257,7 @@ export class HockeyGameManager {
       // Capture the current timer value when goal is scored (for new players)
       const currentPeriodTime = PlayerStatsManager.instance.getCurrentPeriodTimeRemaining();
       this._pausedTimerValue = currentPeriodTime;
-      CONSTANTS.debugLog(`Goal scored - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
+      debugLog(`Goal scored - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
       
       // CRITICAL: Pause the backend period timer to prevent period from ending while goal celebration is active
       if (this._periodTimer) {
@@ -267,7 +268,7 @@ export class HockeyGameManager {
         this._pausedPeriodTimeMs = currentPeriodTime * 1000; // Convert seconds to milliseconds
         this._offsidePauseStartTime = Date.now(); // Reuse the same pause tracking mechanism
         
-        CONSTANTS.debugLog(`Backend period timer paused for goal celebration - remaining time: ${this._pausedPeriodTimeMs}ms`, 'HockeyGameManager');
+        debugLog(`Backend period timer paused for goal celebration - remaining time: ${this._pausedPeriodTimeMs}ms`, 'HockeyGameManager');
       }
       
       // Broadcast the paused timer value to all existing players
@@ -291,7 +292,7 @@ export class HockeyGameManager {
             assistName: assistName
           });
         } catch (error) {
-          console.error('Error sending score update to player:', error);
+          debugError('Error sending score update to player:', error, 'HockeyGameManager');
         }
       });
       
@@ -320,11 +321,11 @@ export class HockeyGameManager {
     
     // Reset players and puck after goal celebration (no immediate movement lock)
     setTimeout(() => {
-      CONSTANTS.debugLog('Starting goal reset sequence...', 'HockeyGameManager');
+      debugLog('Starting goal reset sequence...', 'HockeyGameManager');
       
       // Lock movement IMMEDIATELY when reset starts
       this._state = HockeyGameState.GOAL_SCORED;
-      CONSTANTS.debugLog('Entered GOAL_SCORED state - players locked during reset and countdown', 'HockeyGameManager');
+      debugLog('Entered GOAL_SCORED state - players locked during reset and countdown', 'HockeyGameManager');
       
       // Clear goal celebration state (celebration is over, countdown begins)
       this._goalCelebrationState.isActive = false;
@@ -356,12 +357,12 @@ export class HockeyGameManager {
     // Prevent rapid/duplicate offside calls
     const currentTime = Date.now();
     if (currentTime - this._lastOffsideCallTime < this._offsideCallCooldownMs) {
-      CONSTANTS.debugLog(`Offside call ignored - too soon after last call (${currentTime - this._lastOffsideCallTime}ms ago)`, 'HockeyGameManager');
+      debugLog(`Offside call ignored - too soon after last call (${currentTime - this._lastOffsideCallTime}ms ago)`, 'HockeyGameManager');
       return;
     }
     this._lastOffsideCallTime = currentTime;
     
-    CONSTANTS.debugLog(`Offside called: ${violation.violatingTeam} at ${violation.faceoffLocation}`, 'HockeyGameManager');
+    debugLog(`Offside called: ${violation.violatingTeam} at ${violation.faceoffLocation}`, 'HockeyGameManager');
     
     // Play referee whistle immediately
     this.playRefereeWhistle();
@@ -376,7 +377,7 @@ export class HockeyGameManager {
     // Capture the current timer value when offside is called (same as goals)
     const currentPeriodTime = PlayerStatsManager.instance.getCurrentPeriodTimeRemaining();
     this._pausedTimerValue = currentPeriodTime;
-    CONSTANTS.debugLog(`🕐 Offside called - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
+    debugLog(`🕐 Offside called - captured paused timer value: ${this._pausedTimerValue} seconds`, 'HockeyGameManager');
     
     // CRITICAL: Pause the backend period timer to prevent period from ending while offsides is active
     if (this._periodTimer) {
@@ -387,15 +388,15 @@ export class HockeyGameManager {
       this._pausedPeriodTimeMs = currentPeriodTime * 1000; // Convert seconds to milliseconds
       this._offsidePauseStartTime = Date.now();
       
-      CONSTANTS.debugLog(`🕐 Backend period timer paused - remaining time: ${this._pausedPeriodTimeMs}ms (${currentPeriodTime}s)`, 'HockeyGameManager');
+      debugLog(`🕐 Backend period timer paused - remaining time: ${this._pausedPeriodTimeMs}ms (${currentPeriodTime}s)`, 'HockeyGameManager');
       
       // Additional debugging to understand timer state
       const periodStartTime = PlayerStatsManager.instance.getPeriodStartTime();
       const currentTime = Date.now();
       const actualElapsed = periodStartTime ? (currentTime - periodStartTime) / 1000 : 0;
-      CONSTANTS.debugLog(`🕐 DEBUG: Period started at ${periodStartTime}, current time ${currentTime}, actual elapsed: ${actualElapsed.toFixed(1)}s`, 'HockeyGameManager');
+      debugLog(`🕐 DEBUG: Period started at ${periodStartTime}, current time ${currentTime}, actual elapsed: ${actualElapsed.toFixed(1)}s`, 'HockeyGameManager');
     } else {
-      CONSTANTS.debugLog(`🕐 WARNING: No period timer was running when offside called`, 'HockeyGameManager');
+      debugLog(`🕐 WARNING: No period timer was running when offside called`, 'HockeyGameManager');
     }
     
     // Broadcast offsides call to all players
@@ -425,7 +426,7 @@ export class HockeyGameManager {
               faceoffLocation: violation.faceoffLocation
             });
           } catch (error) {
-            console.error('Error sending offside message to player:', error);
+            debugError('Error sending offside message to player:', error, 'HockeyGameManager');
           }
         });
         
@@ -448,7 +449,7 @@ export class HockeyGameManager {
   private performOffsideFaceoff(faceoffLocation: FaceoffLocation): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog(`Performing offside faceoff at: ${faceoffLocation}`, 'OffsideDetectionService');
+    debugLog(`Performing offside faceoff at: ${faceoffLocation}`, 'OffsideDetectionService');
     
     // Lock movement during reset
     this._state = HockeyGameState.GOAL_SCORED; // Reuse goal state for movement lock
@@ -467,7 +468,7 @@ export class HockeyGameManager {
     // Store the faceoff rotations from PlayerSpawnManager for later reuse
     setTimeout(() => {
       this._faceoffPlayerRotations = PlayerSpawnManager.instance.getLastFaceoffRotations();
-      CONSTANTS.debugLog(`Stored ${this._faceoffPlayerRotations.size} player rotations for faceoff reuse`, 'OffsideDetectionService');
+      debugLog(`Stored ${this._faceoffPlayerRotations.size} player rotations for faceoff reuse`, 'OffsideDetectionService');
     }, 400); // Wait for PlayerSpawnManager to finish setting rotations
     
     // Reset puck to the specific faceoff position instead of center ice
@@ -502,7 +503,7 @@ export class HockeyGameManager {
       const puckAdjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
                                  isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
                                  isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
-      CONSTANTS.debugLog(`Puck teleported to faceoff position: ${JSON.stringify(adjustedPuckPosition)}${puckAdjustmentNote}`, 'OffsideDetectionService');
+      debugLog(`Puck teleported to faceoff position: ${JSON.stringify(adjustedPuckPosition)}${puckAdjustmentNote}`, 'OffsideDetectionService');
     } else {
               CONSTANTS.debugError(`Could not reset puck for offside faceoff - puck not found or not spawned`, undefined, 'OffsideDetectionService');
     }
@@ -551,11 +552,7 @@ export class HockeyGameManager {
           subtitle: `Faceoff - ${this.getFaceoffLocationDescription(faceoffLocation)}`
         });
         
-        // Chat message as backup
-        this._world!.chatManager.sendBroadcastMessage(
-          `Faceoff in ${countdown}...`,
-          'FFFF00'
-        );
+        // Chat message removed to reduce clutter - UI overlay handles countdown display
         countdown--;
       } else {
         clearInterval(countdownInterval);
@@ -603,15 +600,15 @@ export class HockeyGameManager {
             // Remaining time should be the original paused time (we already adjusted UI timing separately)
             const adjustedRemainingTime = this._pausedPeriodTimeMs;
             
-            CONSTANTS.debugLog(`🕐 TIMER RESTART: Paused time: ${this._pausedPeriodTimeMs}ms, Pause duration: ${actualPauseDuration}ms, Adjusted remaining: ${adjustedRemainingTime}ms`, 'HockeyGameManager');
+            debugLog(`🕐 TIMER RESTART: Paused time: ${this._pausedPeriodTimeMs}ms, Pause duration: ${actualPauseDuration}ms, Adjusted remaining: ${adjustedRemainingTime}ms`, 'HockeyGameManager');
             
             if (adjustedRemainingTime > 0) {
               // Restart the period timer with adjusted time
               this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
-              CONSTANTS.debugLog(`🕐 ✅ Backend period timer restarted after offside - remaining time: ${adjustedRemainingTime}ms (${(adjustedRemainingTime/1000).toFixed(1)}s)`, 'HockeyGameManager');
+              debugLog(`🕐 ✅ Backend period timer restarted after offside - remaining time: ${adjustedRemainingTime}ms (${(adjustedRemainingTime/1000).toFixed(1)}s)`, 'HockeyGameManager');
             } else {
               // Time is up, end period immediately
-              CONSTANTS.debugLog(`🕐 ❌ Period time expired during offside (${adjustedRemainingTime}ms remaining) - ending period now`, 'HockeyGameManager');
+              debugLog(`🕐 ❌ Period time expired during offside (${adjustedRemainingTime}ms remaining) - ending period now`, 'HockeyGameManager');
               setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
             }
             
@@ -619,7 +616,7 @@ export class HockeyGameManager {
             this._pausedPeriodTimeMs = null;
             this._offsidePauseStartTime = null;
           } else {
-            CONSTANTS.debugLog(`🕐 ❌ No paused period timer found - period timer may not have been running (pausedMs: ${this._pausedPeriodTimeMs}, pauseStart: ${this._offsidePauseStartTime})`, 'HockeyGameManager');
+            debugLog(`🕐 ❌ No paused period timer found - period timer may not have been running (pausedMs: ${this._pausedPeriodTimeMs}, pauseStart: ${this._offsidePauseStartTime})`, 'HockeyGameManager');
           }
         }, 50); // Small delay to prevent race condition
         
@@ -649,15 +646,15 @@ export class HockeyGameManager {
                 player.camera.setMode(PlayerCameraMode.THIRD_PERSON);
                 player.camera.setAttachedToEntity(playerEntity);
                 player.camera.setOffset({ x: 0, y: 1, z: 0 });
-                CONSTANTS.debugLog(`Reset camera for player ${player.id} back to normal third-person mode`, 'OffsideDetectionService');
+                debugLog(`Reset camera for player ${player.id} back to normal third-person mode`, 'OffsideDetectionService');
               }
             } catch (error) {
-              console.error('Error setting up player after faceoff:', error);
+              debugError('Error setting up player after faceoff:', error, 'HockeyGameManager');
             }
           });
         }
         
-                 CONSTANTS.debugLog('Faceoff complete - play resumed', 'OffsideDetectionService');
+                 debugLog('Faceoff complete - play resumed', 'OffsideDetectionService');
         
         // CRITICAL FIX: Reset offside detection state after faceoff to prevent false positives
         // Use resetAfterFaceoff() to preserve cooldown timers and prevent immediate re-tracking
@@ -713,7 +710,7 @@ export class HockeyGameManager {
 
     // Use stored rotation angles if available, otherwise fallback to recalculation
     if (this._faceoffPlayerRotations.size > 0) {
-      CONSTANTS.debugLog(`Using stored faceoff rotations for ${this._faceoffPlayerRotations.size} players`, 'OffsideDetectionService');
+      debugLog(`Using stored faceoff rotations for ${this._faceoffPlayerRotations.size} players`, 'OffsideDetectionService');
       
       // Get all player IDs from teams
       const allPlayerIds = [
@@ -748,32 +745,32 @@ export class HockeyGameManager {
                 
                 const playerPosition = entity.position;
                 const yawDegrees = (storedYaw * 180 / Math.PI).toFixed(1);
-                                 CONSTANTS.debugLog(`Reapplied stored rotation for player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) - ${yawDegrees}° toward puck`, 'OffsideDetectionService');
+                                 debugLog(`Reapplied stored rotation for player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) - ${yawDegrees}° toward puck`, 'OffsideDetectionService');
               } catch (error) {
-                console.error('Error reapplying stored rotation for player entity:', error);
+                debugError('Error reapplying stored rotation for player entity:', error, 'HockeyGameManager');
               }
             });
           } else {
-                         CONSTANTS.debugLog(`No stored rotation found for player ${player.id}, skipping`, 'OffsideDetectionService');
+                         debugLog(`No stored rotation found for player ${player.id}, skipping`, 'OffsideDetectionService');
           }
         } catch (error) {
-          console.error('Error reapplying stored rotation for player:', error);
+          debugError('Error reapplying stored rotation for player:', error, 'HockeyGameManager');
         }
       });
 
-             CONSTANTS.debugLog('Reapplied stored puck-facing orientations for all players when play resumed', 'OffsideDetectionService');
+             debugLog('Reapplied stored puck-facing orientations for all players when play resumed', 'OffsideDetectionService');
       
       // Clear stored rotations after use
       this._faceoffPlayerRotations.clear();
     } else {
       // Fallback to recalculation if no stored rotations available
-             CONSTANTS.debugLog('No stored rotations available, falling back to recalculation', 'OffsideDetectionService');
+             debugLog('No stored rotations available, falling back to recalculation', 'OffsideDetectionService');
       
       const { ChatCommandManager } = require('./ChatCommandManager');
       const puckEntity = ChatCommandManager.instance.getPuck();
       
       if (!puckEntity || !puckEntity.isSpawned) {
-                 CONSTANTS.debugLog('Cannot maintain puck orientation - puck not found', 'OffsideDetectionService');
+                 debugLog('Cannot maintain puck orientation - puck not found', 'OffsideDetectionService');
         return;
       }
 
@@ -821,17 +818,17 @@ export class HockeyGameManager {
               entity.setRotation(rotation);
               
               const yawDegrees = (yaw * 180 / Math.PI).toFixed(1);
-                             CONSTANTS.debugLog(`Recalculated puck orientation for player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) - ${yawDegrees}° toward puck`, 'OffsideDetectionService');
+                             debugLog(`Recalculated puck orientation for player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) - ${yawDegrees}° toward puck`, 'OffsideDetectionService');
             } catch (error) {
-              console.error('Error maintaining rotation for player entity:', error);
+              debugError('Error maintaining rotation for player entity:', error, 'HockeyGameManager');
             }
           });
         } catch (error) {
-          console.error('Error maintaining puck orientation for player:', error);
+          debugError('Error maintaining puck orientation for player:', error, 'HockeyGameManager');
         }
       });
 
-             CONSTANTS.debugLog('Recalculated puck-facing orientation for all players when play resumed', 'OffsideDetectionService');
+             debugLog('Recalculated puck-facing orientation for all players when play resumed', 'OffsideDetectionService');
     }
   }
 
@@ -843,7 +840,7 @@ export class HockeyGameManager {
     
     // Use centralized AudioManager instead of creating audio for each player
     AudioManager.instance.playRefereeWhistle();
-    CONSTANTS.debugLog('[HockeyGameManager] Referee whistle played globally', 'HockeyGameManager');
+    debugLog('[HockeyGameManager] Referee whistle played globally', 'HockeyGameManager');
   }
 
   /**
@@ -854,7 +851,7 @@ export class HockeyGameManager {
     
     // Use centralized AudioManager instead of creating audio for each player
     AudioManager.instance.playCountdownSound();
-    CONSTANTS.debugLog('[HockeyGameManager] Countdown sound played globally', 'HockeyGameManager');
+    debugLog('[HockeyGameManager] Countdown sound played globally', 'HockeyGameManager');
   }
 
   /**
@@ -878,7 +875,7 @@ export class HockeyGameManager {
       goalHistory
     });
     
-    CONSTANTS.debugLog('Broadcasted stats update to all players', 'HockeyGameManager');
+    debugLog('Broadcasted stats update to all players', 'HockeyGameManager');
   }
 
   /**
@@ -901,7 +898,7 @@ export class HockeyGameManager {
       try {
         player.ui.sendData(data);
       } catch (error) {
-        console.error('Error sending data to player:', error);
+        debugError('Error sending data to player:', error, 'HockeyGameManager');
       }
     });
   }
@@ -937,9 +934,9 @@ export class HockeyGameManager {
         boxScore
       });
       
-      CONSTANTS.debugLog(`Sent live stats with box score to player: ${player.id}`, 'HockeyGameManager');
+      debugLog(`Sent live stats with box score to player: ${player.id}`, 'HockeyGameManager');
     } catch (error) {
-      console.error('Error sending live stats to player:', error);
+      debugError('Error sending live stats to player:', error, 'HockeyGameManager');
     }
   }
 
@@ -997,11 +994,7 @@ export class HockeyGameManager {
           subtitle: 'Resuming Play'
         });
         
-        // Keep chat message as backup
-        this._world!.chatManager.sendBroadcastMessage(
-          `Resuming play in ${countdown}...`,
-          'FFFF00'
-        );
+        // Chat message removed to reduce clutter - UI overlay handles countdown display
         countdown--;
       } else {
         clearInterval(countdownInterval);
@@ -1046,9 +1039,9 @@ export class HockeyGameManager {
           allPlayers.forEach((player) => {
             try {
               player.ui.lockPointer(true); // Lock pointer for gameplay
-              CONSTANTS.debugLog(`Locked pointer for player ${player.id} after goal reset countdown`, 'HockeyGameManager');
+              debugLog(`Locked pointer for player ${player.id} after goal reset countdown`, 'HockeyGameManager');
             } catch (error) {
-              console.error('Error locking pointer for player after goal reset countdown:', error);
+              debugError('Error locking pointer for player after goal reset countdown:', error, 'HockeyGameManager');
             }
           });
         }
@@ -1069,10 +1062,10 @@ export class HockeyGameManager {
             if (adjustedRemainingTime > 0) {
               // Restart the period timer with adjusted time
               this._periodTimer = setTimeout(() => this.endPeriod(), adjustedRemainingTime);
-              CONSTANTS.debugLog(`Backend period timer restarted after goal celebration - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
+              debugLog(`Backend period timer restarted after goal celebration - remaining time: ${adjustedRemainingTime}ms (paused for ${actualPauseDuration}ms)`, 'HockeyGameManager');
             } else {
               // Time is up, end period immediately
-              CONSTANTS.debugLog('Period time expired during goal celebration - ending period now', 'HockeyGameManager');
+              debugLog('Period time expired during goal celebration - ending period now', 'HockeyGameManager');
               setTimeout(() => this.endPeriod(), 100); // Small delay to let UI update
             }
             
@@ -1080,14 +1073,11 @@ export class HockeyGameManager {
             this._pausedPeriodTimeMs = null;
             this._offsidePauseStartTime = null;
           } else {
-            CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
+            debugLog('No paused period timer found - period timer may not have been running', 'HockeyGameManager');
           }
           
-          this._world!.chatManager.sendBroadcastMessage(
-            'Play resumed!',
-            '00FF00'
-          );
-          CONSTANTS.debugLog('Play resumed after goal reset', 'HockeyGameManager');
+          // "Play resumed!" message removed to reduce chat clutter
+          debugLog('Play resumed after goal reset', 'HockeyGameManager');
           
           // Hide countdown overlay after a brief delay
           setTimeout(() => {
@@ -1106,7 +1096,7 @@ export class HockeyGameManager {
   public startMatchSequence(): void {
     if (this._state === HockeyGameState.MATCH_START) return;
     
-    CONSTANTS.debugLog('Starting match sequence...', 'HockeyGameManager');
+    debugLog('Starting match sequence...', 'HockeyGameManager');
     
     // Don't lock pointer here - do it after countdown when game actually starts
     // This prevents pointer lock issues during the reset/countdown phase
@@ -1134,7 +1124,7 @@ export class HockeyGameManager {
   private performMatchReset(): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog('Performing match reset...', 'HockeyGameManager');
+    debugLog('Performing match reset...', 'HockeyGameManager');
     
     // Reset all players to spawn positions and puck to center ice
     // We'll use the existing PlayerSpawnManager system
@@ -1171,7 +1161,7 @@ export class HockeyGameManager {
   private startGameCountdown(): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog('Starting game countdown...', 'HockeyGameManager');
+    debugLog('Starting game countdown...', 'HockeyGameManager');
     
     let countdown = 3;
     
@@ -1199,11 +1189,7 @@ export class HockeyGameManager {
           subtitle: 'Game Starting'
         });
         
-        // Keep chat message as backup
-        this._world!.chatManager.sendBroadcastMessage(
-          `Game starting in ${countdown}...`,
-          'FFFF00'
-        );
+        // Chat message removed to reduce clutter - UI overlay handles countdown display
         countdown--;
       } else {
         clearInterval(countdownInterval);
@@ -1233,9 +1219,9 @@ export class HockeyGameManager {
           allPlayers.forEach((player) => {
             try {
               player.ui.lockPointer(true); // Lock pointer for gameplay
-              CONSTANTS.debugLog(`Locked pointer for player ${player.id} after game start countdown`, 'HockeyGameManager');
+              debugLog(`Locked pointer for player ${player.id} after game start countdown`, 'HockeyGameManager');
             } catch (error) {
-              console.error('Error locking pointer for player after countdown:', error);
+              debugError('Error locking pointer for player after countdown:', error, 'HockeyGameManager');
             }
           });
         }
@@ -1246,11 +1232,8 @@ export class HockeyGameManager {
         // Start tracking period time for stats
         PlayerStatsManager.instance.startPeriodTime();
         
-        this._world!.chatManager.sendBroadcastMessage(
-          'Game started! GO!',
-          '00FF00'
-        );
-        CONSTANTS.debugLog('Game started - players unlocked', 'HockeyGameManager');
+        // "Game started! GO!" message removed to reduce chat clutter
+        debugLog('Game started - players unlocked', 'HockeyGameManager');
         
         // Start the period timer
         this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
@@ -1292,13 +1275,13 @@ export class HockeyGameManager {
       const previousPeriod = this._period;
       this._period++;
       
-      CONSTANTS.debugLog(`End of period ${previousPeriod}, transitioning to period ${this._period}`, 'HockeyGameManager');
+      debugLog(`End of period ${previousPeriod}, transitioning to period ${this._period}`, 'HockeyGameManager');
       
       // Start period break sequence
       this.startPeriodBreak(previousPeriod);
     } else {
       this.endGame().catch(error => {
-        console.error('Error ending game:', error);
+        debugError('Error ending game:', error, 'HockeyGameManager');
       });
     }
   }
@@ -1309,7 +1292,7 @@ export class HockeyGameManager {
   private startPeriodBreak(endedPeriod: number): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog(`Starting period break after period ${endedPeriod}`, 'HockeyGameManager');
+    debugLog(`Starting period break after period ${endedPeriod}`, 'HockeyGameManager');
     
     // Play referee whistle sound effect when period ends
     this.playRefereeWhistle();
@@ -1340,7 +1323,7 @@ export class HockeyGameManager {
   private startNextPeriodSequence(): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog(`Starting ${this.getPeriodName(this._period)} sequence`, 'HockeyGameManager');
+    debugLog(`Starting ${this.getPeriodName(this._period)} sequence`, 'HockeyGameManager');
     
     // Hide period break overlay
     this.broadcastToAllPlayers({
@@ -1349,7 +1332,7 @@ export class HockeyGameManager {
     
     // Set state to PERIOD_END to lock movement during reset (same as goal resets)
     this._state = HockeyGameState.PERIOD_END;
-    CONSTANTS.debugLog('Entered PERIOD_END state - players locked during period reset and countdown', 'HockeyGameManager');
+    debugLog('Entered PERIOD_END state - players locked during period reset and countdown', 'HockeyGameManager');
     
     // Reset all players and puck to starting positions
     this.performPeriodReset();
@@ -1364,7 +1347,7 @@ export class HockeyGameManager {
   private performPeriodReset(): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog(`Performing period reset for ${this.getPeriodName(this._period)}`, 'HockeyGameManager');
+    debugLog(`Performing period reset for ${this.getPeriodName(this._period)}`, 'HockeyGameManager');
     
     // Get the current puck entity from ChatCommandManager (same way goal resets work)
     const { ChatCommandManager } = require('./ChatCommandManager');
@@ -1379,7 +1362,7 @@ export class HockeyGameManager {
       puckEntity // Pass actual puck entity for proper reset
     );
     
-    CONSTANTS.debugLog(`Period reset completed with puck entity: ${!!puckEntity}`, 'HockeyGameManager');
+    debugLog(`Period reset completed with puck entity: ${!!puckEntity}`, 'HockeyGameManager');
   }
 
   /**
@@ -1388,7 +1371,7 @@ export class HockeyGameManager {
   private startPeriodCountdown(): void {
     if (!this._world) return;
     
-    CONSTANTS.debugLog(`Starting countdown for ${this.getPeriodName(this._period)}`, 'HockeyGameManager');
+    debugLog(`Starting countdown for ${this.getPeriodName(this._period)}`, 'HockeyGameManager');
     
     let countdown = 3;
     
@@ -1406,11 +1389,7 @@ export class HockeyGameManager {
           subtitle: `${this.getPeriodName(this._period)} Starting`
         });
         
-        // Keep chat message as backup
-        this._world!.chatManager.sendBroadcastMessage(
-          `${this.getPeriodName(this._period)} starting in ${countdown}...`,
-          'FFFF00'
-        );
+        // Chat message removed to reduce clutter - UI overlay handles countdown display
         countdown--;
       } else {
         clearInterval(countdownInterval);
@@ -1437,9 +1416,9 @@ export class HockeyGameManager {
           allPlayers.forEach((player) => {
             try {
               player.ui.lockPointer(true); // Lock pointer for gameplay
-              CONSTANTS.debugLog(`Locked pointer for player ${player.id} after period start countdown`, 'HockeyGameManager');
+              debugLog(`Locked pointer for player ${player.id} after period start countdown`, 'HockeyGameManager');
             } catch (error) {
-              console.error('Error locking pointer for player after period countdown:', error);
+              debugError('Error locking pointer for player after period countdown:', error, 'HockeyGameManager');
             }
           });
         }
@@ -1450,11 +1429,8 @@ export class HockeyGameManager {
         // Start tracking period time for stats
         PlayerStatsManager.instance.startPeriodTime();
         
-        this._world!.chatManager.sendBroadcastMessage(
-          `${this.getPeriodName(this._period)} started! GO!`,
-          '00FF00'
-        );
-        CONSTANTS.debugLog(`${this.getPeriodName(this._period)} started - players unlocked`, 'HockeyGameManager');
+        // Period start message removed to reduce chat clutter
+        debugLog(`${this.getPeriodName(this._period)} started - players unlocked`, 'HockeyGameManager');
         
         // Clear any existing period timer before setting new one
         if (this._periodTimer) {
@@ -1463,7 +1439,7 @@ export class HockeyGameManager {
         
         // Start the period timer
         this._periodTimer = setTimeout(() => this.endPeriod(), this._periodTimeMs);
-        CONSTANTS.debugLog(`Period timer set for ${this._periodTimeMs}ms`, 'HockeyGameManager');
+        debugLog(`Period timer set for ${this._periodTimeMs}ms`, 'HockeyGameManager');
         
         // Update period display and restart UI timer
         this.broadcastToAllPlayers({
@@ -1500,7 +1476,7 @@ export class HockeyGameManager {
   }
 
   public resetToLobby() {
-    CONSTANTS.debugLog('Resetting to lobby with team selection', 'HockeyGameManager');
+    debugLog('Resetting to lobby with team selection', 'HockeyGameManager');
     
     // Reset all players to lobby state first
     if (this._world) {
@@ -1520,9 +1496,9 @@ export class HockeyGameManager {
     
     if (puckEntity) {
       PlayerSpawnManager.instance.resetPuckToCenterIce(puckEntity);
-      CONSTANTS.debugLog('Puck reset to center ice during lobby reset', 'HockeyGameManager');
+      debugLog('Puck reset to center ice during lobby reset', 'HockeyGameManager');
     } else {
-      console.warn('[HockeyGameManager] Could not reset puck - entity not found');
+      debugWarn('[HockeyGameManager] Could not reset puck - entity not found', 'HockeyGameManager');
     }
     
     // Clear all teams and player assignments
@@ -1542,7 +1518,7 @@ export class HockeyGameManager {
           teams: this.getTeamsWithNamesForUI() // This will be empty after clearing
         });
       });
-      CONSTANTS.debugLog('Sent cleared team positions to all players during lobby reset', 'HockeyGameManager');
+      debugLog('Sent cleared team positions to all players during lobby reset', 'HockeyGameManager');
     }
     
     // Reset scores and period
@@ -1576,9 +1552,9 @@ export class HockeyGameManager {
       this._playerIdToPlayer.forEach((player) => {
         try {
           player.ui.lockPointer(false); // Unlock pointer for lobby/team selection
-          CONSTANTS.debugLog(`Unlocked pointer for player ${player.id} during lobby reset`, 'HockeyGameManager');
+          debugLog(`Unlocked pointer for player ${player.id} during lobby reset`, 'HockeyGameManager');
         } catch (error) {
-          console.error('Error unlocking pointer for player during lobby reset:', error);
+          debugError('Error unlocking pointer for player during lobby reset:', error, 'HockeyGameManager');
         }
       });
     }
@@ -1591,14 +1567,14 @@ export class HockeyGameManager {
       type: 'timer-stop'
     });
     
-    CONSTANTS.debugLog('Lobby reset complete - players should see team selection', 'HockeyGameManager');
+    debugLog('Lobby reset complete - players should see team selection', 'HockeyGameManager');
   }
 
   public async endGame() {
     if (this._state === HockeyGameState.GAME_OVER) return;
     this._state = HockeyGameState.GAME_OVER;
     
-    CONSTANTS.debugLog('Game ended - starting game over sequence', 'HockeyGameManager');
+    debugLog('Game ended - starting game over sequence', 'HockeyGameManager');
     
     // Clear any existing period timer
     if (this._periodTimer) {
@@ -1636,9 +1612,9 @@ export class HockeyGameManager {
         
         // Save all persistent stats
         await PlayerStatsManager.instance.saveAllPlayerStats();
-        CONSTANTS.debugLog('Successfully recorded game outcome and saved persistent stats', 'HockeyGameManager');
+        debugLog('Successfully recorded game outcome and saved persistent stats', 'HockeyGameManager');
       } catch (error) {
-        console.error('Error recording game outcome or saving persistent stats:', error);
+        debugError('Error recording game outcome or saving persistent stats:', error, 'HockeyGameManager');
       }
       
       // Generate box score for enhanced game over display
@@ -1660,12 +1636,12 @@ export class HockeyGameManager {
         color
       );
       
-      CONSTANTS.debugLog(`Game over - Winner: ${winner}, Final Score: RED ${redScore} - BLUE ${blueScore}`, 'HockeyGameManager');
+      debugLog(`Game over - Winner: ${winner}, Final Score: RED ${redScore} - BLUE ${blueScore}`, 'HockeyGameManager');
     }
     
     // Return to lobby after 10 seconds (reduced from 15s for better flow)
     setTimeout(() => {
-      CONSTANTS.debugLog('Returning to lobby after game over', 'HockeyGameManager');
+      debugLog('Returning to lobby after game over', 'HockeyGameManager');
       
       // Hide game over overlay
       this.broadcastToAllPlayers({
@@ -1693,8 +1669,8 @@ export class HockeyGameManager {
     this._tentativeSelections.set(player.id, { team, position });
     this._playerIdToPlayer.set(player.id, player);
     
-    CONSTANTS.debugLog(`assignPlayerToTeam (tentative): player.id=${player.id}, team=${team}, position=${position}`, 'HGM');
-    CONSTANTS.debugLog(`Tentative selections: ${JSON.stringify(Array.from(this._tentativeSelections.entries()))}`, 'HGM');
+    debugLog(`assignPlayerToTeam (tentative): player.id=${player.id}, team=${team}, position=${position}`, 'HGM');
+    debugLog(`Tentative selections: ${JSON.stringify(Array.from(this._tentativeSelections.entries()))}`, 'HGM');
     return true;
   }
 
@@ -1713,7 +1689,7 @@ export class HockeyGameManager {
     // Remove player stats
     PlayerStatsManager.instance.removePlayer(player.id)
       .catch(error => {
-        console.error('Error removing player stats:', error);
+        debugError('Error removing player stats:', error, 'HockeyGameManager');
       });
   }
 
@@ -1834,7 +1810,7 @@ export class HockeyGameManager {
   public lockInPlayer(player: Player) {
     const tentativeSelection = this._tentativeSelections.get(player.id);
     if (!tentativeSelection) {
-      console.warn(`[HGM] No tentative selection found for player ${player.id}`);
+      debugWarn(`[HGM] No tentative selection found for player ${player.id}`, 'HockeyGameManager');
       return false;
     }
     
@@ -1842,7 +1818,7 @@ export class HockeyGameManager {
     
     // Check if position is still available
     if (this._teams[team][position] && this._lockedInPlayers.has(this._teams[team][position])) {
-      console.warn(`[HGM] Position ${team}-${position} already taken by locked-in player`);
+      debugWarn(`[HGM] Position ${team}-${position} already taken by locked-in player`, 'HockeyGameManager');
       return false;
     }
     
@@ -1853,7 +1829,7 @@ export class HockeyGameManager {
         for (const currentPos of Object.values(HockeyPosition)) {
           if (this._teams[currentTeam][currentPos] === player.id) {
             this._teams[currentTeam][currentPos] = undefined;
-            CONSTANTS.debugLog(`Removed player ${player.id} from old position ${currentTeam}-${currentPos}`, 'HGM');
+            debugLog(`Removed player ${player.id} from old position ${currentTeam}-${currentPos}`, 'HGM');
             break;
           }
         }
@@ -1868,11 +1844,11 @@ export class HockeyGameManager {
     // Initialize player stats now that they're locked in
     PlayerStatsManager.instance.initializePlayer(player, team, position)
       .catch(error => {
-        console.error('Error initializing player stats:', error);
+        debugError('Error initializing player stats:', error, 'HockeyGameManager');
       });
     
-    CONSTANTS.debugLog(`Player ${player.id} locked in to ${team}-${position}`, 'HGM');
-          CONSTANTS.debugLog(`Teams after lock-in: ${JSON.stringify(this._teams)}`, 'HGM');
+    debugLog(`Player ${player.id} locked in to ${team}-${position}`, 'HGM');
+          debugLog(`Teams after lock-in: ${JSON.stringify(this._teams)}`, 'HGM');
     return true;
   }
 
@@ -1882,19 +1858,19 @@ export class HockeyGameManager {
     if (this._state !== HockeyGameState.LOBBY && 
         this._state !== HockeyGameState.WAITING_FOR_PLAYERS && 
         this._state !== HockeyGameState.COUNTDOWN_TO_START) {
-      CONSTANTS.debugLog(`Position switching not allowed in state: ${this._state}`, 'HGM');
+      debugLog(`Position switching not allowed in state: ${this._state}`, 'HGM');
       return false;
     }
 
     // Check if position switching is enabled
     if (!CONSTANTS.LOBBY_CONFIG.ALLOW_POSITION_SWITCHING) {
-      CONSTANTS.debugLog('Position switching is disabled', 'HGM');
+      debugLog('Position switching is disabled', 'HGM');
       return false;
     }
 
     // Check if player is currently locked in
     if (!this._lockedInPlayers.has(player.id)) {
-      CONSTANTS.debugLog(`Player ${player.id} is not locked in`, 'HGM');
+      debugLog(`Player ${player.id} is not locked in`, 'HGM');
       return false;
     }
 
@@ -1902,7 +1878,7 @@ export class HockeyGameManager {
     if (this._teams[newTeam][newPosition] && 
         this._lockedInPlayers.has(this._teams[newTeam][newPosition]) && 
         this._teams[newTeam][newPosition] !== player.id) {
-      CONSTANTS.debugLog(`Position ${newTeam}-${newPosition} already taken by another locked-in player`, 'HGM');
+      debugLog(`Position ${newTeam}-${newPosition} already taken by another locked-in player`, 'HGM');
       return false;
     }
 
@@ -1923,7 +1899,7 @@ export class HockeyGameManager {
     }
 
     if (!currentTeam || !currentPosition) {
-      CONSTANTS.debugLog(`Could not find current position for player ${player.id}`, 'HGM');
+      debugLog(`Could not find current position for player ${player.id}`, 'HGM');
       return false;
     }
 
@@ -1937,10 +1913,10 @@ export class HockeyGameManager {
     // TODO: Implement updatePlayerTeamPosition method in PlayerStatsManager
     // PlayerStatsManager.instance.updatePlayerTeamPosition(player, newTeam, newPosition)
     //   .catch((error: any) => {
-    //     console.error('Error updating player stats:', error);
+    //     debugError('Error updating player stats:', error, 'HockeyGameManager');
     //   });
 
-    CONSTANTS.debugLog(`Player ${player.id} switched from ${currentTeam}-${currentPosition} to ${newTeam}-${newPosition}`, 'HGM');
+    debugLog(`Player ${player.id} switched from ${currentTeam}-${currentPosition} to ${newTeam}-${newPosition}`, 'HGM');
     return true;
   }
 
@@ -1979,7 +1955,7 @@ export class HockeyGameManager {
     // Keep tentative selection but mark as unlocked for UI purposes
     // This allows them to see their previous selection when reopening team selection
     
-    CONSTANTS.debugLog(`Player ${player.id} unlocked for reselection`, 'HGM');
+    debugLog(`Player ${player.id} unlocked for reselection`, 'HGM');
     return true;
   }
 
@@ -2009,7 +1985,7 @@ export class HockeyGameManager {
     this._state = HockeyGameState.COUNTDOWN_TO_START;
     this._countdownTimeRemaining = CONSTANTS.LOBBY_CONFIG.COUNTDOWN_DURATION;
 
-    CONSTANTS.debugLog(`Started minimum threshold countdown: ${this._countdownTimeRemaining}s`, 'HGM');
+    debugLog(`Started minimum threshold countdown: ${this._countdownTimeRemaining}s`, 'HGM');
 
     // Track if we've already reset to 5 seconds for full lobby (to avoid repeated resets)
     let hasResetForFullLobby = false;
@@ -2020,7 +1996,7 @@ export class HockeyGameManager {
 
       // Check if lobby is completely full (12/12) and reset countdown to quick start time (once only)
       if (!hasResetForFullLobby && this.areAllPositionsLockedIn()) {
-        CONSTANTS.debugLog(`Lobby is full (12/12)! Resetting countdown to ${CONSTANTS.LOBBY_CONFIG.FULL_LOBBY_COUNTDOWN} seconds for quick start.`, 'HGM');
+        debugLog(`Lobby is full (12/12)! Resetting countdown to ${CONSTANTS.LOBBY_CONFIG.FULL_LOBBY_COUNTDOWN} seconds for quick start.`, 'HGM');
         this._countdownTimeRemaining = CONSTANTS.LOBBY_CONFIG.FULL_LOBBY_COUNTDOWN;
         hasResetForFullLobby = true; // Prevent repeated resets
         
@@ -2035,15 +2011,15 @@ export class HockeyGameManager {
 
       // Trigger UI update in PlayerManager using callback
       if (this._countdownUpdateCallback) {
-        CONSTANTS.debugLog(`Calling countdown update callback, time remaining: ${this._countdownTimeRemaining}s`, 'HGM');
+        debugLog(`Calling countdown update callback, time remaining: ${this._countdownTimeRemaining}s`, 'HGM');
         this._countdownUpdateCallback();
       } else {
-        CONSTANTS.debugLog('No countdown update callback set!', 'HGM');
+        debugLog('No countdown update callback set!', 'HGM');
       }
 
       // AUTO-BALANCE TEAMS 5 seconds before game starts
       if (this._countdownTimeRemaining === 5) {
-        CONSTANTS.debugLog('5 seconds remaining - triggering final auto-balance!', 'HGM');
+        debugLog('5 seconds remaining - triggering final auto-balance!', 'HGM');
         this.autoBalanceTeams();
       }
 
@@ -2070,7 +2046,7 @@ export class HockeyGameManager {
     this.clearCountdownTimer();
     this._state = HockeyGameState.WAITING_FOR_PLAYERS;
 
-    CONSTANTS.debugLog('Minimum threshold countdown cancelled', 'HGM');
+    debugLog('Minimum threshold countdown cancelled', 'HGM');
   }
 
   // NEW: Get countdown time remaining for UI display
@@ -2150,7 +2126,7 @@ export class HockeyGameManager {
     if (shooterInfo?.team) {
       PlayerStatsManager.instance.recordSave(goalieId, shooterId, shooterInfo.team)
         .catch(error => {
-          console.error('Error recording save in PlayerStatsManager:', error);
+          debugError('Error recording save in PlayerStatsManager:', error, 'HockeyGameManager');
         });
     }
     
@@ -2184,7 +2160,7 @@ export class HockeyGameManager {
             totalSaves: goalieStats.saves
           });
         } catch (error) {
-          console.error('Error sending save notification to player:', error);
+          debugError('Error sending save notification to player:', error, 'HockeyGameManager');
         }
       });
       
@@ -2199,7 +2175,7 @@ export class HockeyGameManager {
       // Broadcast updated stats after save
       this.broadcastStatsUpdate();
       
-      CONSTANTS.debugLog(`Save notification broadcasted: ${goalieStats.playerName} -> ${goalieStats.saves} saves`, 'HockeyGameManager');
+      debugLog(`Save notification broadcasted: ${goalieStats.playerName} -> ${goalieStats.saves} saves`, 'HockeyGameManager');
     }
   }
 
@@ -2238,13 +2214,13 @@ export class HockeyGameManager {
       
       // Case 2: Only one team has a goalie but we have enough total players for redistribution
       if ((redGoalieLocked || blueGoalieLocked) && totalPlayers >= 6) {
-        CONSTANTS.debugLog(`Enhanced threshold: Total players=${totalPlayers}, one goalie available, can redistribute`, 'HockeyGameManager');
+        debugLog(`Enhanced threshold: Total players=${totalPlayers}, one goalie available, can redistribute`, 'HockeyGameManager');
         return true; // Auto-balancing will fix the distribution
       }
       
       // Case 3: No goalies but enough players - someone can be reassigned to goalie
       if (!redGoalieLocked && !blueGoalieLocked && totalPlayers >= 6) {
-        CONSTANTS.debugLog(`Enhanced threshold: Total players=${totalPlayers}, no goalies but enough for redistribution`, 'HockeyGameManager');
+        debugLog(`Enhanced threshold: Total players=${totalPlayers}, no goalies but enough for redistribution`, 'HockeyGameManager');
         return true; // Auto-balancing will assign goalies
       }
     }
@@ -2257,7 +2233,7 @@ export class HockeyGameManager {
    */
   public autoBalanceTeams(): void {
     if (!CONSTANTS.LOBBY_CONFIG.AUTO_BALANCE_ENABLED) {
-      CONSTANTS.debugLog('Auto-balancing disabled in config', 'HockeyGameManager');
+      debugLog('Auto-balancing disabled in config', 'HockeyGameManager');
       return;
     }
 
@@ -2270,7 +2246,7 @@ export class HockeyGameManager {
     const blueCount = Object.values(blueTeam).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
     const totalPlayers = redCount + blueCount;
 
-    CONSTANTS.debugLog(`Enhanced auto-balance: RED=${redCount}, BLUE=${blueCount}, Total=${totalPlayers}`, 'HockeyGameManager');
+    debugLog(`Enhanced auto-balance: RED=${redCount}, BLUE=${blueCount}, Total=${totalPlayers}`, 'HockeyGameManager');
 
     // Step 1: Ensure both teams have mandatory positions FIRST (Goalie + Center are critical)
     this.ensureMandatoryPositions(lockedInPlayers);
@@ -2281,7 +2257,7 @@ export class HockeyGameManager {
     // Broadcast updated positions to all players
     this.broadcastTeamPositionsUpdate();
     
-    CONSTANTS.debugLog('Auto-balancing completed', 'HockeyGameManager');
+    debugLog('Auto-balancing completed', 'HockeyGameManager');
   }
 
   /**
@@ -2304,7 +2280,7 @@ export class HockeyGameManager {
     const blueHasPosition = this._teams[HockeyTeam.BLUE][position] && 
                            lockedInPlayers.includes(this._teams[HockeyTeam.BLUE][position]);
 
-    CONSTANTS.debugLog(`Position ${position}: RED=${redHasPosition}, BLUE=${blueHasPosition}`, 'HockeyGameManager');
+    debugLog(`Position ${position}: RED=${redHasPosition}, BLUE=${blueHasPosition}`, 'HockeyGameManager');
 
     // If both teams have the position, we're good
     if (redHasPosition && blueHasPosition) {
@@ -2314,7 +2290,7 @@ export class HockeyGameManager {
     // IMPORTANT: Don't move players who are already locked into required positions
     // If a player chose CENTER or GOALIE, respect their choice during auto-balance
     if ((position === HockeyPosition.CENTER || position === HockeyPosition.GOALIE)) {
-      CONSTANTS.debugLog(`Ensuring mandatory ${position} positions during auto-balance`, 'HockeyGameManager');
+      debugLog(`Ensuring mandatory ${position} positions during auto-balance`, 'HockeyGameManager');
       
       // Assign missing positions - teams need BOTH goalie AND center
       if (!redHasPosition) {
@@ -2350,7 +2326,7 @@ export class HockeyGameManager {
         teamPositions[position] = playerId;
         
         this.notifyPlayerOfMove(playerId, team, position, `Assigned as ${team} ${position} for team balance`);
-        CONSTANTS.debugLog(`Assigned ${playerId} as ${team} ${position} from ${currentPos}`, 'HockeyGameManager');
+        debugLog(`Assigned ${playerId} as ${team} ${position} from ${currentPos}`, 'HockeyGameManager');
         return;
       }
     }
@@ -2374,7 +2350,7 @@ export class HockeyGameManager {
         teamPositions[position] = playerId;
         
         this.notifyPlayerOfMove(playerId, team, position, `Moved to ${team} ${position} for team balance`);
-        CONSTANTS.debugLog(`Moved ${playerId} from ${otherTeam}-${candidatePos} to ${team}-${position}`, 'HockeyGameManager');
+        debugLog(`Moved ${playerId} from ${otherTeam}-${candidatePos} to ${team}-${position}`, 'HockeyGameManager');
         return;
       }
     }
@@ -2387,7 +2363,7 @@ export class HockeyGameManager {
     let redCount = Object.values(this._teams[HockeyTeam.RED]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
     let blueCount = Object.values(this._teams[HockeyTeam.BLUE]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
     
-    CONSTANTS.debugLog(`Team sizes before balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
+    debugLog(`Team sizes before balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
 
     // Calculate target team sizes
     const totalPlayers = redCount + blueCount;
@@ -2411,7 +2387,7 @@ export class HockeyGameManager {
           this._teams[underpopulatedTeam][newPosition] = playerId;
           
           this.notifyPlayerOfMove(playerId, underpopulatedTeam, newPosition, 'Auto-balanced for fair teams');
-          CONSTANTS.debugLog(`Balanced: Moved ${playerId} from ${overpopulatedTeam}-${oldPosition} to ${underpopulatedTeam}-${newPosition}`, 'HockeyGameManager');
+          debugLog(`Balanced: Moved ${playerId} from ${overpopulatedTeam}-${oldPosition} to ${underpopulatedTeam}-${newPosition}`, 'HockeyGameManager');
           
           // Update counts
           redCount = Object.values(this._teams[HockeyTeam.RED]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
@@ -2424,7 +2400,7 @@ export class HockeyGameManager {
       }
     }
 
-    CONSTANTS.debugLog(`Team sizes after balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
+    debugLog(`Team sizes after balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
   }
 
   /**
@@ -2555,7 +2531,7 @@ export class HockeyGameManager {
       type: 'team-positions-update',
       teams: teamsWithNames
     });
-    CONSTANTS.debugLog('Broadcasted team positions update after auto-balance', 'HockeyGameManager');
+    debugLog('Broadcasted team positions update after auto-balance', 'HockeyGameManager');
   }
 
 } 

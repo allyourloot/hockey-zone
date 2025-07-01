@@ -1,6 +1,7 @@
 import { World, Player, type Vector3Like } from 'hytopia';
 import { HockeyTeam, HockeyPosition } from '../utils/types';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 import { IceSkatingController } from '../controllers/IceSkatingController';
 
 interface SpawnData {
@@ -90,7 +91,7 @@ export class PlayerSpawnManager {
    */
   public initialize(world: World): void {
     this._world = world;
-    CONSTANTS.debugLog('Initialized with spawn positions', 'PlayerSpawnManager');
+    debugLog('Initialized with spawn positions', 'PlayerSpawnManager');
   }
 
   /**
@@ -112,7 +113,7 @@ export class PlayerSpawnManager {
    */
   public teleportPlayerToSpawn(player: Player, team: HockeyTeam, position: HockeyPosition): boolean {
     if (!this._world) {
-      console.error('[PlayerSpawnManager] Cannot teleport player - world not initialized');
+      debugError('[PlayerSpawnManager] Cannot teleport player - world not initialized', 'PlayerSpawnManager');
       return false;
     }
 
@@ -120,7 +121,7 @@ export class PlayerSpawnManager {
     const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
 
     if (playerEntities.length === 0) {
-      console.warn(`[PlayerSpawnManager] No entities found for player ${player.id}`);
+      debugWarn(`[PlayerSpawnManager] No entities found for player ${player.id}`, 'PlayerSpawnManager');
       return false;
     }
 
@@ -143,10 +144,10 @@ export class PlayerSpawnManager {
         entity.setLinearVelocity({ x: 0, y: 0, z: 0 });
         entity.setAngularVelocity({ x: 0, y: 0, z: 0 });
         
-        CONSTANTS.debugLog(`Teleported ${player.id} (entity ${index}) to ${team} ${position} at: ${JSON.stringify(spawnData.position)} with rotation: ${spawnData.yaw} radians`, 'PlayerSpawnManager');
+        debugLog(`Teleported ${player.id} (entity ${index}) to ${team} ${position} at: ${JSON.stringify(spawnData.position)} with rotation: ${spawnData.yaw} radians`, 'PlayerSpawnManager');
         teleported = true;
       } catch (error) {
-        console.error(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error);
+        debugError(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error, 'PlayerSpawnManager');
       }
     });
 
@@ -161,7 +162,7 @@ export class PlayerSpawnManager {
     playerIdToPlayer: Map<string, Player>
   ): void {
     if (!this._world) {
-      console.error('[PlayerSpawnManager] Cannot teleport players - world not initialized');
+      debugError('[PlayerSpawnManager] Cannot teleport players - world not initialized', 'PlayerSpawnManager');
       return;
     }
 
@@ -178,13 +179,13 @@ export class PlayerSpawnManager {
               totalTeleported++;
             }
           } else {
-            console.warn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`);
+            debugWarn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`, 'PlayerSpawnManager');
           }
         }
       }
     }
 
-    CONSTANTS.debugLog(`Teleported ${totalTeleported} players to their spawn positions`, 'PlayerSpawnManager');
+    debugLog(`Teleported ${totalTeleported} players to their spawn positions`, 'PlayerSpawnManager');
 
     // Announce the reset
     if (this._world && totalTeleported > 0) {
@@ -200,12 +201,12 @@ export class PlayerSpawnManager {
    */
   public resetPuckToCenterIce(puckEntity: any): boolean {
     if (!puckEntity) {
-      console.warn('[PlayerSpawnManager] Cannot reset puck - puck entity is null or undefined');
+      debugWarn('[PlayerSpawnManager] Cannot reset puck - puck entity is null or undefined', 'PlayerSpawnManager');
       return false;
     }
     
     if (!puckEntity.isSpawned) {
-      console.warn('[PlayerSpawnManager] Cannot reset puck - puck not spawned');
+      debugWarn('[PlayerSpawnManager] Cannot reset puck - puck not spawned', 'PlayerSpawnManager');
       return false;
     }
 
@@ -222,10 +223,10 @@ export class PlayerSpawnManager {
       const { GoalDetectionService } = require('../services/GoalDetectionService');
       GoalDetectionService.instance.reset();
       
-      CONSTANTS.debugLog(`Puck detached and reset to center ice at: ${JSON.stringify(centerIcePosition)}`, 'PlayerSpawnManager');
+      debugLog(`Puck detached and reset to center ice at: ${JSON.stringify(centerIcePosition)}`, 'PlayerSpawnManager');
       return true;
     } catch (error) {
-      console.error('[PlayerSpawnManager] Error resetting puck:', error);
+      debugError('[PlayerSpawnManager] Error resetting puck:', error, 'PlayerSpawnManager');
       return false;
     }
   }
@@ -241,7 +242,7 @@ export class PlayerSpawnManager {
       // Check if any player is currently controlling the puck
       if (IceSkatingController._globalPuckController) {
         const controller = IceSkatingController._globalPuckController;
-        CONSTANTS.debugLog('Detaching puck from current controller', 'PlayerSpawnManager');
+        debugLog('Detaching puck from current controller', 'PlayerSpawnManager');
         
         // Release the puck (this also updates the player's UI)
         controller.releasePuck();
@@ -249,19 +250,19 @@ export class PlayerSpawnManager {
         // Additional safety: ensure the global controller is cleared
         IceSkatingController._globalPuckController = null;
         
-        CONSTANTS.debugLog('Puck successfully detached and global controller cleared', 'PlayerSpawnManager');
+        debugLog('Puck successfully detached and global controller cleared', 'PlayerSpawnManager');
       } else {
-        CONSTANTS.debugLog('No player currently controlling puck', 'PlayerSpawnManager');
+        debugLog('No player currently controlling puck', 'PlayerSpawnManager');
       }
     } catch (error) {
-      console.error('[PlayerSpawnManager] Error detaching puck from players:', error);
+      debugError('[PlayerSpawnManager] Error detaching puck from players:', error, 'PlayerSpawnManager');
       
       // Emergency fallback: clear the global controller even if there was an error
       try {
         const { IceSkatingController } = require('../controllers/IceSkatingController');
         IceSkatingController._globalPuckController = null;
       } catch (fallbackError) {
-        console.error('[PlayerSpawnManager] Error in emergency fallback:', fallbackError);
+        debugError('[PlayerSpawnManager] Error in emergency fallback:', fallbackError, 'PlayerSpawnManager');
       }
     }
   }
@@ -274,7 +275,7 @@ export class PlayerSpawnManager {
     playerIdToPlayer: Map<string, Player>,
     puckEntity: any
   ): void {
-    CONSTANTS.debugLog('Performing complete reset...', 'PlayerSpawnManager');
+    debugLog('Performing complete reset...', 'PlayerSpawnManager');
     
     // Clear all skating players to stop global ice skating sound
     const { AudioManager } = require('../managers/AudioManager');
@@ -286,7 +287,7 @@ export class PlayerSpawnManager {
     // Detach puck from any player and reset to center ice
     this.resetPuckToCenterIce(puckEntity);
     
-    CONSTANTS.debugLog('Complete reset finished - all players and puck reset', 'PlayerSpawnManager');
+    debugLog('Complete reset finished - all players and puck reset', 'PlayerSpawnManager');
   }
 
   /**
@@ -314,7 +315,7 @@ export class PlayerSpawnManager {
     faceoffPosition: Vector3Like
   ): void {
     if (!this._world) {
-      console.error('[PlayerSpawnManager] Cannot teleport players to faceoff - world not initialized');
+      debugError('[PlayerSpawnManager] Cannot teleport players to faceoff - world not initialized', 'PlayerSpawnManager');
       return;
     }
 
@@ -364,7 +365,7 @@ export class PlayerSpawnManager {
               const success = this.teleportPlayerToSpecificPosition(player, spawnData.position, spawnData.yaw);
               if (success) {
                 totalTeleported++;
-                CONSTANTS.debugLog(`${team} ${position} kept at default spawn position during offside reset: X=${spawnData.position.x}, Z=${spawnData.position.z}`, 'OffsideDetectionService');
+                debugLog(`${team} ${position} kept at default spawn position during offside reset: X=${spawnData.position.x}, Z=${spawnData.position.z}`, 'OffsideDetectionService');
               }
             } else {
               // Non-goalies use faceoff formation positioning
@@ -383,17 +384,17 @@ export class PlayerSpawnManager {
                 const adjustmentNote = isBlueNeutralRight ? ' (Blue Right +1 X)' : 
                                        isRedNeutralRight ? ' (Red Right +1 X +0.2 Z)' : 
                                        isRedNeutralLeft ? ' (Red Left -0.1 X +0.2 Z)' : '';
-                CONSTANTS.debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'OffsideDetectionService');
+                debugLog(`${team} ${position} positioned at faceoff formation: X=${finalPosition.x}, Z=${finalPosition.z}${adjustmentNote}`, 'OffsideDetectionService');
               }
             }
           } else {
-            console.warn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`);
+            debugWarn(`[PlayerSpawnManager] Player object not found for ID: ${playerId}`, 'PlayerSpawnManager');
           }
         }
       }
     }
 
-    CONSTANTS.debugLog(`Teleported ${totalTeleported} players to faceoff formation around: ${JSON.stringify(faceoffPosition)}`, 'OffsideDetectionService');
+    debugLog(`Teleported ${totalTeleported} players to faceoff formation around: ${JSON.stringify(faceoffPosition)}`, 'OffsideDetectionService');
 
     // Make all teleported players look at the puck immediately after positioning
     if (totalTeleported > 0) {
@@ -414,14 +415,14 @@ export class PlayerSpawnManager {
    */
   private teleportPlayerToSpecificPosition(player: Player, position: Vector3Like, yaw: number): boolean {
     if (!this._world) {
-      console.error('[PlayerSpawnManager] Cannot teleport player - world not initialized');
+      debugError('[PlayerSpawnManager] Cannot teleport player - world not initialized', 'PlayerSpawnManager');
       return false;
     }
 
     const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
 
     if (playerEntities.length === 0) {
-      console.warn(`[PlayerSpawnManager] No entities found for player ${player.id}`);
+      debugWarn(`[PlayerSpawnManager] No entities found for player ${player.id}`, 'PlayerSpawnManager');
       return false;
     }
 
@@ -446,7 +447,7 @@ export class PlayerSpawnManager {
         
         teleported = true;
       } catch (error) {
-        console.error(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error);
+        debugError(`[PlayerSpawnManager] Error teleporting player ${player.id}:`, error, 'PlayerSpawnManager');
       }
     });
 
@@ -466,12 +467,12 @@ export class PlayerSpawnManager {
             typeof spawnData.position.y !== 'number' || 
             typeof spawnData.position.z !== 'number' ||
             typeof spawnData.yaw !== 'number') {
-          console.error(`[PlayerSpawnManager] Invalid spawn data for ${team} ${position}:`, spawnData);
+          debugError(`[PlayerSpawnManager] Invalid spawn data for ${team} ${position}:`, spawnData, 'PlayerSpawnManager');
           return false;
         }
       }
     }
-          CONSTANTS.debugLog('All spawn positions validated successfully', 'PlayerSpawnManager');
+          debugLog('All spawn positions validated successfully', 'PlayerSpawnManager');
     return true;
   }
 
@@ -524,26 +525,26 @@ export class PlayerSpawnManager {
                       const faceoffRotation = playerEntity.rotation;
                       controller.setFaceoffRotation(faceoffRotation);
                       controller.preserveFaceoffRotation(3000); // Preserve for 3 seconds
-                      CONSTANTS.debugLog(`${team} ${position} (${player.id}) faceoff rotation preserved for 3 seconds`, 'OffsideDetectionService');
+                      debugLog(`${team} ${position} (${player.id}) faceoff rotation preserved for 3 seconds`, 'OffsideDetectionService');
                     }
                   }, 100); // Small delay to ensure rotation is applied first
                 }
                 
-                CONSTANTS.debugLog(`${team} ${position} (${player.id}) camera AND model set to face puck at (${currentPuckPosition.x.toFixed(1)}, ${currentPuckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
+                debugLog(`${team} ${position} (${player.id}) camera AND model set to face puck at (${currentPuckPosition.x.toFixed(1)}, ${currentPuckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
               }, 300); // Longer delay to ensure both player teleport AND puck positioning are complete
               
               playersLooking++;
             } catch (error) {
-              console.error(`Error setting ${team} ${position} to look at puck:`, error);
+              debugError(`Error setting ${team} ${position} to look at puck:`, error, 'PlayerSpawnManager');
             }
           } else {
-            console.warn(`[PlayerSpawnManager] Player object not found for ${team} ${position}: ${playerId}`);
+            debugWarn(`[PlayerSpawnManager] Player object not found for ${team} ${position}: ${playerId}`, 'PlayerSpawnManager');
           }
         }
       }
     }
 
-    CONSTANTS.debugLog(`Initiated camera AND model look setup for ${playersLooking} players`, 'OffsideDetectionService');
+    debugLog(`Initiated camera AND model look setup for ${playersLooking} players`, 'OffsideDetectionService');
   }
 
   /**
@@ -555,7 +556,7 @@ export class PlayerSpawnManager {
     const playerEntities = this._world.entityManager.getPlayerEntitiesByPlayer(player);
     
     if (playerEntities.length === 0) {
-      console.warn(`[PlayerSpawnManager] No entities found for player ${player.id} - cannot rotate toward puck`);
+      debugWarn(`[PlayerSpawnManager] No entities found for player ${player.id} - cannot rotate toward puck`, 'PlayerSpawnManager');
       return;
     }
 
@@ -569,7 +570,7 @@ export class PlayerSpawnManager {
         
         // Skip rotation if player is exactly at puck position
         if (Math.abs(dx) < 0.01 && Math.abs(dz) < 0.01) {
-          CONSTANTS.debugLog(`Player too close to puck for rotation calculation, skipping`, 'OffsideDetectionService');
+          debugLog(`Player too close to puck for rotation calculation, skipping`, 'OffsideDetectionService');
           return;
         }
         
@@ -595,9 +596,9 @@ export class PlayerSpawnManager {
         
         // Convert yaw to degrees for logging
         const yawDegrees = (yaw * 180 / Math.PI).toFixed(1);
-                 CONSTANTS.debugLog(`Player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) rotated ${yawDegrees}° to face puck at (${puckPosition.x.toFixed(1)}, ${puckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
+                 debugLog(`Player at (${playerPosition.x.toFixed(1)}, ${playerPosition.z.toFixed(1)}) rotated ${yawDegrees}° to face puck at (${puckPosition.x.toFixed(1)}, ${puckPosition.z.toFixed(1)})`, 'OffsideDetectionService');
       } catch (error) {
-        console.error(`Error rotating player entity toward puck:`, error);
+        debugError(`Error rotating player entity toward puck:`, error, 'PlayerSpawnManager');
       }
     });
   }

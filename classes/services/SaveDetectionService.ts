@@ -3,6 +3,7 @@ import { HockeyTeam, HockeyPosition } from '../utils/types';
 import { HockeyGameManager } from '../managers/HockeyGameManager';
 import { PlayerStatsManager } from '../managers/PlayerStatsManager';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 
 /**
  * Service for detecting saves made by goalies using trajectory prediction
@@ -49,80 +50,80 @@ export class SaveDetectionService {
    */
   public checkForSave(goalieId: string, puckEntity: Entity): boolean {
     try {
-      CONSTANTS.debugLog(`🧪 SAVE CHECK STARTED for goalie ${goalieId}`, 'SaveDetectionService');
+      debugLog(`🧪 SAVE CHECK STARTED for goalie ${goalieId}`, 'SaveDetectionService');
       
       const gameManager = HockeyGameManager.instance;
       
       // 0. Check if game is in active period (only track saves during live gameplay)
       if (gameManager.state !== 'IN_PERIOD') {
-        CONSTANTS.debugLog(`❌ Save check failed: Game not in active period (current state: ${gameManager.state})`, 'SaveDetectionService');
+        debugLog(`❌ Save check failed: Game not in active period (current state: ${gameManager.state})`, 'SaveDetectionService');
         return false;
       }
 
-      CONSTANTS.debugLog(`✅ Step 0 passed: Game is in active period (${gameManager.state})`, 'SaveDetectionService');
+      debugLog(`✅ Step 0 passed: Game is in active period (${gameManager.state})`, 'SaveDetectionService');
       
       // 1. Verify the player is actually a goalie
       const goalieInfo = gameManager.getTeamAndPosition(goalieId);
       if (!goalieInfo || goalieInfo.position !== HockeyPosition.GOALIE) {
-        CONSTANTS.debugLog(`❌ Save check failed: ${goalieId} is not a goalie (position: ${goalieInfo?.position})`, 'SaveDetectionService');
+        debugLog(`❌ Save check failed: ${goalieId} is not a goalie (position: ${goalieInfo?.position})`, 'SaveDetectionService');
         return false;
       }
 
-      CONSTANTS.debugLog(`✅ Step 1 passed: ${goalieId} is a ${goalieInfo.team} goalie`, 'SaveDetectionService');
+      debugLog(`✅ Step 1 passed: ${goalieId} is a ${goalieInfo.team} goalie`, 'SaveDetectionService');
 
       // 2. Check if puck was last touched by an opponent
       const lastTouchedBy = this.getLastPlayerToTouchPuck(puckEntity);
       if (!lastTouchedBy) {
-        CONSTANTS.debugLog(`❌ Save check failed: No last touched player found`, 'SaveDetectionService');
+        debugLog(`❌ Save check failed: No last touched player found`, 'SaveDetectionService');
         return false;
       }
 
-      CONSTANTS.debugLog(`✅ Step 2 passed: Last touched by player ${lastTouchedBy}`, 'SaveDetectionService');
+      debugLog(`✅ Step 2 passed: Last touched by player ${lastTouchedBy}`, 'SaveDetectionService');
 
       const shooterInfo = gameManager.getTeamAndPosition(lastTouchedBy);
       if (!shooterInfo) {
-        CONSTANTS.debugLog(`❌ Save check failed: Shooter ${lastTouchedBy} not found in teams`, 'SaveDetectionService');
+        debugLog(`❌ Save check failed: Shooter ${lastTouchedBy} not found in teams`, 'SaveDetectionService');
         return false;
       }
 
-      CONSTANTS.debugLog(`✅ Step 3 passed: Shooter ${lastTouchedBy} is on ${shooterInfo.team} team`, 'SaveDetectionService');
+      debugLog(`✅ Step 3 passed: Shooter ${lastTouchedBy} is on ${shooterInfo.team} team`, 'SaveDetectionService');
 
       // Check if last touched player is on opposing team
       if (shooterInfo.team === goalieInfo.team) {
-        CONSTANTS.debugLog(`❌ Save check failed: Last touched by teammate ${lastTouchedBy} (${shooterInfo.team}), not opponent`, 'SaveDetectionService');
+        debugLog(`❌ Save check failed: Last touched by teammate ${lastTouchedBy} (${shooterInfo.team}), not opponent`, 'SaveDetectionService');
         return false;
       }
 
-      CONSTANTS.debugLog(`✅ Step 4 passed: ${lastTouchedBy} (${shooterInfo.team}) is opponent of goalie (${goalieInfo.team})`, 'SaveDetectionService');
+      debugLog(`✅ Step 4 passed: ${lastTouchedBy} (${shooterInfo.team}) is opponent of goalie (${goalieInfo.team})`, 'SaveDetectionService');
 
       // 3. Check if puck was on trajectory to score (trajectory prediction)
       const wouldHaveScored = this.predictTrajectoryGoal(puckEntity, goalieInfo.team);
       if (!wouldHaveScored) {
-        CONSTANTS.debugLog(`❌ Save check failed: Puck was not on trajectory to score`, 'SaveDetectionService');
+        debugLog(`❌ Save check failed: Puck was not on trajectory to score`, 'SaveDetectionService');
         return false;
       }
 
-      CONSTANTS.debugLog(`✅ Step 5 passed: Puck was on trajectory to score`, 'SaveDetectionService');
+      debugLog(`✅ Step 5 passed: Puck was on trajectory to score`, 'SaveDetectionService');
 
       // 4. Check if the touch was recent enough (within 10 seconds to catch slow passes)
       const touchHistory = this.getTouchHistory(puckEntity);
-      CONSTANTS.debugLog(`📋 Touch history length: ${touchHistory.length}`, 'SaveDetectionService');
+      debugLog(`📋 Touch history length: ${touchHistory.length}`, 'SaveDetectionService');
       
       if (touchHistory.length > 0) {
         const lastTouch = touchHistory[0];
         const timeSinceTouch = Date.now() - lastTouch.timestamp;
-        CONSTANTS.debugLog(`⏰ Time since last touch: ${(timeSinceTouch/1000).toFixed(1)}s`, 'SaveDetectionService');
+        debugLog(`⏰ Time since last touch: ${(timeSinceTouch/1000).toFixed(1)}s`, 'SaveDetectionService');
         
         if (timeSinceTouch > 10000) { // Increased from 5 to 10 seconds for slow passes
-          CONSTANTS.debugLog(`❌ Save check failed: Last opponent touch was too long ago (${(timeSinceTouch/1000).toFixed(1)}s > 10s)`, 'SaveDetectionService');
+          debugLog(`❌ Save check failed: Last opponent touch was too long ago (${(timeSinceTouch/1000).toFixed(1)}s > 10s)`, 'SaveDetectionService');
           return false;
         }
       }
 
-      CONSTANTS.debugLog(`✅ Step 6 passed: Touch timing is acceptable`, 'SaveDetectionService');
+      debugLog(`✅ Step 6 passed: Touch timing is acceptable`, 'SaveDetectionService');
 
       // All conditions met - this is a save!
-      CONSTANTS.debugLog(`🎉 SAVE DETECTED! Goalie ${goalieId} (${goalieInfo.team}) saved shot from ${lastTouchedBy} (${shooterInfo.team})`, 'SaveDetectionService');
+      debugLog(`🎉 SAVE DETECTED! Goalie ${goalieId} (${goalieInfo.team}) saved shot from ${lastTouchedBy} (${shooterInfo.team})`, 'SaveDetectionService');
       
       // Record the save
       PlayerStatsManager.instance.recordSave(goalieId, lastTouchedBy, shooterInfo.team);
@@ -131,9 +132,9 @@ export class SaveDetectionService {
       // Note: In SaveDetectionService context, this is never an own goal since the save
       // only occurs when an opponent shoots at the goalie's goal
       PlayerStatsManager.instance.recordShot(lastTouchedBy, shooterInfo.team, true, true, goalieId, false).catch(error => {
-        console.error('Error recording shot stat:', error);
+        debugError('Error recording shot stat:', error, 'SaveDetectionService');
       });
-      CONSTANTS.debugLog(`📊 Recorded shot on goal for ${lastTouchedBy} (saved by ${goalieId})`, 'SaveDetectionService');
+      debugLog(`📊 Recorded shot on goal for ${lastTouchedBy} (saved by ${goalieId})`, 'SaveDetectionService');
       
       // Notify the game manager to broadcast the save
       gameManager.saveRecorded(goalieId, lastTouchedBy);
@@ -159,17 +160,17 @@ export class SaveDetectionService {
     // Determine which goal the goalie is defending
     const defendingGoal = goalieTeam === HockeyTeam.RED ? this.GOAL_ZONES.RED : this.GOAL_ZONES.BLUE;
     
-    CONSTANTS.debugLog(`🎯 Checking trajectory for ${goalieTeam} goalie defending ${defendingGoal.name}`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`📍 Puck position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`🏃 Puck velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)})`, 'SaveDetectionService');
+    debugLog(`🎯 Checking trajectory for ${goalieTeam} goalie defending ${defendingGoal.name}`, 'SaveDetectionService');
+    debugLog(`📍 Puck position: (${position.x.toFixed(2)}, ${position.y.toFixed(2)}, ${position.z.toFixed(2)})`, 'SaveDetectionService');
+    debugLog(`🏃 Puck velocity: (${velocity.x.toFixed(2)}, ${velocity.y.toFixed(2)}, ${velocity.z.toFixed(2)})`, 'SaveDetectionService');
 
     // Check if puck has meaningful velocity (moving toward goal)
     const speed = Math.sqrt(velocity.x * velocity.x + velocity.z * velocity.z);
-    CONSTANTS.debugLog(`⚡ Puck speed: ${speed.toFixed(2)}`, 'SaveDetectionService');
+    debugLog(`⚡ Puck speed: ${speed.toFixed(2)}`, 'SaveDetectionService');
     
     // More lenient speed check - passes can be slower than shots
     if (speed < 0.8) { // Reduced from 1.5 to 0.8 to catch slow passes
-      CONSTANTS.debugLog(`❌ Puck speed too low for save: ${speed.toFixed(2)} < 0.8`, 'SaveDetectionService');
+      debugLog(`❌ Puck speed too low for save: ${speed.toFixed(2)} < 0.8`, 'SaveDetectionService');
       return false; 
     }
 
@@ -177,12 +178,12 @@ export class SaveDetectionService {
     const distanceToGoalLine = Math.abs(position.z - defendingGoal.goalLineZ);
     const velocityTowardGoal = goalieTeam === HockeyTeam.RED ? -velocity.z : velocity.z;
     
-    CONSTANTS.debugLog(`📏 Distance to goal line: ${distanceToGoalLine.toFixed(2)}`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`➡️ Velocity toward goal: ${velocityTowardGoal.toFixed(2)}`, 'SaveDetectionService');
+    debugLog(`📏 Distance to goal line: ${distanceToGoalLine.toFixed(2)}`, 'SaveDetectionService');
+    debugLog(`➡️ Velocity toward goal: ${velocityTowardGoal.toFixed(2)}`, 'SaveDetectionService');
     
     // Very lenient check for puck moving toward goal (to catch slow passes)
     if (velocityTowardGoal <= 0.05) { // Even more lenient than before
-      CONSTANTS.debugLog(`❌ Puck not moving toward goal: velocityTowardGoal=${velocityTowardGoal.toFixed(2)} <= 0.05`, 'SaveDetectionService');
+      debugLog(`❌ Puck not moving toward goal: velocityTowardGoal=${velocityTowardGoal.toFixed(2)} <= 0.05`, 'SaveDetectionService');
       return false;
     }
 
@@ -192,22 +193,22 @@ export class SaveDetectionService {
     const predictedX = position.x + (velocity.x * timeToGoalLine);
     const predictedY = position.y + (velocity.y * timeToGoalLine) + (0.5 * -9.81 * timeToGoalLine * timeToGoalLine); // Account for gravity
 
-    CONSTANTS.debugLog(`⏱️ Time to goal line: ${timeToGoalLine.toFixed(2)}s`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`🎯 Predicted impact: X=${predictedX.toFixed(2)}, Y=${predictedY.toFixed(2)}`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`🥅 Goal boundaries: X(${defendingGoal.minX} to ${defendingGoal.maxX}), Y(0.3 to 3.2)`, 'SaveDetectionService');
+    debugLog(`⏱️ Time to goal line: ${timeToGoalLine.toFixed(2)}s`, 'SaveDetectionService');
+    debugLog(`🎯 Predicted impact: X=${predictedX.toFixed(2)}, Y=${predictedY.toFixed(2)}`, 'SaveDetectionService');
+    debugLog(`🥅 Goal boundaries: X(${defendingGoal.minX} to ${defendingGoal.maxX}), Y(0.3 to 3.2)`, 'SaveDetectionService');
 
     // Very generous goal dimensions to catch passes that might drift into goal
     const withinGoalWidth = predictedX >= (defendingGoal.minX - 0.5) && predictedX <= (defendingGoal.maxX + 0.5); // Increased buffer to 0.5m
     const withinGoalHeight = predictedY >= 0.1 && predictedY <= 3.5; // Expanded height range
     const reasonableTime = timeToGoalLine > 0 && timeToGoalLine < 15.0; // Increased from 8 to 15 seconds for slow passes
 
-    CONSTANTS.debugLog(`✅ Width check: ${withinGoalWidth} (predicted: ${predictedX.toFixed(2)})`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`✅ Height check: ${withinGoalHeight} (predicted: ${predictedY.toFixed(2)})`, 'SaveDetectionService');
-    CONSTANTS.debugLog(`✅ Time check: ${reasonableTime} (time: ${timeToGoalLine.toFixed(2)}s)`, 'SaveDetectionService');
+    debugLog(`✅ Width check: ${withinGoalWidth} (predicted: ${predictedX.toFixed(2)})`, 'SaveDetectionService');
+    debugLog(`✅ Height check: ${withinGoalHeight} (predicted: ${predictedY.toFixed(2)})`, 'SaveDetectionService');
+    debugLog(`✅ Time check: ${reasonableTime} (time: ${timeToGoalLine.toFixed(2)}s)`, 'SaveDetectionService');
 
     const wouldScore = withinGoalWidth && withinGoalHeight && reasonableTime;
     
-    CONSTANTS.debugLog(`🏁 Trajectory result: withinWidth=${withinGoalWidth}, withinHeight=${withinGoalHeight}, reasonableTime=${reasonableTime} -> wouldScore=${wouldScore}`, 'SaveDetectionService');
+    debugLog(`🏁 Trajectory result: withinWidth=${withinGoalWidth}, withinHeight=${withinGoalHeight}, reasonableTime=${reasonableTime} -> wouldScore=${wouldScore}`, 'SaveDetectionService');
 
     return wouldScore;
   }

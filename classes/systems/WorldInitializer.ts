@@ -18,6 +18,7 @@ import {
 import type { World } from 'hytopia';
 import worldMap from '../../assets/maps/hockey-zone-ayl.json';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 import { PlayerBarrierService } from '../services/PlayerBarrierService';
 import { AudioManager } from '../managers/AudioManager';
 
@@ -46,7 +47,7 @@ export class WorldInitializer {
   public initialize(world: World): void {
     this.world = world;
     
-    CONSTANTS.debugLog('Starting world initialization...', 'WorldInitializer');
+    debugLog('Starting world initialization...', 'WorldInitializer');
     
     // Configure model registry
     this.configureModelRegistry();
@@ -63,7 +64,7 @@ export class WorldInitializer {
     // Create ice floor entity for smooth puck physics
     this.createIceFloor();
     
-    CONSTANTS.debugLog('World initialization complete', 'WorldInitializer');
+    debugLog('World initialization complete', 'WorldInitializer');
   }
   
   /**
@@ -71,7 +72,7 @@ export class WorldInitializer {
    */
   private configureModelRegistry(): void {
     ModelRegistry.instance.optimize = false;
-    CONSTANTS.debugLog('Model registry configured', 'WorldInitializer');
+    debugLog('Model registry configured', 'WorldInitializer');
   }
   
   /**
@@ -85,7 +86,7 @@ export class WorldInitializer {
     
     try {
       this.world.loadMap(worldMap);
-      CONSTANTS.debugLog('FACE-OFF map loaded successfully', 'WorldInitializer');
+      debugLog('FACE-OFF map loaded successfully', 'WorldInitializer');
     } catch (error) {
       CONSTANTS.debugError('Failed to load map', error, 'WorldInitializer');
       throw new Error('Failed to load game map');
@@ -97,7 +98,7 @@ export class WorldInitializer {
    */
   private createHockeyGoals(): void {
     if (!this.world) {
-      console.error('WorldInitializer: Cannot create goals - world not initialized');
+      debugError('WorldInitializer: Cannot create goals - world not initialized', 'WorldInitializer');
       return;
     }
     
@@ -134,7 +135,7 @@ export class WorldInitializer {
       });
       blueGoalLabelUI.load(this.world);
       
-      CONSTANTS.debugLog('Hockey goals created and positioned', 'WorldInitializer');
+      debugLog('Hockey goals created and positioned', 'WorldInitializer');
     } catch (error) {
       CONSTANTS.debugError('Failed to create hockey goals', error, 'WorldInitializer');
       throw new Error('Failed to create hockey goals');
@@ -152,7 +153,7 @@ export class WorldInitializer {
 
     try {
       PlayerBarrierService.instance.createBarriers(this.world);
-      CONSTANTS.debugLog('Player barriers created successfully', 'WorldInitializer');
+      debugLog('Player barriers created successfully', 'WorldInitializer');
     } catch (error) {
       CONSTANTS.debugError('Failed to create player barriers', error, 'WorldInitializer');
       throw new Error('Failed to create player barriers');
@@ -173,7 +174,7 @@ export class WorldInitializer {
       // Use the ICE_FLOOR_PHYSICS constants for proper positioning above floor blocks
       this.iceFloor.spawn(this.world, CONSTANTS.ICE_FLOOR_PHYSICS.CENTER_POSITION);
       
-      CONSTANTS.debugLog('Ice floor entity created and spawned for smooth puck physics', 'WorldInitializer');
+      debugLog('Ice floor entity created and spawned for smooth puck physics', 'WorldInitializer');
     } catch (error) {
       CONSTANTS.debugError('Failed to create ice floor entity', error, 'WorldInitializer');
       throw new Error('Failed to create ice floor entity');
@@ -328,10 +329,10 @@ export class WorldInitializer {
     });
 
     // Debug logging for goal entity creation  
-    CONSTANTS.debugLog(`Goal entity created with model: ${modelUri}`, 'WorldInitializer');
-    CONSTANTS.debugLog(`Goal collision groups: belongsTo=[BLOCK, ENTITY], collidesWith=[BLOCK, ENTITY]`, 'WorldInitializer');
-    CONSTANTS.debugLog(`Goal crossbar Y offset: ${CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET}`, 'WorldInitializer');
-    CONSTANTS.debugLog(`Goal bounciness: ${CONSTANTS.GOAL_COLLIDERS.BOUNCINESS}`, 'WorldInitializer');
+    debugLog(`Goal entity created with model: ${modelUri}`, 'WorldInitializer');
+    debugLog(`Goal collision groups: belongsTo=[BLOCK, ENTITY], collidesWith=[BLOCK, ENTITY]`, 'WorldInitializer');
+    debugLog(`Goal crossbar Y offset: ${CONSTANTS.GOAL_COLLIDERS.CROSSBAR_Y_OFFSET}`, 'WorldInitializer');
+    debugLog(`Goal bounciness: ${CONSTANTS.GOAL_COLLIDERS.BOUNCINESS}`, 'WorldInitializer');
     
     // Debug logging for netting rotation
     const nettingRotationRadians = goalConstants.NETTING_X_ROTATION;
@@ -341,8 +342,8 @@ export class WorldInitializer {
       z: 0,
       w: Math.cos(nettingRotationRadians / 2)
     };
-    CONSTANTS.debugLog(`${goalType.toUpperCase()} Goal netting rotation: ${nettingRotationRadians} radians (${(nettingRotationRadians * 180 / Math.PI).toFixed(1)} degrees)`, 'WorldInitializer');
-    CONSTANTS.debugLog(`${goalType.toUpperCase()} Goal netting quaternion: ${JSON.stringify(nettingQuaternion)}`, 'WorldInitializer');
+    debugLog(`${goalType.toUpperCase()} Goal netting rotation: ${nettingRotationRadians} radians (${(nettingRotationRadians * 180 / Math.PI).toFixed(1)} degrees)`, 'WorldInitializer');
+    debugLog(`${goalType.toUpperCase()} Goal netting quaternion: ${JSON.stringify(nettingQuaternion)}`, 'WorldInitializer');
     
     return goalEntity;
   }
@@ -389,7 +390,7 @@ export class WorldInitializer {
       (puck as any).customProperties = new Map();
       (puck as any).customProperties.set('touchHistory', []);
       (puck as any).customProperties.set('lastTouchedBy', null);
-      CONSTANTS.debugLog('Puck created with custom properties support', 'WorldInitializer');
+      debugLog('Puck created with custom properties support', 'WorldInitializer');
     } catch (error) {
       CONSTANTS.debugWarn('Could not initialize puck custom properties: ' + error, 'WorldInitializer');
     }
@@ -405,7 +406,7 @@ export class WorldInitializer {
     const { IceFloorEntity } = require('../entities/IceFloorEntity');
     const iceFloor = new IceFloorEntity();
     
-    CONSTANTS.debugLog('Ice floor entity created for smooth puck physics', 'WorldInitializer');
+    debugLog('Ice floor entity created for smooth puck physics', 'WorldInitializer');
     return iceFloor;
   }
   
@@ -442,11 +443,11 @@ export class WorldInitializer {
   ): void {
     // Enhanced debugging for collision detection
     const colliderInfo = colliderName ? ` [${colliderName}]` : '';
-    CONSTANTS.debugLog(`Goal collision detected${colliderInfo}: started=${started}, other=${other instanceof Entity ? 'Entity' : 'BlockType'}`, 'WorldInitializer');
+    debugLog(`Goal collision detected${colliderInfo}: started=${started}, other=${other instanceof Entity ? 'Entity' : 'BlockType'}`, 'WorldInitializer');
     
     // Only handle collision start events with puck entities
     if (started && other instanceof Entity && other.modelUri && other.modelUri.includes('puck')) {
-      CONSTANTS.debugLog(`Puck collision confirmed with modelUri: ${other.modelUri}`, 'WorldInitializer');
+      debugLog(`Puck collision confirmed with modelUri: ${other.modelUri}`, 'WorldInitializer');
       
       // Check if the puck is currently being controlled by a player
       // If so, don't play the hit-post sound (player is just skating into the posts)
@@ -454,7 +455,7 @@ export class WorldInitializer {
       const isControlled = customProperties && customProperties.get('isControlled');
       
       if (isControlled) {
-        CONSTANTS.debugLog('Puck hit goal post but is controlled by player - skipping sound', 'WorldInitializer');
+        debugLog('Puck hit goal post but is controlled by player - skipping sound', 'WorldInitializer');
         return;
       }
       
@@ -462,14 +463,14 @@ export class WorldInitializer {
       const puckVelocity = other.linearVelocity;
       if (puckVelocity) {
         const speed = Math.sqrt(puckVelocity.x * puckVelocity.x + puckVelocity.z * puckVelocity.z);
-        CONSTANTS.debugLog(`Puck speed: ${speed.toFixed(2)} (threshold: 5.0)`, 'WorldInitializer');
+        debugLog(`Puck speed: ${speed.toFixed(2)} (threshold: 5.0)`, 'WorldInitializer');
         
         // Only play sound if puck is moving with sufficient speed (to avoid tiny bumps)
         if (speed > 5.0) {
           // Check cooldown to prevent sound spam
           const currentTime = Date.now();
           const timeSinceLastSound = currentTime - lastHitPostSoundTime;
-          CONSTANTS.debugLog(`Time since last sound: ${timeSinceLastSound}ms (cooldown: ${CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN}ms)`, 'WorldInitializer');
+          debugLog(`Time since last sound: ${timeSinceLastSound}ms (cooldown: ${CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN}ms)`, 'WorldInitializer');
           
           if (timeSinceLastSound > CONSTANTS.PUCK_SOUND.HIT_POST_COOLDOWN) {
             // Play hit-post sound effect with volume based on speed using pooled audio
@@ -483,26 +484,26 @@ export class WorldInitializer {
             
             if (success) {
               updateLastSoundTime(currentTime);
-              CONSTANTS.debugLog(`✅ Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`, 'WorldInitializer');
+              debugLog(`✅ Puck hit goal post/crossbar at speed ${speed.toFixed(2)}, volume ${volume.toFixed(2)}`, 'WorldInitializer');
             } else {
-              CONSTANTS.debugLog(`❌ Failed to play hit-post sound`, 'WorldInitializer');
+              debugLog(`❌ Failed to play hit-post sound`, 'WorldInitializer');
             }
           } else {
-            CONSTANTS.debugLog(`⏰ Hit-post sound on cooldown`, 'WorldInitializer');
+            debugLog(`⏰ Hit-post sound on cooldown`, 'WorldInitializer');
           }
         } else {
-          CONSTANTS.debugLog(`🐌 Puck speed too low for sound (${speed.toFixed(2)} < 5.0)`, 'WorldInitializer');
+          debugLog(`🐌 Puck speed too low for sound (${speed.toFixed(2)} < 5.0)`, 'WorldInitializer');
         }
       } else {
-        CONSTANTS.debugLog(`❌ No puck velocity data available`, 'WorldInitializer');
+        debugLog(`❌ No puck velocity data available`, 'WorldInitializer');
       }
     } else {
       if (!started) {
-        CONSTANTS.debugLog(`Collision ended (started=false)`, 'WorldInitializer');
+        debugLog(`Collision ended (started=false)`, 'WorldInitializer');
       } else if (!(other instanceof Entity)) {
-        CONSTANTS.debugLog(`Not an entity collision`, 'WorldInitializer');
+        debugLog(`Not an entity collision`, 'WorldInitializer');
       } else if (!other.modelUri || !other.modelUri.includes('puck')) {
-        CONSTANTS.debugLog(`Not a puck entity (modelUri: ${other.modelUri})`, 'WorldInitializer');
+        debugLog(`Not a puck entity (modelUri: ${other.modelUri})`, 'WorldInitializer');
       }
     }
   }
@@ -677,7 +678,7 @@ export class WorldInitializer {
       'blue'
     );
 
-    CONSTANTS.debugLog('Goal collider debug entities created', 'WorldInitializer');
+    debugLog('Goal collider debug entities created', 'WorldInitializer');
   }
 
   /**
@@ -716,10 +717,10 @@ export class WorldInitializer {
     // Apply rotation if provided (for netting visualization)
     if (rotation) {
       debugEntity.spawn(this.world, worldPosition, rotation);
-      CONSTANTS.debugLog(`Created rotated debug entity: ${name} at position ${JSON.stringify(worldPosition)} with rotation ${JSON.stringify(rotation)}`, 'WorldInitializer');
+      debugLog(`Created rotated debug entity: ${name} at position ${JSON.stringify(worldPosition)} with rotation ${JSON.stringify(rotation)}`, 'WorldInitializer');
     } else {
       debugEntity.spawn(this.world, worldPosition);
-      CONSTANTS.debugLog(`Created debug entity: ${name} at position ${JSON.stringify(worldPosition)}`, 'WorldInitializer');
+      debugLog(`Created debug entity: ${name} at position ${JSON.stringify(worldPosition)}`, 'WorldInitializer');
     }
   }
 } 

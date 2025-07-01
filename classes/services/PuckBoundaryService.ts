@@ -4,6 +4,7 @@ import { PlayerSpawnManager } from '../managers/PlayerSpawnManager';
 import { AudioManager } from '../managers/AudioManager';
 import { HockeyGameState } from '../utils/types';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 
 /**
  * Service that monitors puck position and automatically triggers respawn
@@ -46,7 +47,7 @@ export class PuckBoundaryService {
    */
   public initialize(world: World): void {
     this._world = world;
-    CONSTANTS.debugLog('PuckBoundaryService initialized', 'PuckBoundaryService');
+    debugLog('PuckBoundaryService initialized', 'PuckBoundaryService');
   }
 
   /**
@@ -68,7 +69,7 @@ export class PuckBoundaryService {
     // Add tick listener to monitor puck position
     puckEntity.on(EntityEvent.TICK, this._onPuckTick);
 
-    CONSTANTS.debugLog('Started monitoring puck for boundary violations', 'PuckBoundaryService');
+    debugLog('Started monitoring puck for boundary violations', 'PuckBoundaryService');
   }
 
   /**
@@ -78,7 +79,7 @@ export class PuckBoundaryService {
     if (this._puckEntity && this._isMonitoring) {
       // Remove the tick listener
       this._puckEntity.off(EntityEvent.TICK, this._onPuckTick);
-      CONSTANTS.debugLog('Stopped monitoring puck for boundary violations', 'PuckBoundaryService');
+      debugLog('Stopped monitoring puck for boundary violations', 'PuckBoundaryService');
     }
 
     this._puckEntity = null;
@@ -139,18 +140,18 @@ export class PuckBoundaryService {
     // Check if we're already in a reset state to prevent multiple triggers
     const gameManager = HockeyGameManager.instance;
     if (gameManager.state === HockeyGameState.GOAL_SCORED || gameManager.state === HockeyGameState.MATCH_START || gameManager.state === HockeyGameState.PERIOD_END) {
-      CONSTANTS.debugLog('Boundary violation detected but already in reset state, ignoring', 'PuckBoundaryService');
+      debugLog('Boundary violation detected but already in reset state, ignoring', 'PuckBoundaryService');
       return;
     }
 
-    CONSTANTS.debugLog(
+    debugLog(
       `Puck boundary violation detected at: ${JSON.stringify(outOfBoundsPosition)}. Triggering automatic respawn...`,
       'PuckBoundaryService'
     );
 
     // Log the last valid position for debugging
     if (this._lastValidPosition) {
-      CONSTANTS.debugLog(
+      debugLog(
         `Last valid puck position was: ${JSON.stringify(this._lastValidPosition)}`,
         'PuckBoundaryService'
       );
@@ -189,11 +190,11 @@ export class PuckBoundaryService {
     const gameManager = HockeyGameManager.instance;
     const playerSpawnManager = PlayerSpawnManager.instance;
 
-    CONSTANTS.debugLog('Starting boundary reset sequence (similar to goal reset)...', 'PuckBoundaryService');
+    debugLog('Starting boundary reset sequence (similar to goal reset)...', 'PuckBoundaryService');
 
     // Step 1: Set game state to lock movement (same as goal reset)
     gameManager['_state'] = HockeyGameState.GOAL_SCORED; // Use bracket notation to access private field
-    CONSTANTS.debugLog('Set game state to GOAL_SCORED to lock player movement during boundary reset', 'PuckBoundaryService');
+    debugLog('Set game state to GOAL_SCORED to lock player movement during boundary reset', 'PuckBoundaryService');
 
     // Step 2: Pause game timer and UI timer (same as goal reset)
     try {
@@ -212,14 +213,14 @@ export class PuckBoundaryService {
       gameManager['_pausedPeriodTimeMs'] = currentPeriodTime * 1000; // This is the exact time we'll resume with
       gameManager['_offsidePauseStartTime'] = Date.now();
       
-      CONSTANTS.debugLog(`Boundary reset - captured paused timer value: ${currentPeriodTime} seconds`, 'PuckBoundaryService');
-      CONSTANTS.debugLog(`Backend period timer paused for boundary reset - remaining time: ${currentPeriodTime * 1000}ms`, 'PuckBoundaryService');
+      debugLog(`Boundary reset - captured paused timer value: ${currentPeriodTime} seconds`, 'PuckBoundaryService');
+      debugLog(`Backend period timer paused for boundary reset - remaining time: ${currentPeriodTime * 1000}ms`, 'PuckBoundaryService');
 
       // CRITICAL: Send timer-pause event to UI (stops visual countdown at the exact captured time)
       this._sendTimerPauseToAllPlayers(gameManager, currentPeriodTime);
       
     } catch (error) {
-      console.warn('Could not pause game timer:', error);
+      debugWarn('Could not pause game timer:', error, 'PuckBoundaryService');
     }
 
     // Step 3: Get current puck entity and despawn it
@@ -228,9 +229,9 @@ export class PuckBoundaryService {
     if (currentPuck && currentPuck.isSpawned) {
       try {
         currentPuck.despawn();
-        CONSTANTS.debugLog('Despawned out-of-bounds puck', 'PuckBoundaryService');
+        debugLog('Despawned out-of-bounds puck', 'PuckBoundaryService');
       } catch (error) {
-        console.warn('Error despawning puck:', error);
+        debugWarn('Error despawning puck:', error, 'PuckBoundaryService');
       }
     }
 
@@ -248,12 +249,12 @@ export class PuckBoundaryService {
       try {
         const { PuckTrailManager } = require('../managers/PuckTrailManager');
         PuckTrailManager.instance.attachTrailToPuck(newPuck);
-        CONSTANTS.debugLog('Attached trail effect to new boundary-reset puck', 'PuckBoundaryService');
+        debugLog('Attached trail effect to new boundary-reset puck', 'PuckBoundaryService');
       } catch (error) {
-        console.warn('Could not attach trail to new puck:', error);
+        debugWarn('Could not attach trail to new puck:', error, 'PuckBoundaryService');
       }
       
-      CONSTANTS.debugLog('Spawned new puck at center ice with trail effect', 'PuckBoundaryService');
+      debugLog('Spawned new puck at center ice with trail effect', 'PuckBoundaryService');
     }
 
     // Step 6: Reset all players to spawn positions (same as goal reset)
@@ -326,7 +327,7 @@ export class PuckBoundaryService {
       const success = playerSpawnManager.resetPuckToCenterIce(currentPuck);
       
       if (success) {
-        CONSTANTS.debugLog('Puck reset to center ice due to boundary violation (simple reset)', 'PuckBoundaryService');
+        debugLog('Puck reset to center ice due to boundary violation (simple reset)', 'PuckBoundaryService');
         
         // Resume monitoring after reset with fresh puck reference
         setTimeout(() => {
@@ -337,7 +338,7 @@ export class PuckBoundaryService {
         }, 1000);
       }
     } else {
-      CONSTANTS.debugLog('No puck found for simple reset', 'PuckBoundaryService');
+      debugLog('No puck found for simple reset', 'PuckBoundaryService');
     }
   }
 
@@ -393,15 +394,15 @@ export class PuckBoundaryService {
             setTimeout(() => {
               // Now resume game state (UI already has exact timing)
               gameManager['_state'] = HockeyGameState.IN_PERIOD;
-              CONSTANTS.debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset', 'PuckBoundaryService');
+              debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset', 'PuckBoundaryService');
               
               if (exactRemainingTime > 0) {
                 // Restart period timer with the EXACT remaining time we captured
                 gameManager['_periodTimer'] = setTimeout(() => gameManager.endPeriod(), exactRemainingTime);
-                CONSTANTS.debugLog(`Backend period timer restarted after boundary reset - remaining time: ${exactRemainingTime}ms (paused for ${totalPauseDuration}ms)`, 'PuckBoundaryService');
+                debugLog(`Backend period timer restarted after boundary reset - remaining time: ${exactRemainingTime}ms (paused for ${totalPauseDuration}ms)`, 'PuckBoundaryService');
               } else {
                 // Time is up, end period immediately
-                CONSTANTS.debugLog('Period time expired during boundary reset - ending period now', 'PuckBoundaryService');
+                debugLog('Period time expired during boundary reset - ending period now', 'PuckBoundaryService');
                 setTimeout(() => gameManager.endPeriod(), 100);
               }
               
@@ -411,16 +412,16 @@ export class PuckBoundaryService {
             }, 50); // Small delay to prevent race condition
             
           } else {
-            CONSTANTS.debugLog('No paused period timer found - period timer may not have been running', 'PuckBoundaryService');
+            debugLog('No paused period timer found - period timer may not have been running', 'PuckBoundaryService');
             // Still resume game state even if no timer was running
             gameManager['_state'] = HockeyGameState.IN_PERIOD;
-            CONSTANTS.debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset (no timer)', 'PuckBoundaryService');
+            debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset (no timer)', 'PuckBoundaryService');
           }
         } catch (error) {
-          console.warn('Could not restart game timer:', error);
+          debugWarn('Could not restart game timer:', error, 'PuckBoundaryService');
           // Fallback: still resume game state
           gameManager['_state'] = HockeyGameState.IN_PERIOD;
-          CONSTANTS.debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset (error fallback)', 'PuckBoundaryService');
+          debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset (error fallback)', 'PuckBoundaryService');
         }
         
         // Clear paused timer value (play is resuming)
@@ -433,10 +434,10 @@ export class PuckBoundaryService {
           const freshPuckEntity = ChatCommandManager.instance.getPuck();
           
           if (freshPuckEntity && freshPuckEntity.isSpawned) {
-            CONSTANTS.debugLog('Resuming boundary monitoring with fresh puck reference', 'PuckBoundaryService');
+            debugLog('Resuming boundary monitoring with fresh puck reference', 'PuckBoundaryService');
             this.startMonitoring(freshPuckEntity);
           } else {
-            CONSTANTS.debugLog('Could not resume monitoring - fresh puck not found or not spawned', 'PuckBoundaryService');
+            debugLog('Could not resume monitoring - fresh puck not found or not spawned', 'PuckBoundaryService');
           }
         }, 1000);
       }
@@ -471,7 +472,7 @@ export class PuckBoundaryService {
             subtitle: 'Resuming Play'
           });
         } catch (error) {
-          console.error('Error sending countdown to player:', error);
+          debugError('Error sending countdown to player:', error, 'PuckBoundaryService');
         }
       }
     });
@@ -509,7 +510,7 @@ export class PuckBoundaryService {
             type: 'countdown-go'
           });
         } catch (error) {
-          console.error('Error sending GO message to player:', error);
+          debugError('Error sending GO message to player:', error, 'PuckBoundaryService');
         }
       }
     });
@@ -530,7 +531,7 @@ export class PuckBoundaryService {
               type: 'countdown-end'
             });
           } catch (error) {
-            console.error('Error ending countdown for player:', error);
+            debugError('Error ending countdown for player:', error, 'PuckBoundaryService');
           }
         }
       });
@@ -564,12 +565,12 @@ export class PuckBoundaryService {
             pausedTime: pausedTime
           });
         } catch (error) {
-          console.error('Error sending timer-pause to player:', error);
+          debugError('Error sending timer-pause to player:', error, 'PuckBoundaryService');
         }
       }
     });
 
-    CONSTANTS.debugLog(`Sent timer-pause event to ${allPlayerIds.length} players with pausedTime: ${pausedTime}`, 'PuckBoundaryService');
+    debugLog(`Sent timer-pause event to ${allPlayerIds.length} players with pausedTime: ${pausedTime}`, 'PuckBoundaryService');
   }
 
   /**
@@ -599,12 +600,12 @@ export class PuckBoundaryService {
             pauseDurationMs: pauseDurationMs
           });
         } catch (error) {
-          console.error('Error sending period-time-adjusted to player:', error);
+          debugError('Error sending period-time-adjusted to player:', error, 'PuckBoundaryService');
         }
       }
     });
 
-    CONSTANTS.debugLog(`Sent period-time-adjusted event to ${allPlayerIds.length} players with pauseDurationMs: ${pauseDurationMs}`, 'PuckBoundaryService');
+    debugLog(`Sent period-time-adjusted event to ${allPlayerIds.length} players with pauseDurationMs: ${pauseDurationMs}`, 'PuckBoundaryService');
   }
 
   /**
@@ -634,12 +635,12 @@ export class PuckBoundaryService {
             exactTime: exactResumeTime
           });
         } catch (error) {
-          console.error('Error sending timer-resume to player:', error);
+          debugError('Error sending timer-resume to player:', error, 'PuckBoundaryService');
         }
       }
     });
 
-    CONSTANTS.debugLog(`Sent timer-resume event to ${allPlayerIds.length} players with exactTime: ${exactResumeTime} seconds`, 'PuckBoundaryService');
+    debugLog(`Sent timer-resume event to ${allPlayerIds.length} players with exactTime: ${exactResumeTime} seconds`, 'PuckBoundaryService');
   }
 
   /**
@@ -647,7 +648,7 @@ export class PuckBoundaryService {
    */
   public updateBoundaryLimits(limits: Partial<typeof this.BOUNDARY_LIMITS>): void {
     Object.assign(this.BOUNDARY_LIMITS, limits);
-    CONSTANTS.debugLog(
+    debugLog(
       `Updated boundary limits: ${JSON.stringify(this.BOUNDARY_LIMITS)}`,
       'PuckBoundaryService'
     );

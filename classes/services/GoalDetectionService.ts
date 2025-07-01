@@ -4,6 +4,7 @@ import { HockeyGameManager } from '../managers/HockeyGameManager';
 import { IceSkatingController } from '../controllers/IceSkatingController';
 import { OffsideDetectionService } from './OffsideDetectionService';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 
 /**
  * Goal zone configuration for coordinate-based detection
@@ -66,7 +67,7 @@ export class GoalDetectionService {
     this._isActive = true;
     this._previousPuckPosition = null;
     this._lastGoalTime = 0;
-    console.log('[GoalDetectionService] Started monitoring for goals');
+    debugLog('Started monitoring for goals', 'GoalDetectionService');
   }
 
   /**
@@ -75,7 +76,7 @@ export class GoalDetectionService {
   public stopMonitoring(): void {
     this._isActive = false;
     this._previousPuckPosition = null;
-    console.log('[GoalDetectionService] Stopped monitoring for goals');
+    debugLog('Stopped monitoring for goals', 'GoalDetectionService');
   }
 
   /**
@@ -110,7 +111,7 @@ export class GoalDetectionService {
       } else {
         // Block period expired, clear the flag
         this._offsideJustCalled = false;
-        console.log(`[GoalDetectionService] Offside block period expired after ${timeSinceOffside}ms - goal detection re-enabled`);
+        debugLog(`Offside block period expired after ${timeSinceOffside}ms - goal detection re-enabled`, 'GoalDetectionService');
       }
     }
 
@@ -133,7 +134,7 @@ export class GoalDetectionService {
     
     // If puck moved more than 10 blocks in one frame, it's likely a teleport/reset
     if (distance > 10) {
-      console.log(`[GoalDetectionService] Ignoring large movement (${distance.toFixed(2)} blocks) - likely teleport/reset`);
+      debugLog(`Ignoring large movement (${distance.toFixed(2)} blocks) - likely teleport/reset`, 'GoalDetectionService');
       return null;
     }
 
@@ -141,7 +142,7 @@ export class GoalDetectionService {
     // Don't check delayed tracking here - let OffsideDetectionService handle proximity during normal gameplay
     const hasRecentOffside = this.checkForRecentOffsideCall();
     if (hasRecentOffside) {
-      console.log(`[GoalDetectionService] GOAL BLOCKED - Recent offside call prevents goal`);
+      debugLog(`GOAL BLOCKED - Recent offside call prevents goal`, 'GoalDetectionService');
       return null; // Block goal detection if offside was recently called
     }
 
@@ -150,9 +151,9 @@ export class GoalDetectionService {
       const goalResult = this.checkGoalLineCrossing(previousPosition, currentPosition, zone, puckEntity);
       if (goalResult) {
         this._lastGoalTime = currentTime;
-        console.log(`[GoalDetectionService] GOAL DETECTED! ${goalResult.scoringTeam} team scored in ${zone.name}${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`);
-        console.log(`[GoalDetectionService] Puck crossed from Z=${previousPosition.z.toFixed(2)} to Z=${currentPosition.z.toFixed(2)}`);
-        console.log(`[GoalDetectionService] Puck X position: ${currentPosition.x.toFixed(2)} (goal width: ${zone.minX} to ${zone.maxX})`);
+        debugLog(`GOAL DETECTED! ${goalResult.scoringTeam} team scored in ${zone.name}${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`, 'GoalDetectionService');
+        debugLog(`Puck crossed from Z=${previousPosition.z.toFixed(2)} to Z=${currentPosition.z.toFixed(2)}`, 'GoalDetectionService');
+        debugLog(`Puck X position: ${currentPosition.x.toFixed(2)} (goal width: ${zone.minX} to ${zone.maxX})`, 'GoalDetectionService');
         return goalResult;
       }
     }
@@ -193,14 +194,14 @@ export class GoalDetectionService {
       // This preserves the delayed offside proximity system during normal gameplay
       const hasDelayedOffsideViolation = this.checkForActiveOffsideViolation(puckEntity);
       if (hasDelayedOffsideViolation) {
-        console.log(`[GoalDetectionService] GOAL BLOCKED - Delayed offside violation detected during goal attempt`);
+        debugLog(`GOAL BLOCKED - Delayed offside violation detected during goal attempt`, 'GoalDetectionService');
         return null; // Block goal completely if delayed offside violation exists
       }
       
       // Check if puck is currently being controlled by a player (carried into goal)
       const isControlledByPlayer = this.isPuckControlledByPlayer(puckEntity);
       if (isControlledByPlayer) {
-        console.log(`[GoalDetectionService] Goal DENIED - puck is being carried by player (not a valid shot)`);
+        debugLog(`Goal DENIED - puck is being carried by player (not a valid shot)`, 'GoalDetectionService');
         return null; // Don't allow goals when puck is being carried into the goal
       }
       
@@ -265,7 +266,7 @@ export class GoalDetectionService {
     this._lastGoalTime = 0;
     this._offsideJustCalled = false;
     this._offsideCallTime = 0;
-    console.log('[GoalDetectionService] Service state reset');
+    debugLog('Service state reset', 'GoalDetectionService');
   }
 
   /**
@@ -277,10 +278,10 @@ export class GoalDetectionService {
       const globalController = IceSkatingController._globalPuckController;
       const isControlled = globalController !== null && globalController !== undefined;
       
-      console.log(`[GoalDetectionService] isPuckControlledByPlayer: ${isControlled} (global controller: ${globalController ? 'exists' : 'none'})`);
+      debugLog(`isPuckControlledByPlayer: ${isControlled} (global controller: ${globalController ? 'exists' : 'none'})`, 'GoalDetectionService');
       return isControlled;
     } catch (error) {
-      console.warn('[GoalDetectionService] Could not check puck controller:', error);
+      debugWarn('Could not check puck controller:', 'GoalDetectionService');
       return false; // If we can't check, assume it's not controlled
     }
   }
@@ -292,10 +293,10 @@ export class GoalDetectionService {
     try {
       // Check if puck has custom property for last touched player
       const lastTouched = (puckEntity as any).customProperties?.get('lastTouchedBy') as string | undefined;
-      console.log(`[GoalDetectionService] getLastPlayerToTouchPuck: ${lastTouched}`);
+      debugLog(`getLastPlayerToTouchPuck: ${lastTouched}`, 'GoalDetectionService');
       return lastTouched;
     } catch (error) {
-      console.warn('[GoalDetectionService] Could not get puck custom property:', error);
+      debugWarn('Could not get puck custom property:', 'GoalDetectionService');
       return undefined;
     }
   }
@@ -305,7 +306,7 @@ export class GoalDetectionService {
    */
   private isOwnGoal(lastTouchedPlayerId: string | undefined, scoringTeam: HockeyTeam): boolean {
     if (!lastTouchedPlayerId) {
-      console.log(`[GoalDetectionService] No last touched player - not an own goal`);
+      debugLog(`No last touched player - not an own goal`, 'GoalDetectionService');
       return false; // Can't determine own goal without knowing who touched it
     }
 
@@ -314,14 +315,14 @@ export class GoalDetectionService {
     const playerTeamInfo = gameManager.getTeamAndPosition(lastTouchedPlayerId);
     
     if (!playerTeamInfo) {
-      console.log(`[GoalDetectionService] Player ${lastTouchedPlayerId} not found in teams - not an own goal`);
+      debugLog(`Player ${lastTouchedPlayerId} not found in teams - not an own goal`, 'GoalDetectionService');
       return false; // Player not found in teams
     }
 
     // It's an own goal if the player who last touched the puck is on the OPPOSITE team from the one scoring
     // (i.e., they scored against their own team)
     const isOwnGoal = playerTeamInfo.team !== scoringTeam;
-    console.log(`[GoalDetectionService] Own goal check: player ${lastTouchedPlayerId} (${playerTeamInfo.team}) vs scoring team (${scoringTeam}) = ${isOwnGoal ? 'OWN GOAL' : 'NORMAL GOAL'}`);
+    debugLog(`Own goal check: player ${lastTouchedPlayerId} (${playerTeamInfo.team}) vs scoring team (${scoringTeam}) = ${isOwnGoal ? 'OWN GOAL' : 'NORMAL GOAL'}`, 'GoalDetectionService');
     return isOwnGoal;
   }
 
@@ -335,7 +336,7 @@ export class GoalDetectionService {
     const gameManager = HockeyGameManager.instance;
     const timeSinceLastOffside = Date.now() - gameManager['_lastOffsideCallTime'];
     if (timeSinceLastOffside < 3000) { // 3 seconds
-      console.log(`[GoalDetectionService] 🚫 GOAL BLOCKED - Offside was recently called ${timeSinceLastOffside}ms ago`);
+      debugLog(`🚫 GOAL BLOCKED - Offside was recently called ${timeSinceLastOffside}ms ago`, 'GoalDetectionService');
       
       // Set our own blocking flag to prevent dual overlays
       this._offsideJustCalled = true;
@@ -363,15 +364,15 @@ export class GoalDetectionService {
       const delayedViolation = offsideDetectionService.checkForDelayedOffsideViolation(currentPosition);
       
       if (delayedViolation) {
-        console.log(`[GoalDetectionService] 🚨 DELAYED OFFSIDE VIOLATION: ${delayedViolation.violatingTeam} team, ${delayedViolation.violatingPlayerIds.length} players involved`);
-        console.log(`[GoalDetectionService] Players: ${delayedViolation.violatingPlayerIds.join(', ')}`);
-        console.log(`[GoalDetectionService] BLOCKING GOAL and triggering offside immediately`);
+        debugLog(`🚨 DELAYED OFFSIDE VIOLATION: ${delayedViolation.violatingTeam} team, ${delayedViolation.violatingPlayerIds.length} players involved`, 'GoalDetectionService');
+        debugLog(`Players: ${delayedViolation.violatingPlayerIds.join(', ')}`, 'GoalDetectionService');
+        debugLog(`BLOCKING GOAL and triggering offside immediately`, 'GoalDetectionService');
         
         // CRITICAL: Set flag to prevent goal detection for the next few seconds
         // This prevents dual overlays if goal detection is called again before offside overlay completes
         this._offsideJustCalled = true;
         this._offsideCallTime = Date.now();
-        console.log(`[GoalDetectionService] 🚫 GOAL DETECTION BLOCKED for ${this._offsideBlockDurationMs}ms to prevent dual overlays`);
+        debugLog(`🚫 GOAL DETECTION BLOCKED for ${this._offsideBlockDurationMs}ms to prevent dual overlays`, 'GoalDetectionService');
         
         // CRITICAL: Clear the delayed tracking state AFTER we've used it to prevent repeated calls
         // This must happen before calling offsideCalled to prevent infinite loops
@@ -386,11 +387,11 @@ export class GoalDetectionService {
       
       // Only log occasionally to reduce spam
       if (Math.random() < 0.01) { // 1% chance to log
-        console.log(`[GoalDetectionService] ✅ No delayed offside violations found - goal can proceed`);
+        debugLog(`✅ No delayed offside violations found - goal can proceed`, 'GoalDetectionService');
       }
       return false;
     } catch (error) {
-      console.warn('[GoalDetectionService] Error checking for delayed offside violation:', error);
+      debugWarn('Error checking for delayed offside violation:', 'GoalDetectionService');
       return false; // If we can't check, don't block the goal
     }
   }
@@ -404,17 +405,17 @@ export class GoalDetectionService {
     try {
       const customProps = (puckEntity as any).customProperties;
       if (!customProps || !scorerId) {
-        console.log(`[GoalDetectionService] getAssistInfo early return: customProps=${!!customProps}, scorerId=${scorerId}`);
+        debugLog(`getAssistInfo early return: customProps=${!!customProps}, scorerId=${scorerId}`, 'GoalDetectionService');
         return {};
       }
 
       const touchHistory = customProps.get('touchHistory') || [];
-      console.log(`[GoalDetectionService] Touch history for assists: ${JSON.stringify(touchHistory)}`);
-      console.log(`[GoalDetectionService] Scorer: ${scorerId}, Team: ${scoringTeam}, OwnGoal: ${isOwnGoal}`);
+      debugLog(`Touch history for assists: ${JSON.stringify(touchHistory)}`, 'GoalDetectionService');
+      debugLog(`Scorer: ${scorerId}, Team: ${scoringTeam}, OwnGoal: ${isOwnGoal}`, 'GoalDetectionService');
 
       // For own goals, no assists are awarded
       if (isOwnGoal) {
-        console.log(`[GoalDetectionService] Own goal - no assists awarded`);
+        debugLog(`Own goal - no assists awarded`, 'GoalDetectionService');
         return {};
       }
 
@@ -422,11 +423,11 @@ export class GoalDetectionService {
       const scorerTeamInfo = gameManager.getTeamAndPosition(scorerId);
       
       if (!scorerTeamInfo) {
-        console.log(`[GoalDetectionService] Scorer ${scorerId} not found in teams - no assists`);
+        debugLog(`Scorer ${scorerId} not found in teams - no assists`, 'GoalDetectionService');
         return {};
       }
 
-      console.log(`[GoalDetectionService] Scorer team info: ${JSON.stringify(scorerTeamInfo)}`);
+      debugLog(`Scorer team info: ${JSON.stringify(scorerTeamInfo)}`, 'GoalDetectionService');
 
       const assists: string[] = [];
       const currentTime = Date.now();
@@ -437,8 +438,8 @@ export class GoalDetectionService {
         return timeDiff < 45000; // 45 seconds - much more generous window for hockey assists
       });
       
-      console.log(`[GoalDetectionService] Recent touches (last 45s): ${JSON.stringify(recentTouches.map((t: any) => `${t.playerId}@${new Date(t.timestamp).toLocaleTimeString()}`))}`);
-      console.log(`[GoalDetectionService] Processing ${recentTouches.length} recent touches for assists...`);
+      debugLog(`Recent touches (last 45s): ${JSON.stringify(recentTouches.map((t: any) => `${t.playerId}@${new Date(t.timestamp).toLocaleTimeString()}`))}`, 'GoalDetectionService');
+      debugLog(`Processing ${recentTouches.length} recent touches for assists...`, 'GoalDetectionService');
       
       // FIXED: Allow assists even if there's only 1 recent touch (the scorer)
       // Look through all recent touches to find potential assists
@@ -448,43 +449,43 @@ export class GoalDetectionService {
         const touchPlayerTeamInfo = gameManager.getTeamAndPosition(touchPlayerId);
         const timeSinceTouch = currentTime - touch.timestamp;
         
-        console.log(`[GoalDetectionService] Touch ${i}: ${touchPlayerId}, ${timeSinceTouch}ms ago`);
+        debugLog(`Touch ${i}: ${touchPlayerId}, ${timeSinceTouch}ms ago`, 'GoalDetectionService');
         
         // Skip if this is the scorer themselves
         if (touchPlayerId === scorerId) {
-          console.log(`[GoalDetectionService] Skipping touch ${i}: is scorer`);
+          debugLog(`Skipping touch ${i}: is scorer`, 'GoalDetectionService');
           continue;
         }
         
         // Skip if player is not on the same team as scorer
         if (!touchPlayerTeamInfo || touchPlayerTeamInfo.team !== scorerTeamInfo.team) {
-          console.log(`[GoalDetectionService] Skipping touch ${i}: wrong team (${touchPlayerTeamInfo?.team} vs ${scorerTeamInfo.team})`);
+          debugLog(`Skipping touch ${i}: wrong team (${touchPlayerTeamInfo?.team} vs ${scorerTeamInfo.team})`, 'GoalDetectionService');
           continue;
         }
         
         // Skip if player is already in assists list
         if (assists.includes(touchPlayerId)) {
-          console.log(`[GoalDetectionService] Skipping touch ${i}: already in assists list`);
+          debugLog(`Skipping touch ${i}: already in assists list`, 'GoalDetectionService');
           continue;
         }
         
         // Check timing - primary assist gets 30 seconds, secondary gets 45 seconds (very generous timing for hockey)
         const maxTime = assists.length === 0 ? 30000 : 45000;
         if (timeSinceTouch > maxTime) {
-          console.log(`[GoalDetectionService] Skipping touch ${i}: too old (${timeSinceTouch}ms > ${maxTime}ms)`);
+          debugLog(`Skipping touch ${i}: too old (${timeSinceTouch}ms > ${maxTime}ms)`, 'GoalDetectionService');
           continue;
         }
         
         // Award the assist
         assists.push(touchPlayerId);
         const assistType = assists.length === 1 ? 'Primary' : 'Secondary';
-        console.log(`[GoalDetectionService] ✅ ${assistType} assist awarded to ${touchPlayerId} (${touchPlayerTeamInfo.team} team, ${(timeSinceTouch/1000).toFixed(1)}s ago)`);
+        debugLog(`✅ ${assistType} assist awarded to ${touchPlayerId} (${touchPlayerTeamInfo.team} team, ${(timeSinceTouch/1000).toFixed(1)}s ago)`, 'GoalDetectionService');
       }
       
       if (assists.length === 0) {
-        console.log(`[GoalDetectionService] ❌ No assists awarded - no eligible recent touches from teammates`);
+        debugLog(`❌ No assists awarded - no eligible recent touches from teammates`, 'GoalDetectionService');
       } else {
-        console.log(`[GoalDetectionService] ✅ Total assists awarded: ${assists.length} (Primary: ${assists[0] || 'None'}, Secondary: ${assists[1] || 'None'})`);
+        debugLog(`✅ Total assists awarded: ${assists.length} (Primary: ${assists[0] || 'None'}, Secondary: ${assists[1] || 'None'})`, 'GoalDetectionService');
       }
 
       return {
@@ -492,7 +493,7 @@ export class GoalDetectionService {
         secondaryAssist: assists[1]
       };
     } catch (error) {
-      console.warn('[GoalDetectionService] Could not get assist info:', error);
+      debugWarn('Could not get assist info:', 'GoalDetectionService');
       return {};
     }
   }

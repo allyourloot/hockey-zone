@@ -6,6 +6,7 @@
 import { Entity, ChatManager } from 'hytopia';
 import type { World, PlayerEntity } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 import { PuckTrailManager } from './PuckTrailManager';
 import { GoalDetectionService } from '../services/GoalDetectionService';
 import { OffsideDetectionService } from '../services/OffsideDetectionService';
@@ -13,7 +14,8 @@ import { PuckBoundaryService } from '../services/PuckBoundaryService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { WorldInitializer } from '../systems/WorldInitializer';
-import { HockeyTeam, HockeyPosition, HockeyZone, FaceoffLocation, OffsideViolation } from '../utils/types';
+import { HockeyTeam, HockeyPosition, HockeyZone, FaceoffLocation } from '../utils/types';
+import type { OffsideViolation } from '../utils/types';
 import { AudioManager } from './AudioManager';
 import { PlayerStatsManager } from './PlayerStatsManager';
 
@@ -59,7 +61,7 @@ export class ChatCommandManager {
     });
     
     this.registerAllCommands();
-    console.log('ChatCommandManager: All commands registered');
+    debugLog('All commands registered', 'ChatCommandManager');
   }
   
   /**
@@ -124,10 +126,10 @@ export class ChatCommandManager {
           `Puck status: spawned=${this.puck.isSpawned}, position=${JSON.stringify(this.puck.position)}`, 
           '00FF00'
         );
-        console.log('Puck debug - spawned:', this.puck.isSpawned, 'position:', this.puck.position);
+        debugLog('Puck debug - spawned: ' + this.puck.isSpawned + ', position: ' + JSON.stringify(this.puck.position), 'ChatCommandManager');
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'Puck not found!', 'FF0000');
-        console.log('Puck debug - puck is null');
+        debugLog('Puck debug - puck is null', 'ChatCommandManager');
       }
       
       const playerEntities = this.world!.entityManager.getPlayerEntitiesByPlayer(player);
@@ -141,7 +143,7 @@ export class ChatCommandManager {
             `Player entity ${i}: controlling puck = ${controlling}`, 
             '00FF00'
           );
-          console.log(`Player entity ${i}: controlling puck =`, controlling);
+          debugLog(`Player entity ${i}: controlling puck = ${controlling}`, 'ChatCommandManager');
         }
       });
     });
@@ -167,14 +169,14 @@ export class ChatCommandManager {
       if (this.createPuckEntity) {
         try {
           this.puck = this.createPuckEntity();
-          console.log('[SpawnPuck] Puck entity created successfully');
+          debugLog('Puck entity created successfully', 'SpawnPuck');
           
           // Spawn at center ice using constants
           const spawnPos = CONSTANTS.SPAWN_POSITIONS.PUCK_CENTER_ICE;
-          console.log('[SpawnPuck] Attempting to spawn puck at:', spawnPos);
+          debugLog('Attempting to spawn puck at: ' + JSON.stringify(spawnPos), 'SpawnPuck');
           
           this.puck.spawn(this.world!, spawnPos);
-          console.log('[SpawnPuck] Puck spawned, isSpawned:', this.puck.isSpawned);
+          debugLog('Puck spawned, isSpawned: ' + this.puck.isSpawned, 'SpawnPuck');
           
           // Attach trail effect to the new puck
           PuckTrailManager.instance.attachTrailToPuck(this.puck);
@@ -187,14 +189,14 @@ export class ChatCommandManager {
             `Puck spawned at Y=${spawnPos.y} with trail and boundary monitoring!`, 
             '00FF00'
           );
-          console.log('[SpawnPuck] Success - puck spawned with trail and boundary monitoring at Y:', spawnPos.y);
+          debugLog('Success - puck spawned with trail and boundary monitoring at Y: ' + spawnPos.y, 'SpawnPuck');
         } catch (error) {
           this.world!.chatManager.sendPlayerMessage(player, `Error spawning puck: ${error}`, 'FF0000');
-          console.error('[SpawnPuck] Error creating/spawning puck:', error);
+          debugError('Error creating/spawning puck:', error, 'SpawnPuck');
         }
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'Error: Cannot create puck entity!', 'FF0000');
-        console.error('[SpawnPuck] createPuckEntity function not available');
+        debugError('createPuckEntity function not available', undefined, 'SpawnPuck');
       }
     });
   }
@@ -208,7 +210,7 @@ export class ChatCommandManager {
     this.world.chatManager.registerCommand('/removetrail', (player) => {
       PuckTrailManager.instance.removeTrail();
       this.world!.chatManager.sendPlayerMessage(player, 'Puck trail effect removed!', '00FF00');
-      console.log('Puck trail effect removed');
+      debugLog('Puck trail effect removed', 'ChatCommandManager');
     });
   }
 
@@ -229,7 +231,7 @@ export class ChatCommandManager {
           `Trail color would be changed to ${displayColor}! (Feature coming soon)`, 
           color === 'red' ? 'FF4444' : color === 'gold' ? 'FFD700' : 'AAAAAA'
         );
-        console.log(`Trail color change requested: ${displayColor}`);
+        debugLog(`Trail color change requested: ${displayColor}`, 'ChatCommandManager');
       } else {
         this.world!.chatManager.sendPlayerMessage(
           player, 
@@ -257,15 +259,15 @@ export class ChatCommandManager {
           
           if (typeof entity.stopAllModelAnimations === 'function') {
             entity.stopAllModelAnimations();
-            console.log('[TESTSLEEP] Stopped all animations for', entity.player?.id);
+            debugLog(`Stopped all animations for ${entity.player?.id}`, 'TESTSLEEP');
           }
           if (typeof entity.startModelLoopedAnimations === 'function') {
             entity.startModelLoopedAnimations(['sleep']);
-            console.log('[TESTSLEEP] Started looped animation [sleep] for', entity.player?.id);
+            debugLog(`Started looped animation [sleep] for ${entity.player?.id}`, 'TESTSLEEP');
           }
         }
       });
-      this.world!.chatManager.sendBroadcastMessage('Triggered sleep animation for all players!', 'FFFF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'Sleep animation test applied', '00FF00');
     });
   }
   
@@ -293,8 +295,8 @@ export class ChatCommandManager {
     this.world.chatManager.registerCommand('/startmatch', (player) => {
       const gameManager = HockeyGameManager.instance;
       gameManager.startMatchSequence();
-      this.world!.chatManager.sendPlayerMessage(player, 'Starting match sequence!', '00FF00');
-      console.log('[ChatCommand] Match sequence started with proper countdown and reset');
+      this.world!.chatManager.sendPlayerMessage(player, 'Match sequence started', '00FF00');
+      debugLog('Match sequence started with proper countdown and reset', 'ChatCommand');
     });
 
     // /goalinfo - Show goal detection debug information
@@ -331,7 +333,7 @@ export class ChatCommandManager {
         this.world!.chatManager.sendPlayerMessage(player, 'Puck not found or not spawned!', 'FF0000');
       }
 
-      console.log('[ChatCommand] Goal detection debug info:', debugInfo);
+      debugLog('Goal detection debug info', 'ChatCommand');
     });
 
     // /testgoal - Simulate a goal for testing stats
@@ -348,7 +350,7 @@ export class ChatCommandManager {
       const assistId = args[1]; // Optional assist player ID
       
       this.world!.chatManager.sendPlayerMessage(player, `Simulating ${team} goal by ${player.username}${assistId ? ` (assist: ${assistId})` : ''}...`, '00FF00');
-      console.log(`[ChatCommand] Test goal simulated: ${team} by ${player.username} (${player.id})${assistId ? ` with assist from ${assistId}` : ''}`);
+             debugLog(`Test goal simulated: ${team} by ${player.username} (${player.id})${assistId ? ` with assist from ${assistId}` : ''}`, 'ChatCommand');
       
       // Trigger goal with proper attribution
       HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId, assistId);
@@ -372,12 +374,8 @@ export class ChatCommandManager {
         const lastTouchedBy = customProps.get('lastTouchedBy') || 'Unknown';
         const currentTime = Date.now();
 
-        this.world!.chatManager.sendPlayerMessage(player, `=== PUCK TOUCH HISTORY DEBUG ===`, 'FFFF00');
-        this.world!.chatManager.sendPlayerMessage(player, `Last touched by: ${lastTouchedBy}`, 'FFFFFF');
-        this.world!.chatManager.sendPlayerMessage(player, `Touch history length: ${touchHistory.length}`, 'FFFFFF');
-        
-        // Show RAW touch history data
-        this.world!.chatManager.sendPlayerMessage(player, `RAW history: ${JSON.stringify(touchHistory)}`, 'CCCCCC');
+        this.world!.chatManager.sendPlayerMessage(player, `=== PUCK TOUCH HISTORY ===`, 'FFFF00');
+        this.world!.chatManager.sendPlayerMessage(player, `Last: ${lastTouchedBy}, Count: ${touchHistory.length}`, 'FFFFFF');
 
         if (touchHistory.length === 0) {
           this.world!.chatManager.sendPlayerMessage(player, 'No touch history found!', 'FF8888');
@@ -448,7 +446,7 @@ export class ChatCommandManager {
 
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(player, `Error reading touch history: ${error}`, 'FF0000');
-        console.error('Error reading puck touch history:', error);
+        debugError('Error reading puck touch history:', error, 'ChatCommandManager');
       }
     });
 
@@ -468,8 +466,7 @@ export class ChatCommandManager {
       }
 
       try {
-        this.world!.chatManager.sendPlayerMessage(player, `=== ASSIST TEST RESULTS ===`, 'FFFF00');
-        this.world!.chatManager.sendPlayerMessage(player, `Scorer: ${scorerId} (${team} team)`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `Testing assists for ${team}...`, 'FFFF00');
 
         // First, check the current puck touch history 
         const customProps = (this.puck as any).customProperties;
@@ -590,7 +587,7 @@ export class ChatCommandManager {
 
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(player, `Error testing assists: ${error}`, 'FF0000');
-        console.error('Error testing assist detection:', error);
+        debugError('Error testing assist detection:', error, 'ChatCommandManager');
       }
     });
 
@@ -626,7 +623,7 @@ export class ChatCommandManager {
       }
 
       this.world!.chatManager.sendPlayerMessage(player, `Simulating save by ${player.username} (${goalieInfo.team}) against shooter ${shooterId} (${shooterInfo.team})...`, '00FF00');
-      console.log(`[ChatCommand] Test save simulated: ${player.username} (${goalieId}) saved shot from ${shooterId}`);
+      debugLog('Test save simulated: ${player.username} (${goalieId}) saved shot from ${shooterId}', 'ChatCommand');
       
       // Record the save directly
       const { PlayerStatsManager } = require('./PlayerStatsManager');
@@ -640,7 +637,7 @@ export class ChatCommandManager {
     this.world.chatManager.registerCommand('/resetgoals', (player) => {
       GoalDetectionService.instance.reset();
       this.world!.chatManager.sendPlayerMessage(player, 'Goal detection service reset!', '00FF00');
-      console.log('[ChatCommand] Goal detection service reset');
+      debugLog('Goal detection service reset', 'ChatCommand');
     });
 
     // /resetplayers - Reset all players to spawn positions
@@ -652,7 +649,7 @@ export class ChatCommandManager {
         this.puck
       );
       this.world!.chatManager.sendPlayerMessage(player, 'All players reset to spawn positions!', '00FF00');
-      console.log('[ChatCommand] Players reset to spawn positions');
+      debugLog('Players reset to spawn positions', 'ChatCommand');
     });
 
     // /gamestate - Check current game state  
@@ -664,7 +661,7 @@ export class ChatCommandManager {
         `Game state: ${gameState}`, 
         '00FF00'
       );
-      console.log(`[ChatCommand] Player ${player.id} requested game state: ${gameState}`);
+      debugLog('Player ${player.id} requested game state: ${gameState}', 'ChatCommand');
     });
 
     // /testmusic - Test background music
@@ -672,7 +669,7 @@ export class ChatCommandManager {
       if (!this.world) return;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Background music is now handled globally with simple Hytopia approach', '00FF00');
-      console.log('[ChatCommand] Background music handled globally');
+      debugLog('Background music handled globally', 'ChatCommand');
     });
 
     // /stopmusic - Stop background music (no longer available)
@@ -680,7 +677,7 @@ export class ChatCommandManager {
       if (!this.world) return;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Background music cannot be stopped individually - handled globally', 'FFAA00');
-      console.log('[ChatCommand] Background music stop not available with global approach');
+      debugLog('Background music stop not available with global approach', 'ChatCommand');
     });
 
     // /restartmusic - Background music info (no longer restartable)
@@ -688,7 +685,7 @@ export class ChatCommandManager {
       if (!this.world) return;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Background music is handled globally and cannot be restarted individually', 'FFAA00');
-      console.log('[ChatCommand] Background music restart not available with global approach');
+      debugLog('Background music restart not available with global approach', 'ChatCommand');
     });
 
     // /testlock - Test movement lock system
@@ -700,12 +697,12 @@ export class ChatCommandManager {
         // Resume play
         gameManager.startPeriod();
         this.world!.chatManager.sendPlayerMessage(player, 'Movement unlocked - play resumed', '00FF00');
-        console.log('[ChatCommand] Movement unlocked by', player.id);
+                 debugLog(`Movement unlocked by ${player.id}`, 'ChatCommand');
       } else {
         // Lock movement by setting to GOAL_SCORED state
         (gameManager as any)._state = 'GOAL_SCORED';
         this.world!.chatManager.sendPlayerMessage(player, 'Movement locked for testing', 'FF0000');
-        console.log('[ChatCommand] Movement locked by', player.id);
+                 debugLog(`Movement locked by ${player.id}`, 'ChatCommand');
       }
     });
 
@@ -713,7 +710,7 @@ export class ChatCommandManager {
     this.world.chatManager.registerCommand('/testgamestart', (player) => {
       const gameManager = HockeyGameManager.instance;
       this.world!.chatManager.sendPlayerMessage(player, 'Testing game start sequence...', '00FF00');
-      console.log('[ChatCommand] Testing game start sequence triggered by', player.id);
+             debugLog(`Testing game start sequence triggered by ${player.id}`, 'ChatCommand');
       gameManager.startMatchSequence();
     });
 
@@ -726,12 +723,12 @@ export class ChatCommandManager {
         // Unlock by setting to IN_PERIOD
         (gameManager as any)._state = 'IN_PERIOD';
         this.world!.chatManager.sendPlayerMessage(player, 'Movement unlocked - match start lock removed', '00FF00');
-        console.log('[ChatCommand] Match start movement lock removed by', player.id);
+                 debugLog(`Match start movement lock removed by ${player.id}`, 'ChatCommand');
       } else {
         // Lock movement by setting to MATCH_START state
         (gameManager as any)._state = 'MATCH_START';
         this.world!.chatManager.sendPlayerMessage(player, 'Movement locked - testing match start lock', 'FF0000');
-        console.log('[ChatCommand] Match start movement lock activated by', player.id);
+                 debugLog(`Match start movement lock activated by ${player.id}`, 'ChatCommand');
       }
     });
 
@@ -740,7 +737,7 @@ export class ChatCommandManager {
       const gameManager = HockeyGameManager.instance;
       const currentPeriod = (gameManager as any)._period || 1;
       this.world!.chatManager.sendPlayerMessage(player, `Testing period end transition for period ${currentPeriod}...`, '00FF00');
-      console.log(`[ChatCommand] Testing period end transition for period ${currentPeriod} triggered by`, player.id);
+             debugLog(`Testing period end transition for period ${currentPeriod} triggered by ${player.id}`, 'ChatCommand');
       gameManager.endPeriod();
     });
 
@@ -758,7 +755,7 @@ export class ChatCommandManager {
         this.world!.chatManager.sendPlayerMessage(player, 'Server timer is NOT running.', 'FF0000');
       }
       
-      console.log(`[ChatCommand] Timer sync test - State: ${currentState}, Period: ${currentPeriod}`);
+             debugLog(`Timer sync test - State: ${currentState}, Period: ${currentPeriod}`, 'ChatCommand');
     });
 
     // /testgameover - Test enhanced game over sequence with box score
@@ -776,10 +773,10 @@ export class ChatCommandManager {
       PlayerStatsManager.instance.recordShot(player.id, 'RED', true, false, undefined, false);
       
       this.world!.chatManager.sendPlayerMessage(player, 'Testing enhanced game over sequence with box score...', '00FF00');
-      console.log('[ChatCommand] Testing enhanced game over sequence with box score triggered by', player.id);
+             debugLog(`Testing enhanced game over sequence with box score triggered by ${player.id}`, 'ChatCommand');
       
               gameManager.endGame().catch(error => {
-          console.error('Error ending game via command:', error);
+          debugError('Error ending game via command:', error, 'ChatCommandManager');
         });
     });
 
@@ -790,7 +787,7 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, 'Resetting game to lobby...', '00FF00');
       this.world!.chatManager.sendBroadcastMessage('Game reset to lobby by admin. Please reselect your teams!', 'FFFF00');
       
-      console.log('[ChatCommand] Game reset to lobby triggered by', player.id);
+             debugLog(`Game reset to lobby triggered by ${player.id}`, 'ChatCommand');
       
       gameManager.resetToLobby();
     });
@@ -807,7 +804,7 @@ export class ChatCommandManager {
       const offsideService = OffsideDetectionService.instance;
       offsideService.startMonitoring();
       this.world!.chatManager.sendPlayerMessage(player, 'Offside monitoring started!', '00FF00');
-      console.log('[ChatCommand] Offside monitoring started by', player.id);
+             debugLog(`Offside monitoring started by ${player.id}`, 'ChatCommand');
     });
 
     // /stopoffside - Stop offside monitoring
@@ -815,7 +812,7 @@ export class ChatCommandManager {
       const offsideService = OffsideDetectionService.instance;
       offsideService.stopMonitoring();
       this.world!.chatManager.sendPlayerMessage(player, 'Offside monitoring stopped!', 'FF0000');
-      console.log('[ChatCommand] Offside monitoring stopped by', player.id);
+             debugLog(`Offside monitoring stopped by ${player.id}`, 'ChatCommand');
     });
 
     // /offsideinfo - Show offside detection debug information
@@ -859,7 +856,7 @@ export class ChatCommandManager {
         this.world!.chatManager.sendPlayerMessage(player, 'Puck not found or not spawned!', 'FF0000');
       }
 
-      console.log('[ChatCommand] Offside detection debug info:', debugInfo);
+      debugLog('Offside detection debug info', 'ChatCommand');
     });
 
     // /myzone - Show what zone the player is currently in
@@ -890,7 +887,7 @@ export class ChatCommandManager {
         zone === HockeyZone.RED_DEFENSIVE ? 'FF4444' : '44AAFF'
       );
 
-      console.log(`[ChatCommand] Player ${player.id} zone check: ${zone} at ${JSON.stringify(playerPosition)}`);
+             debugLog(`Player ${player.id} zone check: ${zone} at ${JSON.stringify(playerPosition)}`, 'ChatCommand');
     });
 
     // /faceoffspots - Show all faceoff locations
@@ -908,7 +905,7 @@ export class ChatCommandManager {
         );
       });
 
-      console.log('[ChatCommand] Faceoff spots displayed for', player.id);
+             debugLog(`Faceoff spots displayed for ${player.id}`, 'ChatCommand');
     });
 
     // /testoffside - Simulate an offside violation for testing
@@ -951,14 +948,14 @@ export class ChatCommandManager {
         '00FF00'
       );
 
-      console.log(`[ChatCommand] Test offside triggered: ${team} at ${faceoffLocation} by ${player.id}`);
+             debugLog(`Test offside triggered: ${team} at ${faceoffLocation} by ${player.id}`, 'ChatCommand');
     });
 
     // /resetoffside - Reset offside detection service
     this.world.chatManager.registerCommand('/resetoffside', (player) => {
       OffsideDetectionService.instance.reset();
       this.world!.chatManager.sendPlayerMessage(player, 'Offside detection service reset!', '00FF00');
-      console.log('[ChatCommand] Offside detection service reset by', player.id);
+      debugLog(`Offside detection service reset by ${player.id}`, 'ChatCommand');
     });
 
     // /testfaceoff - Test faceoff formation at closest neutral zone dot
@@ -998,7 +995,7 @@ export class ChatCommandManager {
       }
       
       const faceoffPos = neutralPositions[closestLocation as keyof typeof neutralPositions];
-      const validTeams = gameManager.getValidTeamsForReset();
+      const validTeams = (gameManager as any).getValidTeamsForReset();
       
       // Test the faceoff formation
       PlayerSpawnManager.instance.teleportPlayersToFaceoffFormation(
@@ -1012,7 +1009,7 @@ export class ChatCommandManager {
         `Testing faceoff formation at ${closestLocation}: X=${faceoffPos.x}, Z=${faceoffPos.z}`, 
         '00FF00'
       );
-      console.log(`[ChatCommand] Testing faceoff formation at ${closestLocation} by player:`, player.id);
+             debugLog(`Testing faceoff formation at ${closestLocation} by player: ${player.id}`, 'ChatCommand');
     });
 
     // /offsideon - Show only offside detection logs
@@ -1033,7 +1030,7 @@ export class ChatCommandManager {
         }
       };
       this.world!.chatManager.sendPlayerMessage(player, '🏒 Showing ONLY offside detection logs', '00FF00');
-      console.log('[ChatCommand] Offside-only logging enabled by', player.id);
+      debugLog(`Offside-only logging enabled by ${player.id}`, 'ChatCommand');
     });
 
     // /offsideoff - Show all logs again
@@ -1044,7 +1041,7 @@ export class ChatCommandManager {
         delete (console as any).originalLog;
       }
       this.world!.chatManager.sendPlayerMessage(player, '📝 Showing ALL logs again', '00FF00');
-      console.log('[ChatCommand] Full logging restored by', player.id);
+      debugLog(`Full logging restored by ${player.id}`, 'ChatCommand');
     });
   }
 
@@ -1158,7 +1155,7 @@ export class ChatCommandManager {
     this.world.chatManager.registerCommand('/stats', (player) => {
       this.world!.chatManager.sendPlayerMessage(player, 'Broadcasting current stats to all players...', '00FF00');
       HockeyGameManager.instance.broadcastStatsUpdate();
-      console.log('[ChatCommand] Stats broadcast triggered by', player.id);
+      debugLog(`Stats broadcast triggered by ${player.id}`, 'ChatCommand');
     });
 
     // /debugstats - Show detailed stats debugging info
@@ -1168,9 +1165,7 @@ export class ChatCommandManager {
       const goals = PlayerStatsManager.instance.getGoals();
       const boxScore = PlayerStatsManager.instance.generateBoxScore();
       
-      this.world!.chatManager.sendPlayerMessage(player, '=== STATS DEBUG ===', 'FFFF00');
-      this.world!.chatManager.sendPlayerMessage(player, `Total Players: ${allStats.length}`, '00FFFF');
-      this.world!.chatManager.sendPlayerMessage(player, `Total Goals: ${goals.length}`, '00FFFF');
+      this.world!.chatManager.sendPlayerMessage(player, `📊 Stats: ${allStats.length} players, ${goals.length} goals`, 'FFFF00');
       
       // Show each player's stats
       allStats.forEach((stats: any) => {
@@ -1188,11 +1183,7 @@ export class ChatCommandManager {
         'FFFF00'
       );
       
-      console.log(`[ChatCommand] Debug stats:`, {
-        playersCount: allStats.length,
-        goalsCount: goals.length,
-        boxScore: boxScore.totalScore
-      });
+      debugLog(`Debug stats: ${allStats.length} players, ${goals.length} goals`, 'ChatCommand');
     });
   }
 
@@ -1241,7 +1232,7 @@ export class ChatCommandManager {
         );
       }
 
-      console.log('[ChatCommand] Barrier debug info:', debugInfo);
+      debugLog('Barrier debug info retrieved', 'ChatCommand');
     });
 
     // /removebarriers - Remove all goal barriers (for testing)
@@ -1249,7 +1240,7 @@ export class ChatCommandManager {
       const { PlayerBarrierService } = require('../services/PlayerBarrierService');
       PlayerBarrierService.instance.removeBarriers();
       this.world!.chatManager.sendPlayerMessage(player, 'All goal barriers removed!', 'FF0000');
-      console.log('[ChatCommand] Goal barriers removed by', player.id);
+      debugLog(`Goal barriers removed by ${player.id}`, 'ChatCommand');
     });
 
     // /createbarriers - Recreate goal barriers (for testing)
@@ -1258,10 +1249,10 @@ export class ChatCommandManager {
       try {
         PlayerBarrierService.instance.createBarriers(this.world!);
         this.world!.chatManager.sendPlayerMessage(player, 'Goal barriers recreated!', '00FF00');
-        console.log('[ChatCommand] Goal barriers recreated by', player.id);
+        debugLog(`Goal barriers recreated by ${player.id}`, 'ChatCommand');
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(player, 'Error creating barriers!', 'FF0000');
-        console.error('[ChatCommand] Error creating barriers:', error);
+        debugError('[ChatCommand] Error creating barriers:', error, 'ChatCommandManager');
       }
     });
 
@@ -1291,10 +1282,10 @@ export class ChatCommandManager {
           `Teleported to ${goal} goal line to test barrier!`, 
           goal === 'red' ? 'FF4444' : '44AAFF'
         );
-        console.log(`[ChatCommand] Player ${player.id} teleported to ${goal} goal for barrier test`);
+        debugLog(`Player ${player.id} teleported to ${goal} goal for barrier test`, 'ChatCommand');
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(player, 'Error teleporting player!', 'FF0000');
-        console.error('[ChatCommand] Error teleporting player for barrier test:', error);
+        debugError('[ChatCommand] Error teleporting player for barrier test:', error, 'ChatCommandManager');
       }
     });
   }
@@ -1316,10 +1307,10 @@ export class ChatCommandManager {
           `Ice Floor: spawned=${isSpawned}, pos=(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`,
           '00FFFF'
         );
-        console.log('[IceFloor] Status:', { spawned: isSpawned, position });
+        debugLog(`Ice floor status: spawned=${isSpawned}`, 'IceFloor');
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'Ice floor entity not found!', 'FF0000');
-        console.log('[IceFloor] Entity not found');
+        debugLog('Entity not found', 'IceFloor');
       }
     });
 
@@ -1347,9 +1338,7 @@ export class ChatCommandManager {
           '00FFFF'
         );
         
-        console.log('[PuckPhysics] Position:', position);
-        console.log('[PuckPhysics] Linear Velocity:', velocity);
-        console.log('[PuckPhysics] Angular Velocity:', angularVel);
+        debugLog('Puck physics data retrieved', 'PuckPhysics');
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'No puck found or puck not spawned!', 'FF0000');
       }
@@ -1384,9 +1373,7 @@ export class ChatCommandManager {
         verticalDiff > 0.05 && verticalDiff < 0.15 ? '00FF00' : 'FF0000'
       );
 
-      console.log('[CollisionTest] Ice floor position:', iceFloorPos);
-      console.log('[CollisionTest] Puck position:', puckPos);
-      console.log('[CollisionTest] Vertical difference:', verticalDiff);
+      debugLog('Collision test data retrieved', 'CollisionTest');
     });
   }
 
@@ -1421,7 +1408,7 @@ export class ChatCommandManager {
         
         this.world!.chatManager.sendPlayerMessage(
           player, 
-          `Player model nodes: ${nodeNames.join(', ')}`, 
+          `Found ${nodeNames.length} model nodes`, 
           '00FF00'
         );
         
@@ -1479,14 +1466,14 @@ export class ChatCommandManager {
           hasLegLeftAnchor || hasLegLeftAnchorUnderscore ? '00FF00' : 'FF0000'
         );
         
-        console.log('Available node names for player.gltf:', nodeNames);
+        debugLog(`Found ${nodeNames.length} node names for player.gltf`, 'ChatCommandManager');
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(
           player, 
           `Error getting node names: ${error instanceof Error ? error.message : String(error)}`, 
           'FF0000'
         );
-        console.error('Error getting node names:', error);
+        debugError('Error getting node names:', error, 'ChatCommandManager');
       }
     });
   }
@@ -1507,7 +1494,7 @@ export class ChatCommandManager {
         IceSkatingController._showGameplayMessages ? '00FF00' : 'FF0000'
       );
       
-      console.log(`[ChatCommand] Gameplay messages ${IceSkatingController._showGameplayMessages ? 'enabled' : 'disabled'} by`, player.id);
+             debugLog(`Gameplay messages ${IceSkatingController._showGameplayMessages ? 'enabled' : 'disabled'} by ${player.id}`, 'ChatCommand');
     });
   }
   
@@ -1523,11 +1510,7 @@ export class ChatCommandManager {
       const stats = AudioManager.instance.getAudioStats();
       
       if (debugInfo) {
-        this.world!.chatManager.sendPlayerMessage(player, '🎵 AUDIO SYSTEM STATUS:', '00FFFF');
-        this.world!.chatManager.sendPlayerMessage(player, `Total: ${debugInfo.totalAudiosInWorld} | Managed: ${debugInfo.managedAudios} | Unmanaged: ${debugInfo.unmanagedAudios}`, 'FFFFFF');
-        this.world!.chatManager.sendPlayerMessage(player, `Looped: ${debugInfo.loopedAudios} | One-shot: ${debugInfo.oneshotAudios}`, 'FFFFFF');
-        this.world!.chatManager.sendPlayerMessage(player, `Entity Attached: ${debugInfo.entityAttachedAudios}`, 'FFFFFF');
-        this.world!.chatManager.sendPlayerMessage(player, `Memory Est: ${debugInfo.memoryEstimate}MB`, 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, `🎵 Audio: ${debugInfo.totalAudiosInWorld} total, ${debugInfo.memoryEstimate}MB`, '00FFFF');
         
         if (debugInfo.oldestAudio) {
           const ageSeconds = Math.round(debugInfo.oldestAudio.age / 1000);
@@ -1548,23 +1531,7 @@ export class ChatCommandManager {
       const loopedAudios = AudioManager.instance.getAllLoopedAudios();
       const oneshotAudios = AudioManager.instance.getAllOneshotAudios();
       
-      this.world!.chatManager.sendPlayerMessage(player, '🌍 WORLD AUDIO INSTANCES:', '00FFFF');
-      this.world!.chatManager.sendPlayerMessage(player, `Total: ${allAudios.length}`, 'FFFFFF');
-      this.world!.chatManager.sendPlayerMessage(player, `Looped: ${loopedAudios.length}`, 'FFFFFF');
-      this.world!.chatManager.sendPlayerMessage(player, `One-shot: ${oneshotAudios.length}`, 'FFFFFF');
-      
-      // Show details of first few audios
-      const firstFew = allAudios.slice(0, 5);
-      firstFew.forEach((audio, index) => {
-        const uri = audio.uri || 'unknown';
-        const attached = audio.attachedToEntity ? 'entity-attached' : 'global';
-        const looped = audio.loop ? 'looped' : 'one-shot';
-        this.world!.chatManager.sendPlayerMessage(player, `${index + 1}. ${uri} (${attached}, ${looped})`, 'CCCCCC');
-      });
-      
-      if (allAudios.length > 5) {
-        this.world!.chatManager.sendPlayerMessage(player, `... and ${allAudios.length - 5} more`, 'CCCCCC');
-      }
+      this.world!.chatManager.sendPlayerMessage(player, `🌍 Audio instances: ${allAudios.length} total (${loopedAudios.length} looped, ${oneshotAudios.length} one-shot)`, '00FFFF');
     });
     
     // /audiocleanup - Forces manual cleanup
@@ -1700,7 +1667,7 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, '/audioplayercount <1-12> - Set player count for testing', 'CCCCCC');
     });
     
-    console.log('Audio debugging commands registered');
+    debugLog('Audio debugging commands registered', 'ChatCommandManager');
   }
 
   /**
@@ -1744,7 +1711,7 @@ export class ChatCommandManager {
                 'FFFF00'
               );
             } catch (error) {
-              console.error('[PuckTest] Error clearing test indicator:', error);
+              debugError('[PuckTest] Error clearing test indicator:', error, 'ChatCommandManager');
             }
           }, 5000);
           
@@ -1761,7 +1728,7 @@ export class ChatCommandManager {
           `Error testing puck indicator: ${error}`, 
           'FF0000'
         );
-        console.error('[PuckTest] Error:', error);
+        debugError('[PuckTest] Error:', error, 'ChatCommandManager');
       }
     });
   }
@@ -1788,7 +1755,7 @@ export class ChatCommandManager {
         this.world!.chatManager.sendPlayerMessage(player, 'You are not assigned to a team/position!', 'FF0000');
       }
       
-      console.log('[ChatCommand] Spawn info requested for player:', player.id);
+      debugLog(`Spawn info requested for player: ${player.id}`, 'ChatCommand');
     });
   }
 
@@ -1845,14 +1812,7 @@ export class ChatCommandManager {
         playerObj ? '00FF00' : 'FF0000'
       );
       
-      console.log('[ChatCommand] Debug stats for player:', {
-        id: player.id,
-        username: player.username,
-        teamAndPos,
-        isLockedIn,
-        hasCurrentStats: !!currentStats,
-        hasPlayerObject: !!playerObj
-      });
+      debugLog(`Debug stats for player ${player.id}: locked=${isLockedIn}, stats=${!!currentStats}, object=${!!playerObj}`, 'ChatCommand');
     });
   }
 
@@ -1889,10 +1849,10 @@ export class ChatCommandManager {
           saved ? '00FF00' : 'FF0000'
         );
         
-        console.log('[ChatCommand] Persistence test completed for:', player.username, { stats, saved });
+        debugLog(`Persistence test completed for ${player.username}: saved=${saved}`, 'ChatCommand');
         
              } catch (error) {
-         console.error('[ChatCommand] Persistence test error:', error);
+         debugError('[ChatCommand] Persistence test error:', error, 'ChatCommandManager');
          this.world!.chatManager.sendPlayerMessage(player, `❌ Persistence error: ${error instanceof Error ? error.message : 'Unknown error'}`, 'FF0000');
        }
     });
@@ -1940,7 +1900,7 @@ export class ChatCommandManager {
         this.world!.chatManager.sendPlayerMessage(player, '❌ Assignment failed - position may be taken', 'FF0000');
       }
       
-      console.log('[ChatCommand] Team assignment:', { player: player.username, team, position, success });
+      debugLog(`Team assignment: ${player.username} -> ${team} ${position} (success: ${success})`, 'ChatCommand');
     });
   }
 
@@ -1964,14 +1924,14 @@ export class ChatCommandManager {
           '00FF00'
         );
         
-        CONSTANTS.debugLog(`Test hit recorded for player ${player.id}`, 'ChatCommandManager');
+        debugLog(`Test hit recorded for player ${player.id}`, 'ChatCommandManager');
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(
           player, 
           `❌ Error recording test hit: ${error}`,
           'FF0000'
         );
-        console.error('Error in /testhit command:', error);
+        debugError('Error in /testhit command:', error, 'ChatCommandManager');
       }
     });
   }
@@ -2007,14 +1967,14 @@ export class ChatCommandManager {
           '00FF00'
         );
         
-        CONSTANTS.debugLog(`Test shot recorded for player ${player.id}`, 'ChatCommandManager');
+        debugLog(`Test shot recorded for player ${player.id}`, 'ChatCommandManager');
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(
           player, 
           `❌ Error recording test shot: ${error}`,
           'FF0000'
         );
-        console.error('Error in /testshot command:', error);
+        debugError('Error in /testshot command:', error, 'ChatCommandManager');
       }
     });
   }
@@ -2052,7 +2012,7 @@ export class ChatCommandManager {
           `❌ Error testing leaderboard: ${error}`,
           'FF0000'
         );
-        console.error('Error in test leaderboard command:', error);
+        debugError('Error in test leaderboard command:', error, 'ChatCommandManager');
       }
     });
   }
@@ -2068,9 +2028,7 @@ export class ChatCommandManager {
         const statsManager = PlayerStatsManager.instance;
         const summary = statsManager.getPlayTimeSummary();
         
-        this.world!.chatManager.sendPlayerMessage(player, '=== GP QUALIFICATION STATUS ===', 'FFFF00');
-        this.world!.chatManager.sendPlayerMessage(player, 'Criteria: 50%+ play time OR <50% + contribution', 'FFFFFF');
-        this.world!.chatManager.sendPlayerMessage(player, '', 'FFFFFF');
+        this.world!.chatManager.sendPlayerMessage(player, '🏒 GP Qualification Status', 'FFFF00');
         
         summary.forEach((playerSummary, index) => {
           const status = playerSummary.qualifiesForGP ? '✅' : '❌';
@@ -2097,14 +2055,14 @@ export class ChatCommandManager {
           'FFFF00'
         );
         
-        CONSTANTS.debugLog(`GP qualification summary requested by ${player.username}`, 'ChatCommandManager');
+        debugLog(`GP qualification summary requested by ${player.username}`, 'ChatCommandManager');
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(
           player, 
           `❌ Error getting GP qualification: ${error}`,
           'FF0000'
         );
-        console.error('Error in /gpqualify command:', error);
+        debugError('Error in /gpqualify command:', error, 'ChatCommandManager');
       }
     });
   }
@@ -2120,12 +2078,12 @@ export class ChatCommandManager {
         // Enable detailed pass debugging
         (console as any).passDebugEnabled = true;
         this.world!.chatManager.sendPlayerMessage(player, '🐛 Pass debugging enabled - console will show detailed pass logs', '00FF00');
-        console.log('[ChatCommand] Pass debugging enabled by', player.id);
+        debugLog(`Pass debugging enabled by ${player.id}`, 'ChatCommand');
       } else if (action === 'off') {
         // Disable detailed pass debugging  
         (console as any).passDebugEnabled = false;
         this.world!.chatManager.sendPlayerMessage(player, '📴 Pass debugging disabled', 'FFAA00');
-        console.log('[ChatCommand] Pass debugging disabled by', player.id);
+        debugLog(`Pass debugging disabled by ${player.id}`, 'ChatCommand');
       } else {
         this.world!.chatManager.sendPlayerMessage(player, 'Usage: /passdebug <on|off>', 'FFFF00');
         this.world!.chatManager.sendPlayerMessage(player, 'Current status: ' + ((console as any).passDebugEnabled ? 'ON' : 'OFF'), 'FFFFFF');
@@ -2149,13 +2107,13 @@ export class ChatCommandManager {
           customProps.set('touchHistory', []);
           customProps.set('lastTouchedBy', '');
           this.world!.chatManager.sendPlayerMessage(player, '✅ Puck touch history cleared!', '00FF00');
-          console.log('[ChatCommand] Puck touch history cleared by', player.id);
+          debugLog(`Puck touch history cleared by ${player.id}`, 'ChatCommand');
         } else {
           this.world!.chatManager.sendPlayerMessage(player, 'Puck has no custom properties!', 'FF0000');
         }
       } catch (error) {
         this.world!.chatManager.sendPlayerMessage(player, `Error clearing history: ${error}`, 'FF0000');
-        console.error('Error clearing puck touch history:', error);
+        debugError('Error clearing puck touch history:', error, 'ChatCommandManager');
       }
     });
   }

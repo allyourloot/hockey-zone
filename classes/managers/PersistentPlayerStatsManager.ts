@@ -1,5 +1,6 @@
 import { PersistenceManager, Player } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
+import { debugLog, debugError, debugWarn } from '../utils/constants';
 
 export interface PersistentPlayerStats {
   playerId: string;
@@ -57,7 +58,7 @@ export class PersistentPlayerStatsManager {
     // Check cache first
     const cachedStats = this._playerStatsCache.get(playerId);
     if (cachedStats) {
-      CONSTANTS.debugLog(`Loaded cached stats for ${player.username}`, 'PersistentPlayerStatsManager');
+      debugLog(`Loaded cached stats for ${player.username}`, 'PersistentPlayerStatsManager');
       return cachedStats;
     }
 
@@ -81,17 +82,17 @@ export class PersistentPlayerStatsManager {
         // Cache the loaded stats
         this._playerStatsCache.set(playerId, stats);
         
-        CONSTANTS.debugLog(`Loaded persistent stats for ${player.username}: ${stats.gamesPlayed} games, ${stats.goals} goals, ${stats.assists} assists, ${stats.saves} saves, ${stats.wins}W-${stats.losses}L`, 'PersistentPlayerStatsManager');
+        debugLog(`Loaded persistent stats for ${player.username}: ${stats.gamesPlayed} games, ${stats.goals} goals, ${stats.assists} assists, ${stats.saves} saves, ${stats.wins}W-${stats.losses}L`, 'PersistentPlayerStatsManager');
         
         return stats;
       } else {
         // No existing data or invalid data, create new stats
-        CONSTANTS.debugLog(`Creating new persistent stats for ${player.username}`, 'PersistentPlayerStatsManager');
+        debugLog(`Creating new persistent stats for ${player.username}`, 'PersistentPlayerStatsManager');
         return this._createNewPlayerStats(player);
       }
     } catch (error) {
-      console.error(`Error loading persistent stats for player ${player.username}:`, error);
-      CONSTANTS.debugLog(`Failed to load stats for ${player.username}, creating new stats`, 'PersistentPlayerStatsManager');
+      debugError(`Error loading persistent stats for player ${player.username}:`, error, 'PersistentPlayerStatsManager');
+      debugLog(`Failed to load stats for ${player.username}, creating new stats`, 'PersistentPlayerStatsManager');
       
       // Create new stats as fallback
       return this._createNewPlayerStats(player);
@@ -109,7 +110,7 @@ export class PersistentPlayerStatsManager {
       const statsToSave = stats || this._playerStatsCache.get(playerId);
       
       if (!statsToSave) {
-        CONSTANTS.debugLog(`No stats to save for player ${player.username}`, 'PersistentPlayerStatsManager');
+        debugLog(`No stats to save for player ${player.username}`, 'PersistentPlayerStatsManager');
         return false;
       }
       
@@ -124,11 +125,11 @@ export class PersistentPlayerStatsManager {
       this._playerStatsCache.set(playerId, statsToSave);
       this._dirtyPlayers.delete(playerId);
       
-      CONSTANTS.debugLog(`Saved persistent stats for ${player.username}: ${statsToSave.gamesPlayed} games, ${statsToSave.goals} goals, ${statsToSave.assists} assists, ${statsToSave.saves} saves, ${statsToSave.wins}W-${statsToSave.losses}L`, 'PersistentPlayerStatsManager');
+      debugLog(`Saved persistent stats for ${player.username}: ${statsToSave.gamesPlayed} games, ${statsToSave.goals} goals, ${statsToSave.assists} assists, ${statsToSave.saves} saves, ${statsToSave.wins}W-${statsToSave.losses}L`, 'PersistentPlayerStatsManager');
       
       return true;
     } catch (error) {
-      console.error(`Error saving persistent stats for player ${player.username}:`, error);
+      debugError(`Error saving persistent stats for player ${player.username}:`, error, 'PersistentPlayerStatsManager');
       return false;
     }
   }
@@ -159,7 +160,7 @@ export class PersistentPlayerStatsManager {
     // Mark as dirty for batch saving
     this._dirtyPlayers.add(playerId);
     
-    CONSTANTS.debugLog(`Updated stats for ${player.username}: ${JSON.stringify(updates)}`, 'PersistentPlayerStatsManager');
+    debugLog(`Updated stats for ${player.username}: ${JSON.stringify(updates)}`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -169,7 +170,7 @@ export class PersistentPlayerStatsManager {
     const currentStats = await this.getPlayerStats(player);
     currentStats.goals += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded goal for ${player.username}: ${currentStats.goals} total`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded goal for ${player.username}: ${currentStats.goals} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -179,7 +180,7 @@ export class PersistentPlayerStatsManager {
     const currentStats = await this.getPlayerStats(player);
     currentStats.assists += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded assist for ${player.username}: ${currentStats.assists} total`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded assist for ${player.username}: ${currentStats.assists} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -189,7 +190,7 @@ export class PersistentPlayerStatsManager {
     const currentStats = await this.getPlayerStats(player);
     currentStats.saves += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded save for ${player.username}: ${currentStats.saves} total`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded save for ${player.username}: ${currentStats.saves} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -200,7 +201,7 @@ export class PersistentPlayerStatsManager {
     currentStats.wins += 1;
     currentStats.gamesPlayed += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded win for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded win for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -211,7 +212,7 @@ export class PersistentPlayerStatsManager {
     currentStats.losses += 1;
     currentStats.gamesPlayed += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded loss for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded loss for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -221,7 +222,7 @@ export class PersistentPlayerStatsManager {
     const currentStats = await this.getPlayerStats(player);
     currentStats.shotsOnGoal += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded shot on goal for ${player.username}: ${currentStats.shotsOnGoal} total`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded shot on goal for ${player.username}: ${currentStats.shotsOnGoal} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -231,7 +232,7 @@ export class PersistentPlayerStatsManager {
     const currentStats = await this.getPlayerStats(player);
     currentStats.hits += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded hit for ${player.username}: ${currentStats.hits} total`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded hit for ${player.username}: ${currentStats.hits} total`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -242,7 +243,7 @@ export class PersistentPlayerStatsManager {
     currentStats.wins += 1;
     currentStats.gamesPlayed += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded conditional win for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded conditional win for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -253,7 +254,7 @@ export class PersistentPlayerStatsManager {
     currentStats.losses += 1;
     currentStats.gamesPlayed += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded conditional loss for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded conditional loss for ${player.username}: ${currentStats.wins}W-${currentStats.losses}L`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -263,7 +264,7 @@ export class PersistentPlayerStatsManager {
     const currentStats = await this.getPlayerStats(player);
     currentStats.gamesPlayed += 1;
     this._dirtyPlayers.add(player.id);
-    CONSTANTS.debugLog(`Recorded conditional game played for ${player.username}: ${currentStats.gamesPlayed} total games`, 'PersistentPlayerStatsManager');
+    debugLog(`Recorded conditional game played for ${player.username}: ${currentStats.gamesPlayed} total games`, 'PersistentPlayerStatsManager');
   }
 
   /**
@@ -277,7 +278,7 @@ export class PersistentPlayerStatsManager {
       if (stats) {
         // We need the Player object to save, but we only have playerId
         // This method should be called with available players
-        CONSTANTS.debugLog(`Player ID ${playerId} needs stats saved but no Player object available`, 'PersistentPlayerStatsManager');
+        debugLog(`Player ID ${playerId} needs stats saved but no Player object available`, 'PersistentPlayerStatsManager');
       }
     }
     
@@ -327,7 +328,7 @@ export class PersistentPlayerStatsManager {
   public clearPlayerFromCache(playerId: string): void {
     this._playerStatsCache.delete(playerId);
     this._dirtyPlayers.delete(playerId);
-    CONSTANTS.debugLog(`Cleared cache for player ${playerId}`, 'PersistentPlayerStatsManager');
+    debugLog(`Cleared cache for player ${playerId}`, 'PersistentPlayerStatsManager');
   }
 
   /**
