@@ -1846,7 +1846,21 @@ export class HockeyGameManager {
       return false;
     }
     
-    // Actually assign to team now that they're locking in
+    // IMPORTANT: Remove player from their current position first (if they have one)
+    // This is crucial for position switching to work correctly
+    if (this._lockedInPlayers.has(player.id)) {
+      for (const currentTeam of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+        for (const currentPos of Object.values(HockeyPosition)) {
+          if (this._teams[currentTeam][currentPos] === player.id) {
+            this._teams[currentTeam][currentPos] = undefined;
+            CONSTANTS.debugLog(`Removed player ${player.id} from old position ${currentTeam}-${currentPos}`, 'HGM');
+            break;
+          }
+        }
+      }
+    }
+    
+    // Now assign to the new team/position
     this._teams[team][position] = player.id;
     this._lockedInPlayers.add(player.id);
     this._playerIdToPlayer.set(player.id, player);
