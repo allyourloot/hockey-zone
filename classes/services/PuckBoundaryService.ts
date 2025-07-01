@@ -220,7 +220,7 @@ export class PuckBoundaryService {
       this._sendTimerPauseToAllPlayers(gameManager, currentPeriodTime);
       
     } catch (error) {
-      debugWarn('Could not pause game timer:', error, 'PuckBoundaryService');
+      debugError('Could not pause game timer:', error, 'PuckBoundaryService');
     }
 
     // Step 3: Get current puck entity and despawn it
@@ -231,7 +231,7 @@ export class PuckBoundaryService {
         currentPuck.despawn();
         debugLog('Despawned out-of-bounds puck', 'PuckBoundaryService');
       } catch (error) {
-        debugWarn('Error despawning puck:', error, 'PuckBoundaryService');
+        debugError('Error despawning puck:', error, 'PuckBoundaryService');
       }
     }
 
@@ -251,7 +251,7 @@ export class PuckBoundaryService {
         PuckTrailManager.instance.attachTrailToPuck(newPuck);
         debugLog('Attached trail effect to new boundary-reset puck', 'PuckBoundaryService');
       } catch (error) {
-        debugWarn('Could not attach trail to new puck:', error, 'PuckBoundaryService');
+        debugError('Could not attach trail to new puck:', error, 'PuckBoundaryService');
       }
       
       debugLog('Spawned new puck at center ice with trail effect', 'PuckBoundaryService');
@@ -418,7 +418,7 @@ export class PuckBoundaryService {
             debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset (no timer)', 'PuckBoundaryService');
           }
         } catch (error) {
-          debugWarn('Could not restart game timer:', error, 'PuckBoundaryService');
+          debugError('Could not restart game timer:', error, 'PuckBoundaryService');
           // Fallback: still resume game state
           gameManager['_state'] = HockeyGameState.IN_PERIOD;
           debugLog('Set game state back to IN_PERIOD - resuming play after boundary reset (error fallback)', 'PuckBoundaryService');
