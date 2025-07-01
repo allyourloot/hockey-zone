@@ -56,10 +56,11 @@ and also configure additional buttons for mobile compatibility.
 
   // Add keyboard shortcut 'M' for background music toggle
   document.addEventListener('keydown', (e) => {
-    // Check if 'M' key is pressed (case insensitive)
-    if (e.key.toLowerCase() === 'm') {
-      // Prevent default behavior and don't trigger if user is typing in an input
-      if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+    // Prevent default behavior and don't trigger if user is typing in an input
+    if (document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+      
+      // Check if 'M' key is pressed (case insensitive)
+      if (e.key.toLowerCase() === 'm') {
         e.preventDefault();
         
         // Add visual feedback to the button
@@ -70,6 +71,31 @@ and also configure additional buttons for mobile compatibility.
         setTimeout(() => {
           musicMuteButton.classList.remove('active');
         }, 150);
+      }
+      
+      // Check if '1' key is pressed to reopen team selection
+      if (e.key === '1') {
+        e.preventDefault();
+        
+        // Only allow team selection during lobby/waiting states (not during active game)
+        const scoreboard = document.getElementById('scoreboard');
+        const isGameActive = scoreboard && scoreboard.style.display === 'flex' && 
+                           document.querySelector('.timer').textContent !== '--:--';
+        
+        if (!isGameActive) {
+          // Send request to server to reopen team selection
+          hytopia.sendData({ type: 'reopen-team-selection' });
+        }
+      }
+      
+      // Check if 'ESC' key is pressed to close team selection without changes
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+        if (teamSelectionOverlay && teamSelectionOverlay.style.display === 'flex') {
+          e.preventDefault();
+          // Close team selection overlay without sending any data to server
+          hideTeamSelection();
+        }
       }
     }
   });
@@ -1286,9 +1312,13 @@ and also configure additional buttons for mobile compatibility.
         document.querySelector('.team.blue .team-score').textContent = data.blueScore;
       }
       
-      // Show waiting for players text instead of period
+      // Show waiting for players text or countdown text instead of period
       const periodEl = document.querySelector('.period');
-      periodEl.textContent = `Waiting for players ${data.connectedPlayers}/${data.totalPlayers}`;
+      if (data.isCountdown && data.countdownTime !== undefined) {
+        periodEl.textContent = `Game starting in ${data.countdownTime}s (${data.connectedPlayers}/${data.totalPlayers})`;
+      } else {
+        periodEl.textContent = `Waiting for players ${data.connectedPlayers}/${data.totalPlayers}`;
+      }
       
       // Show --:-- for clock
       const timerEl = document.querySelector('.timer');
@@ -1309,6 +1339,61 @@ and also configure additional buttons for mobile compatibility.
       // Show team selection overlay
       // Received show-team-selection event
       showTeamSelection();
+    }
+    if (data.type === 'hide-team-selection') {
+      // Hide team selection overlay
+      hideTeamSelection();
+    }
+    if (data.type === 'team-auto-balanced') {
+      // Player was auto-balanced to a different team/position
+      showAutoBalanceNotification(data.newTeam, data.newPosition, data.reason);
+      
+      // Update position-specific UI elements based on new position
+      const newPosition = data.newPosition;
+      
+      // Show Body Check button for Defenders
+      if (newPosition === 'DEFENDER1' || newPosition === 'DEFENDER2') {
+        const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+        if (bodyCheckIndicator) {
+          bodyCheckIndicator.style.display = 'flex';
+          bodyCheckIndicator.classList.add('disabled'); // Start disabled until targets available
+        }
+      } else {
+        // Hide Body Check button for Non-Defenders
+        const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
+        if (bodyCheckIndicator) {
+          bodyCheckIndicator.style.display = 'none';
+        }
+      }
+      
+      // Show/Hide position-specific move buttons
+      if (newPosition === 'GOALIE') {
+        // Show Goalie Slide button for Goalies
+        const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
+        if (goalieSlideIndicator) {
+          goalieSlideIndicator.style.display = 'flex';
+          goalieSlideIndicator.classList.add('disabled'); // Start disabled until speed requirement met
+        }
+        
+        // Hide Hockey Stop button for Goalies
+        const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
+        if (hockeyStopIndicator) {
+          hockeyStopIndicator.style.display = 'none';
+        }
+      } else {
+        // Show Hockey Stop button for Non-Goalies
+        const hockeyStopIndicator = document.getElementById('hockey-stop-indicator');
+        if (hockeyStopIndicator) {
+          hockeyStopIndicator.style.display = 'flex';
+          hockeyStopIndicator.classList.add('disabled'); // Start disabled until speed requirement met
+        }
+        
+        // Hide Goalie Slide button for Non-Goalies
+        const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
+        if (goalieSlideIndicator) {
+          goalieSlideIndicator.style.display = 'none';
+        }
+      }
     }
     if (data.type === 'score-update') {
       // Update team scores
@@ -2326,6 +2411,83 @@ and also configure additional buttons for mobile compatibility.
           // Hiding game over overlay
   }
 
+  /**
+   * Show auto-balance notification when player is moved to balance teams
+   */
+  function showAutoBalanceNotification(newTeam, newPosition, reason) {
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = 'auto-balance-notification';
+    notification.innerHTML = `
+      <div class="notification-content">
+        <h3>🏒 Team Auto-Balanced!</h3>
+        <p>You've been moved to <strong>${newTeam} ${newPosition}</strong></p>
+        <p class="reason">${reason || 'Teams have been balanced for fair play'}</p>
+        <button class="notification-close" onclick="this.parentElement.parentElement.remove()">OK</button>
+      </div>
+    `;
+    
+    // Add styles
+    notification.style.cssText = `
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      border: 2px solid #4CAF50;
+      z-index: 10000;
+      text-align: center;
+      font-family: Arial, sans-serif;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    `;
+    
+    // Style the content
+    const style = document.createElement('style');
+    style.textContent = `
+      .auto-balance-notification .notification-content h3 {
+        margin: 0 0 15px 0;
+        color: #4CAF50;
+        font-size: 18px;
+      }
+      .auto-balance-notification .notification-content p {
+        margin: 10px 0;
+        font-size: 14px;
+      }
+      .auto-balance-notification .notification-content .reason {
+        font-style: italic;
+        color: #ccc;
+        font-size: 12px;
+      }
+      .auto-balance-notification .notification-close {
+        background: #4CAF50;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin-top: 15px;
+        font-size: 14px;
+      }
+      .auto-balance-notification .notification-close:hover {
+        background: #45a049;
+      }
+    `;
+    document.head.appendChild(style);
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+      if (notification.parentElement) {
+        notification.remove();
+      }
+    }, 8000);
+  }
+
   function showTeamSelection() {
     // Explicitly exit pointer lock when showing team selection
     // This ensures cursor is unlocked for team selection UI interaction
@@ -2437,6 +2599,35 @@ and also configure additional buttons for mobile compatibility.
     });
     
           // Showing team selection overlay with reset state
+  }
+
+  function hideTeamSelection() {
+    // Hide team selection overlay
+    const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+    if (teamSelectionOverlay) {
+      teamSelectionOverlay.style.display = 'none';
+    }
+    
+    // Clear the periodic pointer unlock interval if it exists
+    if (window.teamSelectionPointerUnlockInterval) {
+      clearInterval(window.teamSelectionPointerUnlockInterval);
+      window.teamSelectionPointerUnlockInterval = null;
+    }
+    
+    // Re-lock pointer for game controls
+    setTimeout(() => {
+      if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+        document.body.requestPointerLock?.();
+      }
+    }, 100);
+    
+    // Show scoreboard back
+    const scoreboard = document.getElementById('scoreboard');
+    if (scoreboard) {
+      scoreboard.style.display = 'flex';
+    }
+    
+          // Hidden team selection overlay
   }
 
   // Enhanced Statistics Scoreboard functionality

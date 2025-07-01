@@ -90,6 +90,7 @@ export enum HockeyGameState {
   LOBBY = 'LOBBY',
   TEAM_SELECTION = 'TEAM_SELECTION',
   WAITING_FOR_PLAYERS = 'WAITING_FOR_PLAYERS',
+  COUNTDOWN_TO_START = 'COUNTDOWN_TO_START',
   MATCH_START = 'MATCH_START',
   IN_PERIOD = 'IN_PERIOD',
   GOAL_SCORED = 'GOAL_SCORED',
@@ -184,6 +185,17 @@ export interface PuckShootData extends UIEventData {
 
 export interface LockInData extends UIEventData {
   type: 'lock-in';
+}
+
+// New UI event types for position switching
+export interface PositionSwitchRequestData extends UIEventData {
+  type: 'position-switch-request';
+  newTeam: HockeyTeam;
+  newPosition: HockeyPosition;
+}
+
+export interface ReopenTeamSelectionData extends UIEventData {
+  type: 'reopen-team-selection';
 }
 
 // Audio management types

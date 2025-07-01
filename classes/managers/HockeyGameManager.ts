@@ -1558,6 +1558,9 @@ export class HockeyGameManager {
       this._periodTimer = undefined;
     }
     
+    // Clear countdown timer for new lobby system
+    this.clearCountdownTimer();
+    
     // Clear offside pause tracking on lobby reset
     this._pausedPeriodTimeMs = null;
     this._offsidePauseStartTime = null;
@@ -1859,6 +1862,216 @@ export class HockeyGameManager {
     return true;
   }
 
+  // NEW: Support position switching for locked-in players in lobby/waiting state
+  public switchPlayerPosition(player: Player, newTeam: HockeyTeam, newPosition: HockeyPosition): boolean {
+    // Only allow position switching during lobby/waiting states
+    if (this._state !== HockeyGameState.LOBBY && 
+        this._state !== HockeyGameState.WAITING_FOR_PLAYERS && 
+        this._state !== HockeyGameState.COUNTDOWN_TO_START) {
+      CONSTANTS.debugLog(`Position switching not allowed in state: ${this._state}`, 'HGM');
+      return false;
+    }
+
+    // Check if position switching is enabled
+    if (!CONSTANTS.LOBBY_CONFIG.ALLOW_POSITION_SWITCHING) {
+      CONSTANTS.debugLog('Position switching is disabled', 'HGM');
+      return false;
+    }
+
+    // Check if player is currently locked in
+    if (!this._lockedInPlayers.has(player.id)) {
+      CONSTANTS.debugLog(`Player ${player.id} is not locked in`, 'HGM');
+      return false;
+    }
+
+    // Check if new position is available
+    if (this._teams[newTeam][newPosition] && 
+        this._lockedInPlayers.has(this._teams[newTeam][newPosition]) && 
+        this._teams[newTeam][newPosition] !== player.id) {
+      CONSTANTS.debugLog(`Position ${newTeam}-${newPosition} already taken by another locked-in player`, 'HGM');
+      return false;
+    }
+
+    // Find current position and remove player from it
+    let currentTeam: HockeyTeam | undefined;
+    let currentPosition: HockeyPosition | undefined;
+    
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const pos of Object.values(HockeyPosition)) {
+        if (this._teams[team][pos] === player.id) {
+          currentTeam = team;
+          currentPosition = pos;
+          this._teams[team][pos] = undefined;
+          break;
+        }
+      }
+      if (currentTeam) break;
+    }
+
+    if (!currentTeam || !currentPosition) {
+      CONSTANTS.debugLog(`Could not find current position for player ${player.id}`, 'HGM');
+      return false;
+    }
+
+    // Assign to new position
+    this._teams[newTeam][newPosition] = player.id;
+    
+    // Update tentative selection
+    this._tentativeSelections.set(player.id, { team: newTeam, position: newPosition });
+    
+    // Update player stats with new team/position
+    // TODO: Implement updatePlayerTeamPosition method in PlayerStatsManager
+    // PlayerStatsManager.instance.updatePlayerTeamPosition(player, newTeam, newPosition)
+    //   .catch((error: any) => {
+    //     console.error('Error updating player stats:', error);
+    //   });
+
+    CONSTANTS.debugLog(`Player ${player.id} switched from ${currentTeam}-${currentPosition} to ${newTeam}-${newPosition}`, 'HGM');
+    return true;
+  }
+
+  // NEW: Allow player to unlock and reselect position
+  public unlockPlayerForReselection(player: Player): boolean {
+    // Only allow unlocking during lobby/waiting states
+    if (this._state !== HockeyGameState.LOBBY && 
+        this._state !== HockeyGameState.WAITING_FOR_PLAYERS && 
+        this._state !== HockeyGameState.COUNTDOWN_TO_START) {
+      return false;
+    }
+
+    // Check if position switching is enabled
+    if (!CONSTANTS.LOBBY_CONFIG.ALLOW_POSITION_SWITCHING) {
+      return false;
+    }
+
+    // Check if player is currently locked in
+    if (!this._lockedInPlayers.has(player.id)) {
+      return false;
+    }
+
+    // Find current position and remove player from it
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const pos of Object.values(HockeyPosition)) {
+        if (this._teams[team][pos] === player.id) {
+          this._teams[team][pos] = undefined;
+          break;
+        }
+      }
+    }
+
+    // Remove from locked-in players
+    this._lockedInPlayers.delete(player.id);
+    
+    // Keep tentative selection but mark as unlocked for UI purposes
+    // This allows them to see their previous selection when reopening team selection
+    
+    CONSTANTS.debugLog(`Player ${player.id} unlocked for reselection`, 'HGM');
+    return true;
+  }
+
+
+
+  // NEW: Start countdown when minimum threshold is reached
+  private _countdownTimer: NodeJS.Timeout | undefined;
+  private _countdownTimeRemaining: number = 0;
+  private _countdownUpdateCallback: (() => void) | null = null;
+  private _playerManagerCallback: ((action: string, data: any) => void) | null = null;
+
+  // NEW: Set callback for countdown updates
+  public setCountdownUpdateCallback(callback: () => void): void {
+    this._countdownUpdateCallback = callback;
+  }
+
+  // Set callback for PlayerManager actions (entity movement, etc.)
+  public setPlayerManagerCallback(callback: (action: string, data: any) => void): void {
+    this._playerManagerCallback = callback;
+  }
+
+  public startMinimumThresholdCountdown(): void {
+    if (this._state !== HockeyGameState.WAITING_FOR_PLAYERS) {
+      return;
+    }
+
+    this._state = HockeyGameState.COUNTDOWN_TO_START;
+    this._countdownTimeRemaining = CONSTANTS.LOBBY_CONFIG.COUNTDOWN_DURATION;
+
+    CONSTANTS.debugLog(`Started minimum threshold countdown: ${this._countdownTimeRemaining}s`, 'HGM');
+
+    // Track if we've already reset to 5 seconds for full lobby (to avoid repeated resets)
+    let hasResetForFullLobby = false;
+
+    // Start countdown timer
+    this._countdownTimer = setInterval(() => {
+      this._countdownTimeRemaining--;
+
+      // Check if lobby is completely full (12/12) and reset countdown to quick start time (once only)
+      if (!hasResetForFullLobby && this.areAllPositionsLockedIn()) {
+        CONSTANTS.debugLog(`Lobby is full (12/12)! Resetting countdown to ${CONSTANTS.LOBBY_CONFIG.FULL_LOBBY_COUNTDOWN} seconds for quick start.`, 'HGM');
+        this._countdownTimeRemaining = CONSTANTS.LOBBY_CONFIG.FULL_LOBBY_COUNTDOWN;
+        hasResetForFullLobby = true; // Prevent repeated resets
+        
+        // Broadcast message to all players about the quick start
+        if (this._world) {
+          this._world.chatManager.sendBroadcastMessage(
+            `Lobby full! Game starting in ${CONSTANTS.LOBBY_CONFIG.FULL_LOBBY_COUNTDOWN} seconds...`,
+            '00FF00'
+          );
+        }
+      }
+
+      // Trigger UI update in PlayerManager using callback
+      if (this._countdownUpdateCallback) {
+        CONSTANTS.debugLog(`Calling countdown update callback, time remaining: ${this._countdownTimeRemaining}s`, 'HGM');
+        this._countdownUpdateCallback();
+      } else {
+        CONSTANTS.debugLog('No countdown update callback set!', 'HGM');
+      }
+
+      // AUTO-BALANCE TEAMS 5 seconds before game starts
+      if (this._countdownTimeRemaining === 5) {
+        CONSTANTS.debugLog('5 seconds remaining - triggering final auto-balance!', 'HGM');
+        this.autoBalanceTeams();
+      }
+
+      // Check if we still meet minimum requirements
+      if (!this.checkMinimumPlayersThreshold()) {
+        this.cancelCountdown();
+        return;
+      }
+
+      // Start game when countdown reaches 0 (using normal game start sequence)
+      if (this._countdownTimeRemaining <= 0) {
+        this.clearCountdownTimer();
+        this.startMatchSequence(); // Restore normal game start with overlays
+      }
+    }, 1000);
+  }
+
+  // NEW: Cancel countdown if requirements are no longer met
+  public cancelCountdown(): void {
+    if (this._state !== HockeyGameState.COUNTDOWN_TO_START) {
+      return;
+    }
+
+    this.clearCountdownTimer();
+    this._state = HockeyGameState.WAITING_FOR_PLAYERS;
+
+    CONSTANTS.debugLog('Minimum threshold countdown cancelled', 'HGM');
+  }
+
+  // NEW: Get countdown time remaining for UI display
+  public getCountdownTimeRemaining(): number {
+    return this._countdownTimeRemaining;
+  }
+
+  // NEW: Clear countdown timer
+  private clearCountdownTimer(): void {
+    if (this._countdownTimer) {
+      clearInterval(this._countdownTimer);
+      this._countdownTimer = undefined;
+    }
+  }
+
   // Check if all positions are filled and all players are locked in
   public areAllPositionsLockedIn(): boolean {
     for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
@@ -1975,4 +2188,360 @@ export class HockeyGameManager {
       CONSTANTS.debugLog(`Save notification broadcasted: ${goalieStats.playerName} -> ${goalieStats.saves} saves`, 'HockeyGameManager');
     }
   }
+
+  /**
+   * Enhanced minimum threshold check that considers total player redistribution
+   * If there are enough total players but poor distribution, it suggests auto-balancing
+   */
+  public checkMinimumPlayersThreshold(): boolean {
+    const lockedInPlayers = Array.from(this._lockedInPlayers);
+    const redTeam = this._teams[HockeyTeam.RED];
+    const blueTeam = this._teams[HockeyTeam.BLUE];
+
+    // Count locked-in players per team
+    const redCount = Object.values(redTeam).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+    const blueCount = Object.values(blueTeam).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+    const totalPlayers = redCount + blueCount;
+
+    // Check if we have enough total players for minimum threshold (6)
+    if (totalPlayers < CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_TOTAL) {
+      return false;
+    }
+
+    // Check goalies specifically
+    const redGoalie = redTeam[HockeyPosition.GOALIE];
+    const blueGoalie = blueTeam[HockeyPosition.GOALIE];
+    const redGoalieLocked = redGoalie && lockedInPlayers.includes(redGoalie);
+    const blueGoalieLocked = blueGoalie && lockedInPlayers.includes(blueGoalie);
+
+    // ENHANCED LOGIC: If we have enough total players but uneven distribution, auto-balance first
+    if (totalPlayers >= CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_TOTAL) {
+      // Case 1: Both teams have goalies - standard check
+      if (redGoalieLocked && blueGoalieLocked) {
+        const minPerTeam = CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM;
+        return redCount >= minPerTeam && blueCount >= minPerTeam;
+      }
+      
+      // Case 2: Only one team has a goalie but we have enough total players for redistribution
+      if ((redGoalieLocked || blueGoalieLocked) && totalPlayers >= 6) {
+        CONSTANTS.debugLog(`Enhanced threshold: Total players=${totalPlayers}, one goalie available, can redistribute`, 'HockeyGameManager');
+        return true; // Auto-balancing will fix the distribution
+      }
+      
+      // Case 3: No goalies but enough players - someone can be reassigned to goalie
+      if (!redGoalieLocked && !blueGoalieLocked && totalPlayers >= 6) {
+        CONSTANTS.debugLog(`Enhanced threshold: Total players=${totalPlayers}, no goalies but enough for redistribution`, 'HockeyGameManager');
+        return true; // Auto-balancing will assign goalies
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Enhanced auto-balance that handles goalie assignment and team distribution
+   */
+  public autoBalanceTeams(): void {
+    if (!CONSTANTS.LOBBY_CONFIG.AUTO_BALANCE_ENABLED) {
+      CONSTANTS.debugLog('Auto-balancing disabled in config', 'HockeyGameManager');
+      return;
+    }
+
+    const lockedInPlayers = Array.from(this._lockedInPlayers);
+    const redTeam = this._teams[HockeyTeam.RED];
+    const blueTeam = this._teams[HockeyTeam.BLUE];
+
+    // Count locked-in players per team
+    const redCount = Object.values(redTeam).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+    const blueCount = Object.values(blueTeam).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+    const totalPlayers = redCount + blueCount;
+
+    CONSTANTS.debugLog(`Enhanced auto-balance: RED=${redCount}, BLUE=${blueCount}, Total=${totalPlayers}`, 'HockeyGameManager');
+
+    // Step 1: Ensure both teams have mandatory positions FIRST (Goalie + Center are critical)
+    this.ensureMandatoryPositions(lockedInPlayers);
+
+    // Step 2: Balance remaining team sizes (after mandatory positions are secured)
+    this.balanceTeamSizes(lockedInPlayers);
+
+    // Broadcast updated positions to all players
+    this.broadcastTeamPositionsUpdate();
+    
+    CONSTANTS.debugLog('Auto-balancing completed', 'HockeyGameManager');
+  }
+
+  /**
+   * Ensure both teams have mandatory positions: Goalie and Center
+   */
+  private ensureMandatoryPositions(lockedInPlayers: string[]): void {
+    // Ensure both teams have goalies
+    this.ensurePosition(HockeyPosition.GOALIE, lockedInPlayers);
+    
+    // Ensure both teams have centers  
+    this.ensurePosition(HockeyPosition.CENTER, lockedInPlayers);
+  }
+
+  /**
+   * Ensure both teams have a specific position, reassigning if necessary
+   */
+  private ensurePosition(position: HockeyPosition, lockedInPlayers: string[]): void {
+    const redHasPosition = this._teams[HockeyTeam.RED][position] && 
+                          lockedInPlayers.includes(this._teams[HockeyTeam.RED][position]);
+    const blueHasPosition = this._teams[HockeyTeam.BLUE][position] && 
+                           lockedInPlayers.includes(this._teams[HockeyTeam.BLUE][position]);
+
+    CONSTANTS.debugLog(`Position ${position}: RED=${redHasPosition}, BLUE=${blueHasPosition}`, 'HockeyGameManager');
+
+    // If both teams have the position, we're good
+    if (redHasPosition && blueHasPosition) {
+      return;
+    }
+
+    // IMPORTANT: Don't move players who are already locked into required positions
+    // If a player chose CENTER or GOALIE, respect their choice during auto-balance
+    if ((position === HockeyPosition.CENTER || position === HockeyPosition.GOALIE)) {
+      CONSTANTS.debugLog(`Ensuring mandatory ${position} positions during auto-balance`, 'HockeyGameManager');
+      
+      // Assign missing positions - teams need BOTH goalie AND center
+      if (!redHasPosition) {
+        this.assignPositionToTeam(HockeyTeam.RED, position, lockedInPlayers);
+      }
+      if (!blueHasPosition) {
+        this.assignPositionToTeam(HockeyTeam.BLUE, position, lockedInPlayers);
+      }
+      return;
+    }
+
+    // For non-required positions, assign as normal
+    if (!redHasPosition) {
+      this.assignPositionToTeam(HockeyTeam.RED, position, lockedInPlayers);
+    }
+    if (!blueHasPosition) {
+      this.assignPositionToTeam(HockeyTeam.BLUE, position, lockedInPlayers);
+    }
+  }
+
+
+
+  /**
+   * Assign a specific position to a team from available players
+   */
+  private assignPositionToTeam(team: HockeyTeam, position: HockeyPosition, lockedInPlayers: string[]): void {
+    // First try to find a player on the same team to reassign
+    const teamPositions = this._teams[team];
+    for (const [currentPos, playerId] of Object.entries(teamPositions)) {
+      if (currentPos !== position && playerId && lockedInPlayers.includes(playerId)) {
+        // Move this player to the needed position
+        teamPositions[currentPos as HockeyPosition] = undefined;
+        teamPositions[position] = playerId;
+        
+        this.notifyPlayerOfMove(playerId, team, position, `Assigned as ${team} ${position} for team balance`);
+        CONSTANTS.debugLog(`Assigned ${playerId} as ${team} ${position} from ${currentPos}`, 'HockeyGameManager');
+        return;
+      }
+    }
+
+    // If no players on same team, try to move one from the other team
+    const otherTeam = team === HockeyTeam.RED ? HockeyTeam.BLUE : HockeyTeam.RED;
+    const otherTeamPositions = this._teams[otherTeam];
+    
+    // Prefer non-mandatory positions for reassignment
+    const reassignmentPriority = [
+      HockeyPosition.WINGER1, HockeyPosition.WINGER2, 
+      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2,
+      HockeyPosition.CENTER, HockeyPosition.GOALIE  // Last resort
+    ];
+
+    for (const candidatePos of reassignmentPriority) {
+      const playerId = otherTeamPositions[candidatePos];
+      if (playerId && lockedInPlayers.includes(playerId)) {
+        // Move this player to the target team and position
+        otherTeamPositions[candidatePos] = undefined;
+        teamPositions[position] = playerId;
+        
+        this.notifyPlayerOfMove(playerId, team, position, `Moved to ${team} ${position} for team balance`);
+        CONSTANTS.debugLog(`Moved ${playerId} from ${otherTeam}-${candidatePos} to ${team}-${position}`, 'HockeyGameManager');
+        return;
+      }
+    }
+  }
+
+  /**
+   * Balance team sizes to ensure fair distribution
+   */
+  private balanceTeamSizes(lockedInPlayers: string[]): void {
+    let redCount = Object.values(this._teams[HockeyTeam.RED]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+    let blueCount = Object.values(this._teams[HockeyTeam.BLUE]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+    
+    CONSTANTS.debugLog(`Team sizes before balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
+
+    // Calculate target team sizes
+    const totalPlayers = redCount + blueCount;
+    const targetPerTeam = Math.floor(totalPlayers / 2);
+    
+    // Balance teams to target size
+    while (Math.abs(redCount - blueCount) > 1) {
+      const overpopulatedTeam = redCount > blueCount ? HockeyTeam.RED : HockeyTeam.BLUE;
+      const underpopulatedTeam = overpopulatedTeam === HockeyTeam.RED ? HockeyTeam.BLUE : HockeyTeam.RED;
+      
+      // Find a player to move (prefer non-mandatory positions)
+      const playerToMove = this.findPlayerToMove(overpopulatedTeam, lockedInPlayers);
+      
+      if (playerToMove) {
+        const { position: oldPosition, playerId } = playerToMove;
+        const newPosition = this.findAvailablePosition(underpopulatedTeam, oldPosition);
+        
+        if (newPosition) {
+          // Move the player
+          this._teams[overpopulatedTeam][oldPosition] = undefined;
+          this._teams[underpopulatedTeam][newPosition] = playerId;
+          
+          this.notifyPlayerOfMove(playerId, underpopulatedTeam, newPosition, 'Auto-balanced for fair teams');
+          CONSTANTS.debugLog(`Balanced: Moved ${playerId} from ${overpopulatedTeam}-${oldPosition} to ${underpopulatedTeam}-${newPosition}`, 'HockeyGameManager');
+          
+          // Update counts
+          redCount = Object.values(this._teams[HockeyTeam.RED]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+          blueCount = Object.values(this._teams[HockeyTeam.BLUE]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
+        } else {
+          break; // No available positions
+        }
+      } else {
+        break; // No players to move
+      }
+    }
+
+    CONSTANTS.debugLog(`Team sizes after balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
+  }
+
+  /**
+   * Find a player to move from overpopulated team (prefer non-mandatory positions)
+   */
+  private findPlayerToMove(team: HockeyTeam, lockedInPlayers: string[]): { position: HockeyPosition, playerId: string } | null {
+    const teamPositions = this._teams[team];
+    
+    // Priority: move non-mandatory positions first
+    const movePriority = [
+      HockeyPosition.WINGER1, HockeyPosition.WINGER2,
+      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2,
+      HockeyPosition.CENTER, HockeyPosition.GOALIE  // Last resort
+    ];
+
+    for (const position of movePriority) {
+      const playerId = teamPositions[position];
+      if (playerId && lockedInPlayers.includes(playerId)) {
+        return { position, playerId };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Notify player of position change and update their entity
+   */
+  private notifyPlayerOfMove(playerId: string, newTeam: HockeyTeam, newPosition: HockeyPosition, reason: string): void {
+    const player = this._playerIdToPlayer.get(playerId);
+    if (player) {
+      try {
+        // Update player entity position and cosmetics FIRST
+        this.movePlayerToNewPosition(player, newTeam, newPosition);
+        
+        // Send UI notification AFTER entity recreation with delay to ensure everything is set up
+        setTimeout(() => {
+          try {
+            player.ui.sendData({
+              type: 'team-auto-balanced',
+              newTeam: newTeam,
+              newPosition: newPosition,
+              reason: reason
+            });
+          } catch (error) {
+            CONSTANTS.debugError('Failed to send auto-balance notification', error, 'HockeyGameManager');
+          }
+        }, 300); // Small delay to ensure entity recreation and UI setup is complete
+        
+      } catch (error) {
+        CONSTANTS.debugError('Failed to notify player of auto-balance', error, 'HockeyGameManager');
+      }
+    }
+  }
+
+  /**
+   * Move player entity to new team position and update cosmetics
+   */
+  private movePlayerToNewPosition(player: any, newTeam: HockeyTeam, newPosition: HockeyPosition): void {
+    try {
+      // Get PlayerManager instance through callback
+      if (this._playerManagerCallback) {
+        this._playerManagerCallback('movePlayerToNewPosition', {
+          player: player,
+          newTeam: newTeam,
+          newPosition: newPosition
+        });
+      } else {
+        CONSTANTS.debugError('No PlayerManager callback available for entity movement', null, 'HockeyGameManager');
+      }
+    } catch (error) {
+      CONSTANTS.debugError('Failed to move player to new position', error, 'HockeyGameManager');
+    }
+  }
+
+  /**
+   * Find an available position on the specified team, preferring similar position types
+   */
+  private findAvailablePosition(team: HockeyTeam, preferredPosition: HockeyPosition): HockeyPosition | null {
+    const teamPositions = this._teams[team];
+    
+    // First try the exact same position
+    if (!teamPositions[preferredPosition]) {
+      return preferredPosition;
+    }
+
+    // Try positions of the same type (forward->forward, defender->defender)
+    const positionGroups = {
+      forwards: [HockeyPosition.WINGER1, HockeyPosition.WINGER2, HockeyPosition.CENTER],
+      defenders: [HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2]
+    };
+
+    let preferredGroup: HockeyPosition[] = [];
+    if (positionGroups.forwards.includes(preferredPosition)) {
+      preferredGroup = positionGroups.forwards;
+    } else if (positionGroups.defenders.includes(preferredPosition)) {
+      preferredGroup = positionGroups.defenders;
+    }
+
+    // Try positions in preferred group
+    for (const pos of preferredGroup) {
+      if (!teamPositions[pos]) {
+        return pos;
+      }
+    }
+
+    // Fall back to any available position (excluding goalie)
+    const allPositions = [
+      HockeyPosition.WINGER1, HockeyPosition.WINGER2, HockeyPosition.CENTER,
+      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2
+    ];
+
+    for (const pos of allPositions) {
+      if (!teamPositions[pos as HockeyPosition]) {
+        return pos;
+      }
+    }
+
+    return null; // No available positions
+  }
+
+  /**
+   * Broadcast team positions update to all connected players
+   */
+  private broadcastTeamPositionsUpdate(): void {
+    const teamsWithNames = this.getTeamsWithNamesForUI();
+    this.broadcastToAllPlayers({
+      type: 'team-positions-update',
+      teams: teamsWithNames
+    });
+    CONSTANTS.debugLog('Broadcasted team positions update after auto-balance', 'HockeyGameManager');
+  }
+
 } 

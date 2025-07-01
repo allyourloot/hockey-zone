@@ -7,16 +7,16 @@
     "saves": 0,
     "wins": 1,
     "losses": 0,
-    "gamesPlayed": 1,
+    "gamesPlayed": 3,
     "shotsOnGoal": 4,
     "shotsBlocked": 0,
     "hits": 2,
     "penaltyMinutes": 0,
-    "winRate": 100,
-    "pointsPerGame": 3,
+    "winRate": 33.33333333333333,
+    "pointsPerGame": 1,
     "savesPerGame": 0,
     "firstGameDate": 1751320486994,
     "lastGameDate": 1751320486994,
-    "lastUpdated": 1751321008580
+    "lastUpdated": 1751338298321
   }
 }

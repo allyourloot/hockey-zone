@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
@@ -447,6 +447,20 @@ export const SPAWN_POSITIONS = {
   PLAYER_DEFAULT: { x: 0, y: 10, z: 0 },
   RED_GOAL: { x: 0, y: 2, z: -32 },
   BLUE_GOAL: { x: 0, y: 2, z: 32 },
+} as const;
+
+// =========================
+// LOBBY CONFIGURATION CONSTANTS (NEW)
+// =========================
+export const LOBBY_CONFIG = {
+  MINIMUM_PLAYERS_TOTAL: 6,        // 3v3 minimum
+  MINIMUM_PLAYERS_PER_TEAM: 3,     // At least 3 per team
+  REQUIRED_GOALIES: 1,             // Each team must have 1 goalie
+  COUNTDOWN_DURATION: 60,          // 60 seconds when minimum reached
+  FULL_LOBBY_COUNTDOWN: 5,         // 5 seconds when lobby is completely full (12/12)
+  MAX_PLAYERS_TOTAL: 12,           // 6v6 maximum
+  AUTO_BALANCE_ENABLED: true,      // Enable auto-balancing
+  ALLOW_POSITION_SWITCHING: true   // Allow position changes in lobby
 } as const;
 
 // =========================
