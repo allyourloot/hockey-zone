@@ -9119,4 +9119,66 @@ k
     }
     
   }
+
+  /* Mobile Touch Scrolling Fixes */
+  /* Override HYTOPIA SDK's disabled touch actions for scrollable elements */
+  
+  /* Live Stats - Enable vertical scrolling for all child elements */
+  body.mobile .live-stats-content * {
+    touch-action: pan-y !important;
+    -webkit-user-drag: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Controls overlay - Enable vertical scrolling for all child elements */
+  body.mobile .controls-content * {
+    touch-action: pan-y !important;
+    -webkit-user-drag: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Leaderboard table - Enable horizontal scrolling for all child elements */
+  body.mobile .leaderboard-table * {
+    touch-action: pan-x !important;
+    -webkit-user-drag: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Top 100 table - Enable horizontal scrolling for all child elements */
+  body.mobile .top100-table * {
+    touch-action: pan-x !important;
+    -webkit-user-drag: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Ensure table containers themselves can scroll horizontally */
+  body.mobile .leaderboard-table,
+  body.mobile .top100-table {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    touch-action: pan-x !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Remove separate scrolling from table bodies on mobile */
+  body.mobile .leaderboard-table-body,
+  body.mobile .top100-table-body {
+    overflow-y: visible !important;
+    overflow-x: visible !important;
+  }
+
+  /* Enable vertical scrolling for stats content containers */
+  body.mobile .live-stats-content {
+    overflow-y: auto !important;
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* Enable vertical scrolling for controls content */
+  body.mobile .controls-content {
+    overflow-y: auto !important;
+    touch-action: pan-y !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
 </style>
