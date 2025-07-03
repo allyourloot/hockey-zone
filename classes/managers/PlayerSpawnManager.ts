@@ -37,15 +37,15 @@ export class PlayerSpawnManager {
         yaw: Math.PI 
       },
       [HockeyPosition.WINGER1]: { 
-        position: { x: 10.11, y: 1.75, z: -0.30 }, 
+        position: { x: 10.11, y: 1.75, z: 0.24 }, 
         yaw: Math.PI 
       },
       [HockeyPosition.WINGER2]: { 
-        position: { x: -10.11, y: 1.75, z: -0.30 }, 
+        position: { x: -10.11, y: 1.75, z: 0.24 }, 
         yaw: Math.PI 
       },
       [HockeyPosition.CENTER]: { 
-        position: { x: 0.05, y: 1.75, z: -1.30 }, 
+        position: { x: 0.05, y: 1.75, z: -0.50 }, 
         yaw: Math.PI 
       }
     },
@@ -55,11 +55,11 @@ export class PlayerSpawnManager {
         yaw: 0 // Face towards negative Z (Red goal)
       },
       [HockeyPosition.DEFENDER1]: { 
-        position: { x: -10.11, y: 1.75, z: 8 }, 
+        position: { x: -10.11, y: 1.75, z: 8.7 }, 
         yaw: 0 
       },
       [HockeyPosition.DEFENDER2]: { 
-        position: { x: 10.11, y: 1.75, z: 8 }, 
+        position: { x: 10.11, y: 1.75, z: 8.7 }, 
         yaw: 0 
       },
       [HockeyPosition.WINGER1]: { 
@@ -71,7 +71,7 @@ export class PlayerSpawnManager {
         yaw: 0 
       },
       [HockeyPosition.CENTER]: { 
-        position: { x: 0.05, y: 1.75, z: 3.30 }, 
+        position: { x: 0.05, y: 1.75, z: 2.50 }, 
         yaw: 0 
       }
     }
