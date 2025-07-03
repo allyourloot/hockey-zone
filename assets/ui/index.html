@@ -8868,28 +8868,51 @@ k
 
     /* Scoreboard mobile adjustments */
     .scoreboard {
-      padding: 4px 20px;
+      padding: 6px 18px;
       font-size: 0.8rem;
       z-index: 150; /* Lower than team selection overlay (200) but higher than default */
+      gap: 12px; /* Reduce gap between elements */
+      height: auto; /* Let height adjust to content */
+      min-height: 36px; /* Smaller minimum height */
+    }
+    
+    .scoreboard .teams {
+      gap: 8px; /* Much smaller gap between teams */
+    }
+    
+    .scoreboard .team {
+      min-width: 60px; /* Much smaller minimum width */
+      gap: 10px; /* Smaller gap between team name and score */
     }
     
     .scoreboard .team-name {
-      font-size: 0.8rem !important;
+      font-size: 0.75rem !important;
       margin-top: 10px !important;
+      line-height: 0 !important;
+      white-space: nowrap;
     }
     
     .scoreboard .team-score {
-      font-size: 1.3rem !important;
+      font-size: 1.1rem !important;
+      line-height: 1.2 !important;
+    }
+    
+    .timer-section {
+      padding: 0 12px; /* Reduce timer section padding */
+      border-left: 1px solid rgba(255,255,255,0.2);
+      border-right: 1px solid rgba(255,255,255,0.2);
     }
     
     .scoreboard .period {
-      font-size: 0.7rem;
+      font-size: 0.5rem;
       white-space: nowrap !important;
+      margin-top: 0;
     }
     
     .scoreboard .timer {
-      font-size: 1.2rem;
+      font-size: 1rem;
       white-space: nowrap !important;
+      line-height: 1.1;
     }
     
     /* Prevent waiting text from wrapping and fix alignment */
@@ -9106,8 +9129,68 @@ k
     }
     
     .scoreboard {
-      padding: 2px 8px;
-      font-size: 0.7rem;
+      padding: 4px 8px;
+      font-size: 0.65rem;
+      gap: 8px; /* Even smaller gap for very small screens */
+      min-height: 32px; /* Very compact height */
+    }
+    
+    .scoreboard .teams {
+      gap: 6px; /* Very small gap between teams */
+    }
+    
+    .scoreboard .team {
+      min-width: 50px; /* Very small minimum width */
+      gap: 4px; /* Tiny gap between team name and score */
+    }
+    
+    .scoreboard .team-name {
+      font-size: 0.65rem !important;
+      line-height: 1.1 !important;
+    }
+    
+    .scoreboard .team-score {
+      font-size: 1rem !important;
+      line-height: 1.1 !important;
+    }
+    
+    .timer-section {
+      padding: 0 8px; /* Very compact timer section */
+    }
+    
+    .scoreboard .period {
+      font-size: 0.55rem;
+      line-height: 1.1;
+    }
+    
+    .scoreboard .timer {
+      font-size: 0.9rem;
+      line-height: 1.1;
+    }
+    
+  }
+
+  /* Additional Mobile Scoreboard Optimizations */
+  @media (max-width: 768px) {
+    /* Compact scoreboard for all mobile devices */
+    .scoreboard {
+      padding: 6px 10px !important;
+      gap: 10px !important;
+      min-height: 34px !important;
+      top: 16px !important; /* Move closer to top */
+    }
+    
+    .scoreboard .teams {
+      gap: 6px !important;
+    }
+    
+    .scoreboard .team {
+      min-width: 55px !important;
+      gap: 5px !important;
+    }
+    
+    .timer-section {
+      padding: 0 10px !important;
     }
     
     .scoreboard .team-name {
@@ -9115,9 +9198,16 @@ k
     }
     
     .scoreboard .team-score {
-      font-size: 1.2rem;
+      font-size: 1rem !important;
     }
     
+    .scoreboard .period {
+      font-size: 0.6rem !important;
+    }
+    
+    .scoreboard .timer {
+      font-size: 0.95rem !important;
+    }
   }
 
   /* Mobile Touch Scrolling Fixes */
