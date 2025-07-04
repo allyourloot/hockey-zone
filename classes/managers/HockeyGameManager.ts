@@ -2021,9 +2021,39 @@ export class HockeyGameManager {
       if (this._countdownTimeRemaining === 5) {
         debugLog('5 seconds remaining - triggering final auto-balance!', 'HGM');
         this.autoBalanceTeams();
+        
+        // After auto-balancing, check if teams are properly balanced
+        if (!this.checkMinimumPlayersThreshold()) {
+          debugLog('Teams not properly balanced after auto-balancing, restarting countdown with 10 seconds', 'HGM');
+          this.clearCountdownTimer();
+          this._countdownTimeRemaining = 10; // Give 10 seconds for another attempt
+          
+          // Restart countdown timer
+          this._countdownTimer = setInterval(() => {
+            this._countdownTimeRemaining--;
+            
+            if (this._countdownUpdateCallback) {
+              this._countdownUpdateCallback();
+            }
+            
+            // Final check - if still not balanced, cancel completely
+            if (!this.checkMinimumPlayersThreshold()) {
+              this.cancelCountdown();
+              return;
+            }
+            
+            // Start game when countdown reaches 0
+            if (this._countdownTimeRemaining <= 0) {
+              this.clearCountdownTimer();
+              this.startMatchSequence();
+            }
+          }, 1000);
+          
+          return; // Exit the current countdown loop
+        }
       }
 
-      // Check if we still meet minimum requirements
+      // Check if we still meet minimum requirements (only if not in auto-balance retry)
       if (!this.checkMinimumPlayersThreshold()) {
         this.cancelCountdown();
         return;
@@ -2213,13 +2243,13 @@ export class HockeyGameManager {
       }
       
       // Case 2: Only one team has a goalie but we have enough total players for redistribution
-      if ((redGoalieLocked || blueGoalieLocked) && totalPlayers >= 6) {
+      if ((redGoalieLocked || blueGoalieLocked) && totalPlayers >= CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_TOTAL) {
         debugLog(`Enhanced threshold: Total players=${totalPlayers}, one goalie available, can redistribute`, 'HockeyGameManager');
         return true; // Auto-balancing will fix the distribution
       }
       
       // Case 3: No goalies but enough players - someone can be reassigned to goalie
-      if (!redGoalieLocked && !blueGoalieLocked && totalPlayers >= 6) {
+      if (!redGoalieLocked && !blueGoalieLocked && totalPlayers >= CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_TOTAL) {
         debugLog(`Enhanced threshold: Total players=${totalPlayers}, no goalies but enough for redistribution`, 'HockeyGameManager');
         return true; // Auto-balancing will assign goalies
       }
@@ -2248,11 +2278,11 @@ export class HockeyGameManager {
 
     debugLog(`Enhanced auto-balance: RED=${redCount}, BLUE=${blueCount}, Total=${totalPlayers}`, 'HockeyGameManager');
 
-    // Step 1: Ensure both teams have mandatory positions FIRST (Goalie + Center are critical)
-    this.ensureMandatoryPositions(lockedInPlayers);
-
-    // Step 2: Balance remaining team sizes (after mandatory positions are secured)
-    this.balanceTeamSizes(lockedInPlayers);
+    // Step 1: Analyze what's missing and create a plan
+    const balancePlan = this.createBalancePlan(lockedInPlayers);
+    
+    // Step 2: Execute the plan in one pass (no multiple moves)
+    this.executeBalancePlan(balancePlan, lockedInPlayers);
 
     // Broadcast updated positions to all players
     this.broadcastTeamPositionsUpdate();
@@ -2261,168 +2291,255 @@ export class HockeyGameManager {
   }
 
   /**
-   * Ensure both teams have mandatory positions: Goalie and Center
+   * Create a comprehensive balance plan that ensures both teams have required positions
    */
-  private ensureMandatoryPositions(lockedInPlayers: string[]): void {
-    // Ensure both teams have goalies
-    this.ensurePosition(HockeyPosition.GOALIE, lockedInPlayers);
+  private createBalancePlan(lockedInPlayers: string[]): Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}> {
+    const moves: Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}> = [];
     
-    // Ensure both teams have centers  
-    this.ensurePosition(HockeyPosition.CENTER, lockedInPlayers);
-  }
+    // Check what each team has
+    const redGoalie = this._teams[HockeyTeam.RED][HockeyPosition.GOALIE] && 
+                     lockedInPlayers.includes(this._teams[HockeyTeam.RED][HockeyPosition.GOALIE]);
+    const blueGoalie = this._teams[HockeyTeam.BLUE][HockeyPosition.GOALIE] && 
+                      lockedInPlayers.includes(this._teams[HockeyTeam.BLUE][HockeyPosition.GOALIE]);
+    const redCenter = this._teams[HockeyTeam.RED][HockeyPosition.CENTER] && 
+                     lockedInPlayers.includes(this._teams[HockeyTeam.RED][HockeyPosition.CENTER]);
+    const blueCenter = this._teams[HockeyTeam.BLUE][HockeyPosition.CENTER] && 
+                      lockedInPlayers.includes(this._teams[HockeyTeam.BLUE][HockeyPosition.CENTER]);
 
-  /**
-   * Ensure both teams have a specific position, reassigning if necessary
-   */
-  private ensurePosition(position: HockeyPosition, lockedInPlayers: string[]): void {
-    const redHasPosition = this._teams[HockeyTeam.RED][position] && 
-                          lockedInPlayers.includes(this._teams[HockeyTeam.RED][position]);
-    const blueHasPosition = this._teams[HockeyTeam.BLUE][position] && 
-                           lockedInPlayers.includes(this._teams[HockeyTeam.BLUE][position]);
+    debugLog(`Current mandatory positions - RED: GOALIE=${redGoalie}, CENTER=${redCenter} | BLUE: GOALIE=${blueGoalie}, CENTER=${blueCenter}`, 'HockeyGameManager');
 
-    debugLog(`Position ${position}: RED=${redHasPosition}, BLUE=${blueHasPosition}`, 'HockeyGameManager');
-
-    // If both teams have the position, we're good
-    if (redHasPosition && blueHasPosition) {
-      return;
-    }
-
-    // IMPORTANT: Don't move players who are already locked into required positions
-    // If a player chose CENTER or GOALIE, respect their choice during auto-balance
-    if ((position === HockeyPosition.CENTER || position === HockeyPosition.GOALIE)) {
-      debugLog(`Ensuring mandatory ${position} positions during auto-balance`, 'HockeyGameManager');
-      
-      // Assign missing positions - teams need BOTH goalie AND center
-      if (!redHasPosition) {
-        this.assignPositionToTeam(HockeyTeam.RED, position, lockedInPlayers);
-      }
-      if (!blueHasPosition) {
-        this.assignPositionToTeam(HockeyTeam.BLUE, position, lockedInPlayers);
-      }
-      return;
-    }
-
-    // For non-required positions, assign as normal
-    if (!redHasPosition) {
-      this.assignPositionToTeam(HockeyTeam.RED, position, lockedInPlayers);
-    }
-    if (!blueHasPosition) {
-      this.assignPositionToTeam(HockeyTeam.BLUE, position, lockedInPlayers);
-    }
-  }
-
-
-
-  /**
-   * Assign a specific position to a team from available players
-   */
-  private assignPositionToTeam(team: HockeyTeam, position: HockeyPosition, lockedInPlayers: string[]): void {
-    // First try to find a player on the same team to reassign
-    const teamPositions = this._teams[team];
-    for (const [currentPos, playerId] of Object.entries(teamPositions)) {
-      if (currentPos !== position && playerId && lockedInPlayers.includes(playerId)) {
-        // Move this player to the needed position
-        teamPositions[currentPos as HockeyPosition] = undefined;
-        teamPositions[position] = playerId;
-        
-        this.notifyPlayerOfMove(playerId, team, position, `Assigned as ${team} ${position} for team balance`);
-        debugLog(`Assigned ${playerId} as ${team} ${position} from ${currentPos}`, 'HockeyGameManager');
-        return;
-      }
-    }
-
-    // If no players on same team, try to move one from the other team
-    const otherTeam = team === HockeyTeam.RED ? HockeyTeam.BLUE : HockeyTeam.RED;
-    const otherTeamPositions = this._teams[otherTeam];
-    
-    // Prefer non-mandatory positions for reassignment
-    const reassignmentPriority = [
-      HockeyPosition.WINGER1, HockeyPosition.WINGER2, 
-      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2,
-      HockeyPosition.CENTER, HockeyPosition.GOALIE  // Last resort
-    ];
-
-    for (const candidatePos of reassignmentPriority) {
-      const playerId = otherTeamPositions[candidatePos];
-      if (playerId && lockedInPlayers.includes(playerId)) {
-        // Move this player to the target team and position
-        otherTeamPositions[candidatePos] = undefined;
-        teamPositions[position] = playerId;
-        
-        this.notifyPlayerOfMove(playerId, team, position, `Moved to ${team} ${position} for team balance`);
-        debugLog(`Moved ${playerId} from ${otherTeam}-${candidatePos} to ${team}-${position}`, 'HockeyGameManager');
-        return;
-      }
-    }
-  }
-
-  /**
-   * Balance team sizes to ensure fair distribution
-   */
-  private balanceTeamSizes(lockedInPlayers: string[]): void {
-    let redCount = Object.values(this._teams[HockeyTeam.RED]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
-    let blueCount = Object.values(this._teams[HockeyTeam.BLUE]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
-    
-    debugLog(`Team sizes before balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
-
-    // Calculate target team sizes
-    const totalPlayers = redCount + blueCount;
-    const targetPerTeam = Math.floor(totalPlayers / 2);
-    
-    // Balance teams to target size
-    while (Math.abs(redCount - blueCount) > 1) {
-      const overpopulatedTeam = redCount > blueCount ? HockeyTeam.RED : HockeyTeam.BLUE;
-      const underpopulatedTeam = overpopulatedTeam === HockeyTeam.RED ? HockeyTeam.BLUE : HockeyTeam.RED;
-      
-      // Find a player to move (prefer non-mandatory positions)
-      const playerToMove = this.findPlayerToMove(overpopulatedTeam, lockedInPlayers);
-      
-      if (playerToMove) {
-        const { position: oldPosition, playerId } = playerToMove;
-        const newPosition = this.findAvailablePosition(underpopulatedTeam, oldPosition);
-        
-        if (newPosition) {
-          // Move the player
-          this._teams[overpopulatedTeam][oldPosition] = undefined;
-          this._teams[underpopulatedTeam][newPosition] = playerId;
-          
-          this.notifyPlayerOfMove(playerId, underpopulatedTeam, newPosition, 'Auto-balanced for fair teams');
-          debugLog(`Balanced: Moved ${playerId} from ${overpopulatedTeam}-${oldPosition} to ${underpopulatedTeam}-${newPosition}`, 'HockeyGameManager');
-          
-          // Update counts
-          redCount = Object.values(this._teams[HockeyTeam.RED]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
-          blueCount = Object.values(this._teams[HockeyTeam.BLUE]).filter(playerId => playerId && lockedInPlayers.includes(playerId)).length;
-        } else {
-          break; // No available positions
-        }
-      } else {
-        break; // No players to move
-      }
-    }
-
-    debugLog(`Team sizes after balancing: RED=${redCount}, BLUE=${blueCount}`, 'HockeyGameManager');
-  }
-
-  /**
-   * Find a player to move from overpopulated team (prefer non-mandatory positions)
-   */
-  private findPlayerToMove(team: HockeyTeam, lockedInPlayers: string[]): { position: HockeyPosition, playerId: string } | null {
-    const teamPositions = this._teams[team];
-    
-    // Priority: move non-mandatory positions first
+    // Priority order for finding players to move (non-mandatory positions first)
     const movePriority = [
       HockeyPosition.WINGER1, HockeyPosition.WINGER2,
-      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2,
-      HockeyPosition.CENTER, HockeyPosition.GOALIE  // Last resort
+      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2
+      // Never move CENTER or GOALIE unless absolutely necessary
     ];
 
-    for (const position of movePriority) {
-      const playerId = teamPositions[position];
-      if (playerId && lockedInPlayers.includes(playerId)) {
-        return { position, playerId };
+    // Phase 1: Ensure both teams have GOALIE (highest priority)
+    if (!redGoalie && !blueGoalie) {
+      // Neither team has goalie - assign one to each team from available players
+      const availablePlayers = this.findAvailablePlayersForMove(movePriority, lockedInPlayers);
+      if (availablePlayers.length >= 2) {
+        moves.push({
+          from: availablePlayers[0].team,
+          fromPos: availablePlayers[0].position,
+          to: HockeyTeam.RED,
+          toPos: HockeyPosition.GOALIE,
+          playerId: availablePlayers[0].playerId,
+          reason: 'Assigned as RED GOALIE for required position'
+        });
+        moves.push({
+          from: availablePlayers[1].team,
+          fromPos: availablePlayers[1].position,
+          to: HockeyTeam.BLUE,
+          toPos: HockeyPosition.GOALIE,
+          playerId: availablePlayers[1].playerId,
+          reason: 'Assigned as BLUE GOALIE for required position'
+        });
+      }
+    } else if (!redGoalie) {
+      // RED needs goalie
+      const player = this.findBestPlayerToMove([HockeyTeam.BLUE], movePriority, lockedInPlayers);
+      if (player) {
+        moves.push({
+          from: player.team,
+          fromPos: player.position,
+          to: HockeyTeam.RED,
+          toPos: HockeyPosition.GOALIE,
+          playerId: player.playerId,
+          reason: 'Moved to RED GOALIE for required position'
+        });
+      }
+    } else if (!blueGoalie) {
+      // BLUE needs goalie
+      const player = this.findBestPlayerToMove([HockeyTeam.RED], movePriority, lockedInPlayers);
+      if (player) {
+        moves.push({
+          from: player.team,
+          fromPos: player.position,
+          to: HockeyTeam.BLUE,
+          toPos: HockeyPosition.GOALIE,
+          playerId: player.playerId,
+          reason: 'Moved to BLUE GOALIE for required position'
+        });
       }
     }
 
+    // Phase 2: Ensure both teams have CENTER (after accounting for goalie moves)
+    const redCenterAfterMoves = redCenter || moves.some(m => m.to === HockeyTeam.RED && m.toPos === HockeyPosition.CENTER);
+    const blueCenterAfterMoves = blueCenter || moves.some(m => m.to === HockeyTeam.BLUE && m.toPos === HockeyPosition.CENTER);
+
+    if (!redCenterAfterMoves && !blueCenterAfterMoves) {
+      // Neither team has center - assign one to each from remaining available players
+      const remainingPlayers = this.findAvailablePlayersForMove(movePriority, lockedInPlayers, moves);
+      if (remainingPlayers.length >= 2) {
+        moves.push({
+          from: remainingPlayers[0].team,
+          fromPos: remainingPlayers[0].position,
+          to: HockeyTeam.RED,
+          toPos: HockeyPosition.CENTER,
+          playerId: remainingPlayers[0].playerId,
+          reason: 'Assigned as RED CENTER for required position'
+        });
+        moves.push({
+          from: remainingPlayers[1].team,
+          fromPos: remainingPlayers[1].position,
+          to: HockeyTeam.BLUE,
+          toPos: HockeyPosition.CENTER,
+          playerId: remainingPlayers[1].playerId,
+          reason: 'Assigned as BLUE CENTER for required position'
+        });
+      }
+    } else if (!redCenterAfterMoves) {
+      // RED needs center - find any available player
+      const player = this.findBestPlayerToMove([HockeyTeam.RED, HockeyTeam.BLUE], movePriority, lockedInPlayers, moves);
+      if (player) {
+        moves.push({
+          from: player.team,
+          fromPos: player.position,
+          to: HockeyTeam.RED,
+          toPos: HockeyPosition.CENTER,
+          playerId: player.playerId,
+          reason: 'Moved to RED CENTER for required position'
+        });
+      }
+    } else if (!blueCenterAfterMoves) {
+      // BLUE needs center - find any available player
+      const player = this.findBestPlayerToMove([HockeyTeam.RED, HockeyTeam.BLUE], movePriority, lockedInPlayers, moves);
+      if (player) {
+        moves.push({
+          from: player.team,
+          fromPos: player.position,
+          to: HockeyTeam.BLUE,
+          toPos: HockeyPosition.CENTER,
+          playerId: player.playerId,
+          reason: 'Moved to BLUE CENTER for required position'
+        });
+      }
+    }
+
+    // Phase 3: Ensure balanced team sizes (minimum 2 players per team)
+    const redCountAfterMoves = this.countTeamPlayersAfterMoves(HockeyTeam.RED, moves, lockedInPlayers);
+    const blueCountAfterMoves = this.countTeamPlayersAfterMoves(HockeyTeam.BLUE, moves, lockedInPlayers);
+    
+    debugLog(`Team counts after moves: RED=${redCountAfterMoves}, BLUE=${blueCountAfterMoves}`, 'HockeyGameManager');
+    
+    // If teams are severely imbalanced, move players to balance them
+    if (redCountAfterMoves < CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM && blueCountAfterMoves > CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM) {
+      // RED needs more players
+      const needed = CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM - redCountAfterMoves;
+      for (let i = 0; i < needed; i++) {
+        const player = this.findBestPlayerToMove([HockeyTeam.BLUE], movePriority, lockedInPlayers, moves);
+        if (player) {
+          // Find best available position on RED team
+          const availablePos = this.findAvailablePosition(HockeyTeam.RED, player.position, moves);
+          if (availablePos) {
+            moves.push({
+              from: player.team,
+              fromPos: player.position,
+              to: HockeyTeam.RED,
+              toPos: availablePos,
+              playerId: player.playerId,
+              reason: 'Moved to RED team for balanced 2v2 minimum'
+            });
+          }
+        }
+      }
+    } else if (blueCountAfterMoves < CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM && redCountAfterMoves > CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM) {
+      // BLUE needs more players
+      const needed = CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM - blueCountAfterMoves;
+      for (let i = 0; i < needed; i++) {
+        const player = this.findBestPlayerToMove([HockeyTeam.RED], movePriority, lockedInPlayers, moves);
+        if (player) {
+          // Find best available position on BLUE team
+          const availablePos = this.findAvailablePosition(HockeyTeam.BLUE, player.position, moves);
+          if (availablePos) {
+            moves.push({
+              from: player.team,
+              fromPos: player.position,
+              to: HockeyTeam.BLUE,
+              toPos: availablePos,
+              playerId: player.playerId,
+              reason: 'Moved to BLUE team for balanced 2v2 minimum'
+            });
+          }
+        }
+      }
+    }
+
+    debugLog(`Created balance plan with ${moves.length} moves:`, 'HockeyGameManager');
+    moves.forEach(move => {
+      debugLog(`  ${move.playerId}: ${move.from} ${move.fromPos} -> ${move.to} ${move.toPos} (${move.reason})`, 'HockeyGameManager');
+    });
+
+    return moves;
+  }
+
+  /**
+   * Execute the balance plan
+   */
+  private executeBalancePlan(moves: Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}>, lockedInPlayers: string[]): void {
+    for (const move of moves) {
+      // Remove player from old position
+      this._teams[move.from][move.fromPos] = undefined;
+      
+      // Add player to new position
+      this._teams[move.to][move.toPos] = move.playerId;
+      
+      // Notify player
+      this.notifyPlayerOfMove(move.playerId, move.to, move.toPos, move.reason);
+      
+      debugLog(`Executed move: ${move.playerId} from ${move.from} ${move.fromPos} to ${move.to} ${move.toPos}`, 'HockeyGameManager');
+    }
+  }
+
+  /**
+   * Find available players that can be moved (excluding players already in mandatory positions)
+   */
+  private findAvailablePlayersForMove(
+    positionPriority: HockeyPosition[], 
+    lockedInPlayers: string[], 
+    plannedMoves: Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}> = []
+  ): Array<{team: HockeyTeam, position: HockeyPosition, playerId: string}> {
+    const available: Array<{team: HockeyTeam, position: HockeyPosition, playerId: string}> = [];
+    
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const position of positionPriority) {
+        const playerId = this._teams[team][position];
+        if (playerId && lockedInPlayers.includes(playerId)) {
+          // Check if this player is already planned to be moved
+          const isAlreadyPlanned = plannedMoves.some(m => m.playerId === playerId);
+          if (!isAlreadyPlanned) {
+            available.push({ team, position, playerId });
+          }
+        }
+      }
+    }
+    
+    return available;
+  }
+
+  /**
+   * Find the best player to move from specific teams
+   */
+  private findBestPlayerToMove(
+    availableTeams: HockeyTeam[], 
+    positionPriority: HockeyPosition[], 
+    lockedInPlayers: string[], 
+    plannedMoves: Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}> = []
+  ): {team: HockeyTeam, position: HockeyPosition, playerId: string} | null {
+    for (const position of positionPriority) {
+      for (const team of availableTeams) {
+        const playerId = this._teams[team][position];
+        if (playerId && lockedInPlayers.includes(playerId)) {
+          // Check if this player is already planned to be moved
+          const isAlreadyPlanned = plannedMoves.some(m => m.playerId === playerId);
+          if (!isAlreadyPlanned) {
+            return { team, position, playerId };
+          }
+        }
+      }
+    }
     return null;
   }
 
@@ -2476,51 +2593,7 @@ export class HockeyGameManager {
     }
   }
 
-  /**
-   * Find an available position on the specified team, preferring similar position types
-   */
-  private findAvailablePosition(team: HockeyTeam, preferredPosition: HockeyPosition): HockeyPosition | null {
-    const teamPositions = this._teams[team];
-    
-    // First try the exact same position
-    if (!teamPositions[preferredPosition]) {
-      return preferredPosition;
-    }
 
-    // Try positions of the same type (forward->forward, defender->defender)
-    const positionGroups = {
-      forwards: [HockeyPosition.WINGER1, HockeyPosition.WINGER2, HockeyPosition.CENTER],
-      defenders: [HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2]
-    };
-
-    let preferredGroup: HockeyPosition[] = [];
-    if (positionGroups.forwards.includes(preferredPosition)) {
-      preferredGroup = positionGroups.forwards;
-    } else if (positionGroups.defenders.includes(preferredPosition)) {
-      preferredGroup = positionGroups.defenders;
-    }
-
-    // Try positions in preferred group
-    for (const pos of preferredGroup) {
-      if (!teamPositions[pos]) {
-        return pos;
-      }
-    }
-
-    // Fall back to any available position (excluding goalie)
-    const allPositions = [
-      HockeyPosition.WINGER1, HockeyPosition.WINGER2, HockeyPosition.CENTER,
-      HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2
-    ];
-
-    for (const pos of allPositions) {
-      if (!teamPositions[pos as HockeyPosition]) {
-        return pos;
-      }
-    }
-
-    return null; // No available positions
-  }
 
   /**
    * Broadcast team positions update to all connected players
@@ -2532,6 +2605,92 @@ export class HockeyGameManager {
       teams: teamsWithNames
     });
     debugLog('Broadcasted team positions update after auto-balance', 'HockeyGameManager');
+  }
+
+  /**
+   * Count how many players a team will have after all planned moves are executed
+   */
+  private countTeamPlayersAfterMoves(
+    team: HockeyTeam, 
+    moves: Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}>,
+    lockedInPlayers: string[]
+  ): number {
+    // Start with current team count
+    let count = Object.values(this._teams[team]).filter(playerId => 
+      playerId && lockedInPlayers.includes(playerId)
+    ).length;
+    
+    // Add players moving TO this team
+    count += moves.filter(m => m.to === team).length;
+    
+    // Subtract players moving FROM this team
+    count -= moves.filter(m => m.from === team).length;
+    
+    return count;
+  }
+
+  /**
+   * Find an available position on a team, preferring similar position types
+   */
+  private findAvailablePosition(
+    team: HockeyTeam, 
+    preferredPosition: HockeyPosition,
+    moves: Array<{from: HockeyTeam, fromPos: HockeyPosition, to: HockeyTeam, toPos: HockeyPosition, playerId: string, reason: string}> = []
+  ): HockeyPosition | null {
+    const teamPositions = this._teams[team];
+    
+    // Create a set of positions that will be occupied after moves
+    const occupiedAfterMoves = new Set<HockeyPosition>();
+    
+    // Add currently occupied positions
+    Object.entries(teamPositions).forEach(([pos, playerId]) => {
+      if (playerId && !moves.some(m => m.from === team && m.fromPos === pos as HockeyPosition)) {
+        occupiedAfterMoves.add(pos as HockeyPosition);
+      }
+    });
+    
+    // Add positions that will be occupied by moves
+    moves.filter(m => m.to === team).forEach(m => {
+      occupiedAfterMoves.add(m.toPos);
+    });
+    
+    // Try the preferred position first
+    if (!occupiedAfterMoves.has(preferredPosition)) {
+      return preferredPosition;
+    }
+    
+    // Try positions of the same type (forward->forward, defender->defender)
+    const positionGroups = {
+      forwards: [HockeyPosition.WINGER1, HockeyPosition.WINGER2, HockeyPosition.CENTER],
+      defenders: [HockeyPosition.DEFENDER1, HockeyPosition.DEFENDER2],
+      goalie: [HockeyPosition.GOALIE]
+    };
+    
+    let preferredGroup: HockeyPosition[] = [];
+    if (positionGroups.forwards.includes(preferredPosition)) {
+      preferredGroup = positionGroups.forwards;
+    } else if (positionGroups.defenders.includes(preferredPosition)) {
+      preferredGroup = positionGroups.defenders;
+    } else if (positionGroups.goalie.includes(preferredPosition)) {
+      preferredGroup = positionGroups.goalie;
+    }
+    
+    // Try positions in the preferred group
+    for (const pos of preferredGroup) {
+      if (!occupiedAfterMoves.has(pos)) {
+        return pos;
+      }
+    }
+    
+    // Try any available position
+    const allPositions = Object.values(HockeyPosition);
+    for (const pos of allPositions) {
+      if (!occupiedAfterMoves.has(pos)) {
+        return pos;
+      }
+    }
+    
+    return null; // No available positions
   }
 
 } 

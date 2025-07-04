@@ -462,8 +462,8 @@ export const SPAWN_POSITIONS = {
 // LOBBY CONFIGURATION CONSTANTS (NEW)
 // =========================
 export const LOBBY_CONFIG = {
-  MINIMUM_PLAYERS_TOTAL: 6,        // 3v3 minimum
-  MINIMUM_PLAYERS_PER_TEAM: 3,     // At least 3 per team
+  MINIMUM_PLAYERS_TOTAL: 4,        // 2v2 minimum
+  MINIMUM_PLAYERS_PER_TEAM: 2,     // At least 2 per team
   REQUIRED_GOALIES: 1,             // Each team must have 1 goalie
   COUNTDOWN_DURATION: 60,          // 60 seconds when minimum reached
   FULL_LOBBY_COUNTDOWN: 5,         // 5 seconds when lobby is completely full (12/12)
