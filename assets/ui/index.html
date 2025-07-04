@@ -54,6 +54,193 @@ and also configure additional buttons for mobile compatibility.
     }, 150);
   });
 
+  // Debug function for position switching overlay
+  window.debugPositionOverlay = function() {
+    const overlay = document.getElementById('position-switch-overlay');
+    if (overlay) {
+      console.log('Position switch overlay found:', overlay);
+      console.log('Current display style:', window.getComputedStyle(overlay).display);
+      console.log('Current position:', window.getComputedStyle(overlay).position);
+      console.log('Current top:', window.getComputedStyle(overlay).top);
+      console.log('Current right:', window.getComputedStyle(overlay).right);
+      console.log('Element HTML:', overlay.outerHTML);
+      
+      // Force show it for testing
+      overlay.style.display = 'block';
+      console.log('Forced overlay to show');
+    } else {
+      console.error('Position switch overlay element not found!');
+    }
+  };
+
+  // Force show position overlay for testing
+  window.forceShowPositionOverlay = function() {
+    const overlay = document.getElementById('position-switch-overlay');
+    if (overlay) {
+      overlay.style.display = 'block';
+      overlay.style.background = 'rgba(255, 0, 0, 0.9)'; // Red background to make it obvious
+      overlay.style.zIndex = '9999';
+      console.log('Position overlay forced to show with red background');
+    } else {
+      console.error('Position overlay not found!');
+    }
+  };
+
+  // Simple show/hide functions for easy testing
+  window.showPositionOverlay = function() {
+    const overlay = document.getElementById('position-switch-overlay');
+    if (overlay) {
+      overlay.style.display = 'block';
+      overlay.style.visibility = 'visible';
+      overlay.style.opacity = '1';
+      console.log('Position overlay shown');
+    } else {
+      console.error('Position overlay not found!');
+    }
+  };
+
+  window.hidePositionOverlay = function() {
+    const overlay = document.getElementById('position-switch-overlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+      console.log('Position overlay hidden');
+    } else {
+      console.error('Position overlay not found!');
+    }
+  };
+
+  // Test mobile vs desktop version
+  window.testPositionOverlayVersions = function() {
+    const desktop = document.querySelector('.position-switch-desktop');
+    const mobile = document.querySelector('.position-switch-mobile');
+    
+    console.log('=== Position Overlay Version Test ===');
+    console.log('Desktop version found:', !!desktop);
+    console.log('Mobile version found:', !!mobile);
+    
+    if (desktop) {
+      console.log('Desktop display:', window.getComputedStyle(desktop).display);
+      console.log('Desktop content:', desktop.textContent);
+    }
+    
+    if (mobile) {
+      console.log('Mobile display:', window.getComputedStyle(mobile).display);
+      console.log('Mobile content:', mobile.textContent);
+    }
+    
+    // Force show mobile version for testing
+    if (mobile) {
+      mobile.style.display = 'flex';
+      console.log('Forced mobile version to show');
+    }
+    if (desktop) {
+      desktop.style.display = 'none';
+      console.log('Forced desktop version to hide');
+    }
+  };
+
+  // Test mobile click functionality
+  window.testMobileClick = function() {
+    console.log('=== Testing Mobile Click ===');
+    
+    // Test the direct showTeamSelection call
+    if (typeof showTeamSelection === 'function') {
+      console.log('showTeamSelection function found - calling directly');
+      showTeamSelection();
+      console.log('Team selection overlay should now be open');
+    } else {
+      console.error('showTeamSelection function not found');
+    }
+  };
+
+  // Test mobile overlay click simulation
+  window.simulateMobileClick = function() {
+    console.log('=== Simulating Mobile Overlay Click ===');
+    
+    const mobileOverlay = document.querySelector('.position-switch-mobile');
+    if (mobileOverlay) {
+      console.log('Mobile overlay found - simulating click');
+      mobileOverlay.click();
+    } else {
+      console.error('Mobile overlay not found');
+    }
+  };
+
+  // Check if we should show position overlay on page load
+  window.checkPositionOverlayOnLoad = function() {
+    // Wait a bit for the page to fully load
+    setTimeout(() => {
+      const overlay = document.getElementById('position-switch-overlay');
+      if (overlay) {
+        console.log('Position overlay found on page load');
+        console.log('Current overlay display style:', overlay.style.display);
+        console.log('Computed overlay display style:', window.getComputedStyle(overlay).display);
+        
+        // Force show it immediately
+        overlay.style.display = 'block';
+        overlay.style.visibility = 'visible';
+        overlay.style.opacity = '1';
+        
+        console.log('Position overlay forced to show on page load');
+        console.log('New overlay display style:', overlay.style.display);
+      } else {
+        console.error('Position overlay not found on page load!');
+      }
+    }, 500); // Reduced delay to show sooner
+  };
+
+  // Backup mechanism to show position overlay in waiting/lobby states
+  window.checkPositionOverlayPeriodically = function() {
+    setInterval(() => {
+      const overlay = document.getElementById('position-switch-overlay');
+      const scoreboard = document.getElementById('scoreboard');
+      const waitingOverlay = document.getElementById('waiting-overlay');
+      const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+      
+      if (overlay && scoreboard) {
+        const periodElement = document.querySelector('.period');
+        const timerElement = document.querySelector('.timer');
+        
+        // Check if we're in a waiting/lobby state
+        const isWaitingState = periodElement && 
+          (periodElement.textContent.includes('Waiting for players') || 
+           periodElement.textContent.includes('Game starting in'));
+        
+        // Also check if timer shows "--:--" which indicates waiting state
+        const isTimerWaiting = timerElement && timerElement.textContent.includes('--:--');
+        
+        const isTeamSelectionOpen = teamSelectionOverlay && 
+          teamSelectionOverlay.style.display === 'flex';
+        
+        // Show overlay if we're in waiting state AND team selection is NOT open
+        if ((isWaitingState || isTimerWaiting) && !isTeamSelectionOpen) {
+          if (overlay.style.display !== 'block') {
+            overlay.style.display = 'block';
+            overlay.style.visibility = 'visible';
+            overlay.style.opacity = '1';
+            console.log('Position overlay shown by backup mechanism');
+            console.log('Period text:', periodElement?.textContent);
+            console.log('Timer text:', timerElement?.textContent);
+            console.log('Team selection open:', isTeamSelectionOpen);
+          }
+        } else if (!isWaitingState && !isTimerWaiting && overlay.style.display === 'block') {
+          overlay.style.display = 'none';
+          console.log('Position overlay hidden by backup mechanism');
+        }
+      }
+    }, 1000); // Check every 1 second for faster response
+  };
+
+  // Check for position switching overlay on page load
+  document.addEventListener('DOMContentLoaded', () => {
+    const overlay = document.getElementById('position-switch-overlay');
+    if (overlay) {
+      console.log('Position switch overlay loaded successfully');
+    } else {
+      console.error('Position switch overlay not found in DOM!');
+    }
+  });
+
   // Add keyboard shortcut 'M' for background music toggle
   document.addEventListener('keydown', (e) => {
     // Prevent default behavior and don't trigger if user is typing in an input
@@ -892,6 +1079,49 @@ and also configure additional buttons for mobile compatibility.
   document.getElementById('stats-toggle').addEventListener('click', enhancedToggleStatsOverlay);
   document.getElementById('live-stats-close').addEventListener('click', enhancedToggleStatsOverlay);
 
+  // Position switching overlay click handler with toggle functionality
+  function togglePositionSwitchOverlay() {
+    console.log('Position switch overlay clicked');
+    
+    // Check if team selection overlay is already open
+    const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+    const isTeamSelectionOpen = teamSelectionOverlay && 
+                               (teamSelectionOverlay.style.display === 'flex' || 
+                                teamSelectionOverlay.style.display === 'block');
+    
+    if (isTeamSelectionOpen) {
+      // Team selection is open - close it
+      if (typeof hideTeamSelection === 'function') {
+        hideTeamSelection();
+        console.log('Team selection overlay closed successfully');
+      } else {
+        console.error('hideTeamSelection function not found');
+      }
+      return;
+    }
+    
+    // Team selection is closed - check if we can open it
+    const scoreboard = document.getElementById('scoreboard');
+    const timerElement = document.querySelector('.timer');
+    const isGameActive = scoreboard && scoreboard.style.display === 'flex' && 
+                         timerElement && timerElement.textContent !== '--:--';
+    
+    if (!isGameActive) {
+      // Call showTeamSelection() to open the overlay
+      if (typeof showTeamSelection === 'function') {
+        showTeamSelection();
+        console.log('Team selection overlay opened successfully');
+      } else {
+        console.error('showTeamSelection function not found');
+      }
+    } else {
+      console.log('Cannot open team selection during active game - timer shows:', timerElement?.textContent);
+    }
+  }
+
+  // Set up position switch overlay click handler
+  document.getElementById('position-switch-overlay').addEventListener('click', togglePositionSwitchOverlay);
+
   // Tab event listeners - set up immediately since DOMContentLoaded may have already fired
   function setupTabEventListeners() {
     const liveStatsTab = document.getElementById('live-stats-tab');
@@ -1253,6 +1483,13 @@ and also configure additional buttons for mobile compatibility.
       } else {
         document.querySelector('.waiting-count').textContent = '';
       }
+
+      // Show position switching overlay during waiting overlay state
+      const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+      if (positionSwitchOverlay) {
+        positionSwitchOverlay.style.display = 'block';
+        console.log('Position switch overlay shown (show-waiting-overlay event)');
+      }
     }
     if (data.type === 'team-position-error') {
       // Show error message
@@ -1264,6 +1501,12 @@ and also configure additional buttons for mobile compatibility.
       document.getElementById('waiting-overlay').style.display = 'none';
       const scoreboard = document.getElementById('scoreboard');
       scoreboard.style.display = 'flex';
+      
+      // Hide position switching overlay when game starts
+      const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+      if (positionSwitchOverlay) {
+        positionSwitchOverlay.style.display = 'none';
+      }
       
       // Initialize scores if provided
       if (typeof data.redScore === 'number') {
@@ -1334,15 +1577,37 @@ and also configure additional buttons for mobile compatibility.
         clearInterval(timerInterval);
         timerInterval = null;
       }
+
+      // Show position switching overlay during lobby/waiting states
+      const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+      if (positionSwitchOverlay) {
+        positionSwitchOverlay.style.display = 'block';
+        console.log('Position switch overlay shown (game-waiting event)');
+      } else {
+        console.warn('Position switch overlay element not found!');
+      }
     }
     if (data.type === 'show-team-selection') {
       // Show team selection overlay
       // Received show-team-selection event
       showTeamSelection();
+      
+      // Hide position switching overlay when team selection is shown (to avoid redundancy)
+      const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+      if (positionSwitchOverlay) {
+        positionSwitchOverlay.style.display = 'none';
+      }
     }
     if (data.type === 'hide-team-selection') {
       // Hide team selection overlay
       hideTeamSelection();
+      
+      // Show position switching overlay again when team selection is hidden (in lobby/waiting state)
+      const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+      if (positionSwitchOverlay) {
+        positionSwitchOverlay.style.display = 'block';
+        console.log('Position switch overlay shown (hide-team-selection event)');
+      }
     }
     if (data.type === 'team-auto-balanced') {
       // Player was auto-balanced to a different team/position
@@ -2801,6 +3066,76 @@ and also configure additional buttons for mobile compatibility.
         hideStatsScoreboard();
       });
     }
+    
+    // Check for position switching overlay on page load
+    const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+    if (positionSwitchOverlay) {
+      console.log('Position switch overlay loaded successfully');
+      
+      // Auto-run the position overlay check for testing
+      checkPositionOverlayOnLoad();
+      
+      // Start periodic checking mechanism
+      checkPositionOverlayPeriodically();
+      
+      // Mobile detection function
+      function isMobile() {
+        return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+          || (window.matchMedia && window.matchMedia("(max-width: 768px)").matches)
+          || ('ontouchstart' in window)
+          || (navigator.maxTouchPoints > 0);
+      }
+      
+      // Force correct version to show based on device type
+      const positionSwitchDesktop = document.querySelector('.position-switch-desktop');
+      const positionSwitchMobile = document.querySelector('.position-switch-mobile');
+      
+      if (isMobile()) {
+        console.log('Mobile device detected - showing mobile version');
+        if (positionSwitchDesktop) {
+          positionSwitchDesktop.style.display = 'none';
+        }
+        if (positionSwitchMobile) {
+          positionSwitchMobile.style.display = 'flex';
+        }
+      } else {
+        console.log('Desktop device detected - showing desktop version');
+        if (positionSwitchDesktop) {
+          positionSwitchDesktop.style.display = 'flex';
+        }
+        if (positionSwitchMobile) {
+          positionSwitchMobile.style.display = 'none';
+        }
+      }
+      
+             console.log('Mobile position switch click handler added');
+      
+      // Add immediate check after a short delay to handle initial game state
+      setTimeout(() => {
+        const overlay = document.getElementById('position-switch-overlay');
+        const scoreboard = document.getElementById('scoreboard');
+        const periodElement = document.querySelector('.period');
+        const timerElement = document.querySelector('.timer');
+        
+        if (overlay && scoreboard) {
+          const isWaitingState = periodElement && 
+            (periodElement.textContent.includes('Waiting for players') || 
+             periodElement.textContent.includes('Game starting in'));
+          const isTimerWaiting = timerElement && timerElement.textContent.includes('--:--');
+          
+          if (isWaitingState || isTimerWaiting) {
+            overlay.style.display = 'block';
+            overlay.style.visibility = 'visible';
+            overlay.style.opacity = '1';
+            console.log('Position overlay shown on immediate check');
+            console.log('Period text:', periodElement?.textContent);
+            console.log('Timer text:', timerElement?.textContent);
+          }
+        }
+      }, 2000); // Check after 2 seconds when game state is established
+    } else {
+      console.error('Position switch overlay not found on page load!');
+    }
   });
 
   // Live Stats Overlay functionality
@@ -3655,6 +3990,22 @@ and also configure additional buttons for mobile compatibility.
       <img src="{{CDN_ASSETS_URL}}/icons/stats-icon.svg" alt="Stats" />
     </div>
     <div class="stats-label">STATS <img class="stats-keyboard-icon" src="{{CDN_ASSETS_URL}}/ui/inputs/keyboard_k.svg" alt="K" /></div>
+  </div>
+
+  <!-- Position Switching Overlay -->
+  <div id="position-switch-overlay" class="position-switch-overlay" style="display: block;">
+    <div class="position-switch-content">
+      <!-- Desktop version -->
+      <div class="position-switch-desktop">
+        <div class="position-switch-text">Press</div>
+        <img src="{{CDN_ASSETS_URL}}/ui/inputs/keyboard_1.svg" alt="1" class="position-switch-key" />
+        <div class="position-switch-text">to Switch Positions</div>
+      </div>
+      <!-- Mobile version -->
+      <div class="position-switch-mobile">
+        <div class="position-switch-text">Switch Positions</div>
+      </div>
+    </div>
   </div>
 
   <!-- Live Stats Overlay -->
@@ -6681,6 +7032,88 @@ and also configure additional buttons for mobile compatibility.
     letter-spacing: 1px;
   }
 
+  /* Position Switching Overlay */
+  .position-switch-overlay {
+    position: fixed;
+    top: 80px; /* Positioned below the Stats button */
+    right: 20px; /* Aligned with Stats button */
+    background: rgba(0, 0, 0, 0.8);
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 8px;
+    padding: 8px 12px;
+    z-index: 1000;
+    transition: all 0.3s ease;
+    animation: fadeInSlide 0.5s ease-out;
+  }
+
+  .position-switch-content {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .position-switch-text {
+    color: #fff;
+    font-weight: 500;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+  }
+
+  .position-switch-key {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) invert(1);
+  }
+
+  /* Desktop version - show by default */
+  .position-switch-desktop {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Mobile version - hidden by default */
+  .position-switch-mobile {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .position-switch-mobile:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .position-switch-mobile:active {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(0.95);
+  }
+
+  /* Mobile-specific rules - apply to all mobile devices */
+  @media (max-width: 768px), (hover: none) {
+    .position-switch-desktop {
+      display: none !important;
+    }
+    
+    .position-switch-mobile {
+      display: flex !important;
+    }
+  }
+
+  @keyframes fadeInSlide {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   @keyframes statsSlideIn {
     from {
       opacity: 0;
@@ -8938,6 +9371,8 @@ k
       padding: 10px;
       z-index: 200; /* Higher than scoreboard */
     }
+    
+
   }
 
   /* Additional mobile landscape adjustments for very small heights */
@@ -9126,6 +9561,31 @@ k
     .stats-toggle .stats-icon img {
       width: 18px;
       height: 18px;
+    }
+
+    /* Position switching overlay mobile adjustments */
+    .position-switch-overlay {
+      top: 60px; /* Closer to stats button on mobile */
+      right: 10px; /* Align with other mobile buttons */
+      padding: 6px 10px; /* More compact padding */
+    }
+    
+    .position-switch-text {
+      font-size: 0.75rem; /* Smaller text for mobile */
+    }
+    
+    .position-switch-key {
+      width: 18px; /* Smaller icon for mobile */
+      height: 18px;
+    }
+
+    /* Mobile version - show mobile, hide desktop */
+    .position-switch-desktop {
+      display: none !important;
+    }
+    
+    .position-switch-mobile {
+      display: flex !important;
     }
     
     .scoreboard {
