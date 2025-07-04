@@ -1,4 +1,4 @@
-import { PersistenceManager, Player } from 'hytopia';
+import { Player } from 'hytopia';
 import * as CONSTANTS from '../utils/constants';
 import { debugLog, debugError, debugWarn } from '../utils/constants';
 
@@ -63,8 +63,8 @@ export class PersistentPlayerStatsManager {
     }
 
     try {
-      // FIX: Try getting data without a key - just the player's main persistent data
-      const persistedData = await player.getPersistedData();
+      // FIX: Use the new synchronous API - no await needed
+      const persistedData = player.getPersistedData();
       
       // Look for stats in the persistent data
       const statsData = persistedData?.playerStats;
@@ -118,8 +118,8 @@ export class PersistentPlayerStatsManager {
       statsToSave.lastUpdated = Date.now();
       this._recalculateStats(statsToSave);
       
-      // FIX: Store the stats as part of the player's main persistent data object
-      await player.setPersistedData({ playerStats: statsToSave });
+      // FIX: Use the new synchronous API - no await needed
+      player.setPersistedData({ playerStats: statsToSave });
       
       // Update cache and mark as clean
       this._playerStatsCache.set(playerId, statsToSave);

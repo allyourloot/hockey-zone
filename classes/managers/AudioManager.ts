@@ -384,8 +384,12 @@ export class AudioManager {
       // Reuse the available audio instance
       availableAudio.isPlaying = true;
       availableAudio.lastUsed = Date.now();
-      // Update entity reference if provided
-      availableAudio.attachedEntity = config.attachedToEntity;
+      // Update entity reference if provided - with validation
+      if (config.attachedToEntity && config.attachedToEntity.isSpawned) {
+        availableAudio.attachedEntity = config.attachedToEntity;
+      } else {
+        availableAudio.attachedEntity = undefined; // Clear invalid entity reference
+      }
       return availableAudio;
     }
     
@@ -406,8 +410,12 @@ export class AudioManager {
         
         oldestAudio.isPlaying = true;
         oldestAudio.lastUsed = Date.now();
-        // Update entity reference if provided
-        oldestAudio.attachedEntity = config.attachedToEntity;
+        // Update entity reference if provided - with validation
+        if (config.attachedToEntity && config.attachedToEntity.isSpawned) {
+          oldestAudio.attachedEntity = config.attachedToEntity;
+        } else {
+          oldestAudio.attachedEntity = undefined; // Clear invalid entity reference
+        }
         CONSTANTS.debugLog(`Forced reuse of pooled audio for ${uri.split('/').pop()} (at instance limit)`, 'AudioManager');
         return oldestAudio;
       }
@@ -477,8 +485,12 @@ export class AudioManager {
       // Reuse this instance
       oldestAudio.isPlaying = true;
       oldestAudio.lastUsed = Date.now();
-      // Update entity reference if provided
-      oldestAudio.attachedEntity = config.attachedToEntity;
+      // Update entity reference if provided - with validation
+      if (config.attachedToEntity && config.attachedToEntity.isSpawned) {
+        oldestAudio.attachedEntity = config.attachedToEntity;
+      } else {
+        oldestAudio.attachedEntity = undefined; // Clear invalid entity reference
+      }
       CONSTANTS.debugLog(`Reusing pooled audio for ${uri.split('/').pop()} (pool full)`, 'AudioManager');
       return oldestAudio;
     }
@@ -512,19 +524,25 @@ export class AudioManager {
     }
     
     try {
-      // Double-check entity validity again before playing
-      if (pooledAudio.attachedEntity) {
-        // Validate entity exists and is spawned
-        if (!pooledAudio.attachedEntity.isSpawned) {
-          CONSTANTS.debugLog(`Pooled audio entity not spawned for ${uri.split('/').pop()}, playing as global sound`, 'AudioManager');
-          // Play as global sound instead
+      // Triple-check entity validity with more robust validation
+      const hasValidEntity = pooledAudio.attachedEntity && 
+                            typeof pooledAudio.attachedEntity === 'object' && 
+                            pooledAudio.attachedEntity.isSpawned === true;
+      
+      if (hasValidEntity) {
+        // Entity is valid, play attached audio
+        try {
           pooledAudio.audio.play(this.world, true);
-        } else {
-          // Entity is valid, play attached audio
+        } catch (entityError) {
+          // Entity became invalid during play call, fall back to global sound
+          CONSTANTS.debugLog(`Entity became invalid during play for ${uri.split('/').pop()}, playing as global sound`, 'AudioManager');
           pooledAudio.audio.play(this.world, true);
         }
       } else {
-        // No entity attachment, play as global sound
+        // Entity is undefined, null, or not spawned - play as global sound
+        if (pooledAudio.attachedEntity) {
+          CONSTANTS.debugLog(`Pooled audio entity not spawned for ${uri.split('/').pop()}, playing as global sound`, 'AudioManager');
+        }
         pooledAudio.audio.play(this.world, true);
       }
       
@@ -539,7 +557,7 @@ export class AudioManager {
       
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      CONSTANTS.debugError(`Error playing pooled audio for ${uri.split('/').pop()}: ${errorMessage}`, error, 'AudioManager');
+      CONSTANTS.debugAudioError(`Error playing pooled audio for ${uri.split('/').pop()}: ${errorMessage}`, error, 'AudioManager');
       pooledAudio.isPlaying = false;
       return false;
     }

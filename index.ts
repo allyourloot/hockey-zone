@@ -193,6 +193,17 @@ startServer(world => {
   // Initial check
   setTimeout(checkPuckBoundaryMonitoring, 1000);
 
+  // Print debugging helper information
+  console.log('\n🐛 DEBUGGING HELPERS (type these commands in console):');
+  console.log('🔊 Audio error filtering: audioerrorsoff / audioerrorson');
+  console.log('🔍 Entity state debugging: entitydebugon / entitydebugoff');
+  console.log('🧹 Cleanup debugging: cleanupdebugon / cleanupdebugoff');
+  console.log('🎵 Show ONLY AudioManager logs: audioon / audiooff');
+  console.log('📊 Other specialized filters: saveon/saveoff, offsideon/offsideoff, boundaryon/boundaryoff');
+  console.log('');
+  console.log('✨ Commands should work immediately after typing them in the console.');
+  console.log('If they don\'t work, try: setEntityDebugFilter(true) or setCleanupDebugFilter(true)\n');
+
   // Clean up on server shutdown
   process.on('SIGINT', () => {
     CONSTANTS.debugLog('Shutting down services...', 'Main');

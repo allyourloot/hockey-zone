@@ -12,7 +12,7 @@
   "dependencies": {
     "@hytopia.com/assets": "^0.3.10",
     "hockey-zone": ".",
-    "hytopia": "^0.6.10"
+    "hytopia": "^0.6.27"
   },
   "trustedDependencies": [
     "mediasoup",

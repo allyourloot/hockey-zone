@@ -20,6 +20,15 @@ export const OFFSIDE_DEBUG_FILTER = false; // Set to true to show ONLY OffsideDe
 // NEW: Boundary detection debug filter for isolating PuckBoundaryService logs
 export const BOUNDARY_DEBUG_FILTER = false; // Set to true to show ONLY PuckBoundaryService logs
 
+// NEW: Entity state debugging filter for detailed entity validation debugging
+export const ENTITY_DEBUG_FILTER = false; // Set to true to show detailed entity state debugging
+
+// NEW: Cleanup debugging filter for controller cleanup operations  
+export const CLEANUP_DEBUG_FILTER = false; // Set to true to show cleanup debugging
+
+// NEW: Audio error filtering - hide/show audio-related errors
+export const AUDIO_ERROR_FILTER = false; // Set to false to hide audio errors
+
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
 
@@ -666,4 +675,105 @@ export function setBoundaryDebugFilter(enabled: boolean): void {
 // Boundary detection debug filter shortcuts
 (globalThis as any).setBoundaryDebugFilter = setBoundaryDebugFilter;
 (globalThis as any).boundaryon = () => setBoundaryDebugFilter(true);
-(globalThis as any).boundaryoff = () => setBoundaryDebugFilter(false); 
+(globalThis as any).boundaryoff = () => setBoundaryDebugFilter(false);
+
+/**
+ * Enhanced debugging functions with filtering for entity states and cleanup
+ */
+
+// Entity state debugging function - works independently of DEBUG_MODE
+export function debugEntityState(message: string, source?: string): void {
+  const entityFilterEnabled = (globalThis as any).ENTITY_DEBUG_FILTER ?? ENTITY_DEBUG_FILTER;
+  if (entityFilterEnabled) {
+    const logMessage = source ? `[ENTITY][${source}] ${message}` : `[ENTITY] ${message}`;
+    console.log(logMessage);
+  }
+}
+
+// Cleanup debugging function - works independently of DEBUG_MODE
+export function debugCleanup(message: string, source?: string): void {
+  const cleanupFilterEnabled = (globalThis as any).CLEANUP_DEBUG_FILTER ?? CLEANUP_DEBUG_FILTER;
+  if (cleanupFilterEnabled) {
+    const logMessage = source ? `[CLEANUP][${source}] ${message}` : `[CLEANUP] ${message}`;
+    console.log(logMessage);
+  }
+}
+
+// Audio error function with filtering - works independently of DEBUG_MODE
+export function debugAudioError(message: string, error?: any, source?: string): void {
+  const audioErrorFilterEnabled = (globalThis as any).AUDIO_ERROR_FILTER ?? AUDIO_ERROR_FILTER;
+  if (audioErrorFilterEnabled) {
+    const logMessage = source ? `[AUDIO ERROR][${source}] ${message}` : `[AUDIO ERROR] ${message}`;
+    if (error) {
+      console.error(logMessage, error);
+    } else {
+      console.error(logMessage);
+    }
+  }
+}
+
+/**
+ * Toggle the entity debugging filter at runtime
+ * When enabled, detailed entity state debugging will be shown
+ * @param enabled - Whether to enable entity debugging
+ */
+export function setEntityDebugFilter(enabled: boolean): void {
+  (globalThis as any).ENTITY_DEBUG_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('🔍 ENTITY DEBUG FILTER ENABLED - Entity state debugging will be shown');
+    console.log('💡 To disable: setEntityDebugFilter(false) or type "entitydebugoff" in console');
+  } else {
+    console.log('🔍 ENTITY DEBUG FILTER DISABLED - Entity debugging will be hidden');
+    console.log('💡 To enable: setEntityDebugFilter(true) or type "entitydebugon" in console');
+  }
+}
+
+/**
+ * Toggle the cleanup debugging filter at runtime
+ * When enabled, cleanup operations debugging will be shown
+ * @param enabled - Whether to enable cleanup debugging
+ */
+export function setCleanupDebugFilter(enabled: boolean): void {
+  (globalThis as any).CLEANUP_DEBUG_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('🧹 CLEANUP DEBUG FILTER ENABLED - Cleanup debugging will be shown');
+    console.log('💡 To disable: setCleanupDebugFilter(false) or type "cleanupdebugoff" in console');
+  } else {
+    console.log('🧹 CLEANUP DEBUG FILTER DISABLED - Cleanup debugging will be hidden');
+    console.log('💡 To enable: setCleanupDebugFilter(true) or type "cleanupdebugon" in console');
+  }
+}
+
+/**
+ * Toggle the audio error filter at runtime
+ * When disabled, audio errors will be hidden from console
+ * @param enabled - Whether to show audio errors
+ */
+export function setAudioErrorFilter(enabled: boolean): void {
+  (globalThis as any).AUDIO_ERROR_FILTER = enabled;
+  
+  if (enabled) {
+    console.log('🔊 AUDIO ERROR FILTER ENABLED - Audio errors will be shown');
+    console.log('💡 To hide: setAudioErrorFilter(false) or type "audioerrorsoff" in console');
+  } else {
+    console.log('🔊 AUDIO ERROR FILTER DISABLED - Audio errors will be hidden');
+    console.log('💡 To show: setAudioErrorFilter(true) or type "audioerrorson" in console');
+  }
+}
+
+// Entity debugging shortcuts
+(globalThis as any).setEntityDebugFilter = setEntityDebugFilter;
+(globalThis as any).entitydebugon = () => setEntityDebugFilter(true);
+(globalThis as any).entitydebugoff = () => setEntityDebugFilter(false);
+
+// Cleanup debugging shortcuts
+(globalThis as any).setCleanupDebugFilter = setCleanupDebugFilter;
+(globalThis as any).cleanupdebugon = () => setCleanupDebugFilter(true);
+(globalThis as any).cleanupdebugoff = () => setCleanupDebugFilter(false);
+
+// Audio error filtering shortcuts
+(globalThis as any).setAudioErrorFilter = setAudioErrorFilter;
+(globalThis as any).audioerrorson = () => setAudioErrorFilter(true);
+(globalThis as any).audioerrorsoff = () => setAudioErrorFilter(false); 
