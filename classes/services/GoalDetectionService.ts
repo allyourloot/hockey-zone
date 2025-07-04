@@ -92,10 +92,10 @@ export class GoalDetectionService {
 
     // Only detect goals during active gameplay
     const gameManager = HockeyGameManager.instance;
-    if (gameManager.state !== HockeyGameState.IN_PERIOD) {
+    if (gameManager.state !== HockeyGameState.IN_PERIOD && gameManager.state !== HockeyGameState.SHOOTOUT_IN_PROGRESS) {
       return null;
     }
-
+    
     // Cooldown check to prevent spam
     const currentTime = Date.now();
     if (currentTime - this._lastGoalTime < this._goalCooldownMs) {
@@ -115,11 +115,11 @@ export class GoalDetectionService {
       }
     }
 
-    const currentPosition = puckEntity.position;
+    const puckPosition = puckEntity.position;
     
     // Store position for next frame comparison
     const previousPosition = this._previousPuckPosition;
-    this._previousPuckPosition = { ...currentPosition };
+    this._previousPuckPosition = { ...puckPosition };
 
     // Need previous position to detect crossing
     if (!previousPosition) {
@@ -128,8 +128,8 @@ export class GoalDetectionService {
 
     // Detect if this is a teleportation (large distance change) and ignore it
     const distance = Math.sqrt(
-      Math.pow(currentPosition.x - previousPosition.x, 2) + 
-      Math.pow(currentPosition.z - previousPosition.z, 2)
+      Math.pow(puckPosition.x - previousPosition.x, 2) + 
+      Math.pow(puckPosition.z - previousPosition.z, 2)
     );
     
     // If puck moved more than 10 blocks in one frame, it's likely a teleport/reset
@@ -148,12 +148,12 @@ export class GoalDetectionService {
 
     // Check each goal zone for line crossing
     for (const zone of Object.values(this.GOAL_ZONES)) {
-      const goalResult = this.checkGoalLineCrossing(previousPosition, currentPosition, zone, puckEntity);
+      const goalResult = this.checkGoalLineCrossing(previousPosition, puckPosition, zone, puckEntity);
       if (goalResult) {
         this._lastGoalTime = currentTime;
         debugLog(`GOAL DETECTED! ${goalResult.scoringTeam} team scored in ${zone.name}${goalResult.isOwnGoal ? ' (OWN GOAL)' : ''}`, 'GoalDetectionService');
-        debugLog(`Puck crossed from Z=${previousPosition.z.toFixed(2)} to Z=${currentPosition.z.toFixed(2)}`, 'GoalDetectionService');
-        debugLog(`Puck X position: ${currentPosition.x.toFixed(2)} (goal width: ${zone.minX} to ${zone.maxX})`, 'GoalDetectionService');
+        debugLog(`Puck crossed from Z=${previousPosition.z.toFixed(2)} to Z=${puckPosition.z.toFixed(2)}`, 'GoalDetectionService');
+        debugLog(`Puck X position: ${puckPosition.x.toFixed(2)} (goal width: ${zone.minX} to ${zone.maxX})`, 'GoalDetectionService');
         return goalResult;
       }
     }
@@ -395,8 +395,6 @@ export class GoalDetectionService {
       return false; // If we can't check, don't block the goal
     }
   }
-
-
 
   /**
    * Get assist information from puck touch history

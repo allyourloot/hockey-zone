@@ -3,13 +3,16 @@ import {
   HockeyGameState, 
   HockeyTeam, 
   HockeyPosition,
-  FaceoffLocation
+  FaceoffLocation,
+  GameMode
 } from '../utils/types';
 import type { OffsideViolation } from '../utils/types';
 import type { 
   TeamAssignment, 
-  Teams 
+  Teams,
+  GameModeSelectData
 } from '../utils/types';
+import { ShootoutManager } from './ShootoutManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { AudioManager } from './AudioManager';
 import { PlayerStatsManager } from './PlayerStatsManager';
@@ -20,6 +23,7 @@ export class HockeyGameManager {
   private static _instance: HockeyGameManager;
   private _world: World | undefined;
   private _state: HockeyGameState = HockeyGameState.LOBBY;
+  private _gameMode: GameMode = GameMode.REGULATION;
   private _teams: Teams = {
     [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
     [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
@@ -81,7 +85,8 @@ export class HockeyGameManager {
 
   public setupGame(world: World) {
     this._world = world;
-    this._state = HockeyGameState.LOBBY;
+    this._state = HockeyGameState.GAME_MODE_SELECTION;
+    this._gameMode = GameMode.REGULATION;
     this._teams = {
       [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
       [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
@@ -98,12 +103,272 @@ export class HockeyGameManager {
     // Reset player stats for new game
     PlayerStatsManager.instance.resetStats();
     
-    // TODO: Announce lobby open, show team selection UI
+    // Initialize shootout manager
+    ShootoutManager.instance.initialize(world);
+    
+    // Start with game mode selection
+    this.startGameModeSelection();
+  }
+
+  public startGameModeSelection() {
+    if (this._state === HockeyGameState.GAME_MODE_SELECTION) return;
+    this._state = HockeyGameState.GAME_MODE_SELECTION;
+    
+    debugLog('🎮 GAME MODE SELECTION STARTED - State set to GAME_MODE_SELECTION', 'HockeyGameManager');
+    debugLog(`📊 Current players in map: ${this._playerIdToPlayer.size}`, 'HockeyGameManager');
+    
+    // Unlock pointer for game mode selection UI interaction
+    if (this._world) {
+      this._playerIdToPlayer.forEach((player) => {
+        try {
+          player.ui.lockPointer(false); // Unlock pointer for game mode selection
+          debugLog(`Unlocked pointer for player ${player.id} during game mode selection`, 'HockeyGameManager');
+        } catch (error) {
+          debugError('Error unlocking pointer for player during game mode selection:', error, 'HockeyGameManager');
+        }
+      });
+    }
+    
+    // Broadcast game mode selection start (Note: may not reach anyone if no players are in teams yet)
+    this.broadcastToAllPlayers({
+      type: 'game-mode-selection-start'
+    });
+    
+    debugLog('📡 Broadcasted game-mode-selection-start event (PlayerManager will handle new players)', 'HockeyGameManager');
+  }
+
+  public selectGameMode(gameMode: GameMode) {
+    if (this._state !== HockeyGameState.GAME_MODE_SELECTION) {
+      debugWarn(`selectGameMode called but not in GAME_MODE_SELECTION state. Current state: ${this._state}`, 'HockeyGameManager');
+      return;
+    }
+    
+    this._gameMode = gameMode;
+    debugLog(`🎯 Game mode selected: ${gameMode}`, 'HockeyGameManager');
+    
+    if (gameMode === GameMode.SHOOTOUT) {
+      debugLog('🥅 Starting Shootout mode', 'HockeyGameManager');
+      this.startShootoutMode();
+    } else {
+      debugLog('🏒 Starting Regulation mode (Team Selection)', 'HockeyGameManager');
+      this.startTeamSelection();
+      
+      // Also notify PlayerManager to show team selection to all connected players
+      if (this._playerManagerCallback) {
+        this._playerManagerCallback('showTeamSelectionToAll', {});
+      }
+    }
+  }
+
+  public registerPlayerForShootout(player: any): void {
+    if (this._gameMode !== GameMode.SHOOTOUT) return;
+    
+    // Only accept the first 2 players for shootout
+    if (this._playerIdToPlayer.size >= 2) {
+      debugLog(`🚫 Rejecting player ${player.id} - shootout already has 2 players`, 'HockeyGameManager');
+      // Send message to player that shootout is full
+      player.ui.sendData({
+        type: 'shootout-full',
+        message: 'Shootout is full! Please wait for the next game.'
+      });
+      return;
+    }
+    
+    // Add player to the map
+    this._playerIdToPlayer.set(player.id, player);
+    debugLog(`🥅 Registered player ${player.id} for shootout mode (${this._playerIdToPlayer.size}/2 players)`, 'HockeyGameManager');
+    
+    // Hide game mode selection overlay for this player
+    player.ui.sendData({
+      type: 'hide-game-mode-selection'
+    });
+    
+    // Hide any existing scoreboards
+    player.ui.sendData({
+      type: 'hide-scoreboard'
+    });
+    
+    if (this._playerIdToPlayer.size === 1) {
+      // First player - show waiting message
+      player.ui.sendData({
+        type: 'shootout-waiting',
+        message: 'Waiting for another player to join shootout...',
+        playersWaiting: 1,
+        playersNeeded: 2
+      });
+    } else if (this._playerIdToPlayer.size === 2) {
+      // Second player - hide waiting message and prepare for game start
+      const allRegisteredPlayers = Array.from(this._playerIdToPlayer.values());
+      allRegisteredPlayers.forEach(p => {
+        p.ui.sendData({
+          type: 'hide-waiting-message'
+        });
+      });
+    }
+    
+    // Spawn player immediately as CENTER position
+    this.spawnPlayerForShootout(player);
+    
+    // Check if we can start shootout
+    this.checkShootoutReadiness();
+  }
+
+  private spawnPlayerForShootout(player: any): void {
+    if (!this._world) return;
+    
+    // Determine team and position based on how many players are already registered
+    const playerCount = this._playerIdToPlayer.size;
+    let team: HockeyTeam;
+    let position: HockeyPosition;
+    
+    if (playerCount === 1) {
+      // First player: RED CENTER
+      team = HockeyTeam.RED;
+      position = HockeyPosition.CENTER;
+      this._teams[HockeyTeam.RED][HockeyPosition.CENTER] = player.id;
+    } else if (playerCount === 2) {
+      // Second player: BLUE GOALIE
+      team = HockeyTeam.BLUE;
+      position = HockeyPosition.GOALIE;
+      this._teams[HockeyTeam.BLUE][HockeyPosition.GOALIE] = player.id;
+    } else {
+      debugWarn(`Unexpected player count in shootout: ${playerCount}`, 'HockeyGameManager');
+      return;
+    }
+    
+    this._lockedInPlayers.add(player.id);
+    
+    debugLog(`🎯 Spawning player ${player.id} as ${team} ${position} for shootout`, 'HockeyGameManager');
+    
+    // Broadcast spawn event to PlayerManager
+    if (this._playerManagerCallback) {
+      this._playerManagerCallback('spawnPlayerForShootout', {
+        player: player,
+        team: team,
+        position: position
+      });
+    }
+  }
+
+  private checkShootoutReadiness(): void {
+    const connectedPlayers = Array.from(this._playerIdToPlayer.values());
+    
+    if (connectedPlayers.length >= 2) {
+      debugLog(`✅ Shootout ready with ${connectedPlayers.length} players`, 'HockeyGameManager');
+      
+      // Show brief "Get ready" message before countdown
+      this.broadcastToAllPlayers({
+        type: 'shootout-preparing',
+        message: 'Get ready for shootout...',
+        waitSeconds: 2
+      });
+      
+      // Add a 2-second delay before starting shootout to make it less jarring
+      setTimeout(() => {
+        this.beginShootout();
+      }, 2000);
+    } else {
+      debugLog(`⏳ Waiting for more players (${connectedPlayers.length}/2)`, 'HockeyGameManager');
+    }
+  }
+
+  private beginShootout(): void {
+    if (!this._world) return;
+    
+    this._state = HockeyGameState.SHOOTOUT_IN_PROGRESS;
+    const connectedPlayers = Array.from(this._playerIdToPlayer.values());
+    
+    debugLog('🥅 Beginning shootout with position assignments', 'HockeyGameManager');
+    
+    // Clear previous team assignments
+    this._teams = {
+      [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
+      [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>,
+    };
+    
+    // Start shootout - ShootoutManager will handle the countdown
+    ShootoutManager.instance.startShootout(connectedPlayers);
+  }
+
+  public startShootoutMode() {
+    if (!this._world) return;
+    
+    this._state = HockeyGameState.SHOOTOUT_READY;
+    debugLog('🥅 Shootout mode started - waiting for players to join', 'HockeyGameManager');
+    
+    // Don't automatically register all existing players
+    // Players must individually select "Shootout" mode to join
+    // The first player to select shootout will have already been registered
+    
+    // Check if there are already players registered (from the first player selection)
+    this.checkShootoutReadiness();
+  }
+
+  public shootoutGoalScored(scored: boolean, scorerId?: string) {
+    if (this._state !== HockeyGameState.SHOOTOUT_IN_PROGRESS) return;
+    
+    debugLog(`Shootout shot attempted - scored: ${scored}, scorer: ${scorerId}`, 'HockeyGameManager');
+    
+    // If a goal was scored, trigger the same celebration effects as regulation goals
+    if (scored && this._world && scorerId) {
+      // Get the scorer's team information
+      const scorerTeamInfo = this.getTeamAndPosition(scorerId);
+      if (!scorerTeamInfo) {
+        debugWarn(`Cannot determine team for shooter ${scorerId} in shootout`, 'HockeyGameManager');
+        // Still pass the goal to shootout manager even if we can't determine team
+        ShootoutManager.instance.shotAttempted(scored, scorerId);
+        return;
+      }
+      
+      const scoringTeam = scorerTeamInfo.team;
+      
+      // Play goal horn sound effect (same as regulation)
+      AudioManager.instance.playGoalHorn();
+      
+      // Get scorer name for UI
+      const scorerName = this._playerIdToPlayer.get(scorerId)?.username || 'Unknown';
+      
+      // Get all players to send goal overlay and updates
+      const allPlayerIds = [
+        ...Object.values(this._teams[HockeyTeam.RED]), 
+        ...Object.values(this._teams[HockeyTeam.BLUE])
+      ].filter(Boolean) as string[];
+      
+      const allPlayers = allPlayerIds
+        .map(playerId => this._playerIdToPlayer.get(playerId))
+        .filter(Boolean) as Player[];
+      
+      // Send goal overlay and score update to all players (same as regulation)
+      allPlayers.forEach((player) => {
+        try {
+          player.ui.sendData({
+            type: 'goal-scored',
+            team: scoringTeam,
+            isOwnGoal: false, // Shootout goals can't be own goals
+            scorerName: scorerName
+          });
+        } catch (error) {
+          debugError('Error sending shootout goal overlay to player:', error, 'HockeyGameManager');
+        }
+      });
+      
+      // Send chat message about the goal
+      this._world.chatManager.sendBroadcastMessage(
+        `SHOOTOUT GOAL! ${scoringTeam} team scores! Scored by ${scorerName}`,
+        scoringTeam === HockeyTeam.RED ? 'FF4444' : '44AAFF'
+      );
+    }
+    
+    // Always pass the goal event to the shootout manager (handles timing)
+    ShootoutManager.instance.shotAttempted(scored, scorerId);
   }
 
   public startTeamSelection() {
     if (this._state === HockeyGameState.TEAM_SELECTION) return;
     this._state = HockeyGameState.TEAM_SELECTION;
+    
+    debugLog('👥 TEAM SELECTION STARTED - State set to TEAM_SELECTION', 'HockeyGameManager');
+    debugLog(`📊 Current players in map: ${this._playerIdToPlayer.size}`, 'HockeyGameManager');
     
     // Unlock pointer for team selection UI interaction
     if (this._world) {
@@ -119,10 +384,16 @@ export class HockeyGameManager {
     
     // Broadcast team selection start
     this.broadcastToAllPlayers({
-      type: 'team-selection-start'
+      type: 'show-team-selection'
     });
     
-    // TODO: Show team/position selection UI
+    // Also broadcast current team positions so players see what's taken
+    this.broadcastToAllPlayers({
+      type: 'team-positions-update',
+      teams: this.getTeamsWithNamesForUI()
+    });
+    
+    debugLog('📡 Broadcasted show-team-selection and team-positions-update events', 'HockeyGameManager');
   }
 
   public startWaitingForPlayers() {
@@ -187,6 +458,12 @@ export class HockeyGameManager {
   }
 
   public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false, scorerId?: string, primaryAssistId?: string) {
+    // Handle shootout goals differently
+    if (this._state === HockeyGameState.SHOOTOUT_IN_PROGRESS) {
+      this.shootoutGoalScored(true, scorerId);
+      return;
+    }
+    
     if (this._state === HockeyGameState.GOAL_SCORED) return;
     this._scores[team]++;
     
@@ -1475,6 +1752,66 @@ export class HockeyGameManager {
     }
   }
 
+  private resetGameState() {
+    debugLog('Resetting game state for game mode selection', 'HockeyGameManager');
+    
+    // Reset the puck to center ice
+    const { ChatCommandManager } = require('./ChatCommandManager');
+    const { PlayerSpawnManager } = require('./PlayerSpawnManager');
+    const puckEntity = ChatCommandManager.instance.getPuck();
+    
+    if (puckEntity) {
+      PlayerSpawnManager.instance.resetPuckToCenterIce(puckEntity);
+      debugLog('Puck reset to center ice during game state reset', 'HockeyGameManager');
+    } else {
+      debugWarn('[HockeyGameManager] Could not reset puck - entity not found', 'HockeyGameManager');
+    }
+    
+    // Clear all teams and player assignments
+    this._teams = {
+      [HockeyTeam.RED]: {} as Record<HockeyPosition, string>,
+      [HockeyTeam.BLUE]: {} as Record<HockeyPosition, string>
+    };
+    this._tentativeSelections.clear();
+    this._lockedInPlayers.clear();
+    this._playerIdToPlayer.clear();
+    
+    // Reset scores and period
+    this._scores = {
+      [HockeyTeam.RED]: 0,
+      [HockeyTeam.BLUE]: 0
+    };
+    this._period = 1;
+    
+    // Clear any timers
+    if (this._periodTimer) {
+      clearTimeout(this._periodTimer);
+      this._periodTimer = undefined;
+    }
+    
+    // Clear countdown timer
+    this.clearCountdownTimer();
+    
+    // Clear offside pause tracking
+    this._pausedPeriodTimeMs = null;
+    this._offsidePauseStartTime = null;
+    
+    // Reset player stats
+    PlayerStatsManager.instance.resetStats();
+    
+    // Clear all player UI states - ensure clean slate for game mode selection
+    this.broadcastToAllPlayers({
+      type: 'clear-all-ui'
+    });
+    
+    // Hide any existing scoreboards
+    this.broadcastToAllPlayers({
+      type: 'hide-scoreboard'
+    });
+    
+    debugLog('Game state reset complete for game mode selection', 'HockeyGameManager');
+  }
+
   public resetToLobby() {
     debugLog('Resetting to lobby with team selection', 'HockeyGameManager');
     
@@ -1639,9 +1976,9 @@ export class HockeyGameManager {
       debugLog(`Game over - Winner: ${winner}, Final Score: RED ${redScore} - BLUE ${blueScore}`, 'HockeyGameManager');
     }
     
-    // Return to lobby after 10 seconds (reduced from 15s for better flow)
+    // Return to game mode selection after 10 seconds (like shootout mode)
     setTimeout(() => {
-      debugLog('Returning to lobby after game over', 'HockeyGameManager');
+      debugLog('Returning to game mode selection after game over', 'HockeyGameManager');
       
       // Hide game over overlay
       this.broadcastToAllPlayers({
@@ -1653,8 +1990,38 @@ export class HockeyGameManager {
         type: 'timer-stop'
       });
       
-      // Reset to lobby with team selection
-      this.resetToLobby();
+      // Show game mode selection BEFORE despawning players
+      this.broadcastToAllPlayers({
+        type: 'game-mode-selection-start'
+      });
+
+      // Small delay to ensure UI message is received before despawning
+      setTimeout(() => {
+        // Get all players before clearing
+        const playersToReset = Array.from(this._playerIdToPlayer.values());
+        
+        // Despawn all player entities
+        if (this._world) {
+          playersToReset.forEach(player => {
+            try {
+              this._world!.entityManager.getPlayerEntitiesByPlayer(player).forEach(entity => {
+                entity.despawn();
+                debugLog(`Despawned entity for player ${player.id} from regulation game`, 'HockeyGameManager');
+              });
+            } catch (error) {
+              debugError(`Error despawning player ${player.id}:`, error, 'HockeyGameManager');
+            }
+          });
+        }
+
+        // Reset all game state
+        this.resetGameState();
+        
+        // Start game mode selection
+        this.startGameModeSelection();
+        
+        debugLog('🎮 Returned to game mode selection from regulation game', 'HockeyGameManager');
+      }, 500); // 500ms delay to ensure UI message is processed
     }, 10000);
   }
 
@@ -2124,6 +2491,14 @@ export class HockeyGameManager {
 
   public get period(): number {
     return this._period;
+  }
+
+  public get gameMode(): GameMode {
+    return this._gameMode;
+  }
+
+  public isShootoutMode(): boolean {
+    return this._gameMode === GameMode.SHOOTOUT;
   }
 
   /**

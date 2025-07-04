@@ -3,7 +3,9 @@ import {
   HockeyTeam, 
   HockeyGameState, 
   HockeyZone, 
-  FaceoffLocation,
+  FaceoffLocation
+} from '../utils/types';
+import type { 
   BlueLLineCrossing,
   PlayerPositionHistory,
   OffsideViolation,

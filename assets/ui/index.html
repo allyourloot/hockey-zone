@@ -287,6 +287,55 @@ and also configure additional buttons for mobile compatibility.
     }
   });
 
+  // Game Mode Selection logic
+  const gameModeOptions = document.querySelectorAll('.game-mode-option');
+  const gameModeSelectionOverlay = document.getElementById('game-mode-selection-overlay');
+  const gameModeMessage = document.getElementById('game-mode-selection-message');
+  let selectedGameMode = null;
+
+  gameModeOptions.forEach(option => {
+    option.addEventListener('click', () => {
+      // Try to activate audio on first user interaction
+      tryActivateAudio();
+      
+      // Unlock pointer for better interaction
+      setTimeout(() => {
+        if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+          if (document.exitPointerLock) {
+            document.exitPointerLock();
+          } else if (document.mozExitPointerLock) {
+            document.mozExitPointerLock();
+          } else if (document.webkitExitPointerLock) {
+            document.webkitExitPointerLock();
+          }
+        }
+      }, 50);
+      
+      // Highlight selected
+      gameModeOptions.forEach(opt => opt.classList.remove('selected'));
+      option.classList.add('selected');
+      
+      // Store selection
+      const gameMode = option.getAttribute('data-mode');
+      selectedGameMode = gameMode;
+      
+      // Update message
+      if (gameMode === 'REGULATION') {
+        gameModeMessage.textContent = 'Regulation mode selected - full 6v6 hockey game';
+      } else if (gameMode === 'SHOOTOUT') {
+        gameModeMessage.textContent = 'Shootout mode selected - 1v1 penalty shootout';
+      }
+      
+             // Send selection to server immediately
+       hytopia.sendData({ type: 'game-mode-select', gameMode });
+       
+       // Hide overlay after a brief delay to show selection feedback
+       setTimeout(() => {
+         gameModeSelectionOverlay.style.display = 'none';
+       }, 500);
+    });
+  });
+
   // Team/Position selection logic
   const positionButtons = document.querySelectorAll('.position-btn');
   const selectedMsg = document.getElementById('selected-position-msg');
@@ -1356,7 +1405,210 @@ and also configure additional buttons for mobile compatibility.
 
   // Handle server messages for team/position selection
   hytopia.onData(data => {
-    if (data.type === 'team-positions-update') {
+         if (data.type === 'game-mode-selection-start') {
+       // Clear persistent waiting notification
+       clearPersistentShootoutNotification();
+       
+       // Hide team selection overlay first
+       teamSelectionOverlay.style.display = 'none';
+       
+       // Show game mode selection overlay
+       gameModeSelectionOverlay.style.display = 'flex';
+       gameModeMessage.textContent = 'Choose a game mode to begin';
+       
+       // Clear any previous selection
+       gameModeOptions.forEach(option => option.classList.remove('selected'));
+       selectedGameMode = null;
+       
+       // Show position switch overlay for game mode selection
+       const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+       if (positionSwitchOverlay) {
+         positionSwitchOverlay.style.display = 'block';
+       }
+       
+       // Unlock pointer for game mode selection
+       setTimeout(() => {
+         if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+           if (document.exitPointerLock) {
+             document.exitPointerLock();
+           } else if (document.mozExitPointerLock) {
+             document.mozExitPointerLock();
+           } else if (document.webkitExitPointerLock) {
+             document.webkitExitPointerLock();
+           }
+         }
+       }, 100);
+     }
+           if (data.type === 'show-team-selection') {
+        // Clear persistent waiting notification
+        clearPersistentShootoutNotification();
+        
+        // Hide game mode selection overlay first
+        gameModeSelectionOverlay.style.display = 'none';
+        
+        // Show team selection overlay
+        teamSelectionOverlay.style.display = 'flex';
+        
+        // Show position switch overlay for team selection
+        const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+        if (positionSwitchOverlay) {
+          positionSwitchOverlay.style.display = 'block';
+        }
+       
+       // Clear any previous selections but don't clear position data
+       // Let team-positions-update handle locked-in positions properly
+       positionButtons.forEach(btn => {
+         btn.classList.remove('selected');
+         // Don't clear player names or disabled state - let team-positions-update handle it
+       });
+       
+       selectedBtn = null;
+       selectedTeam = null;
+       selectedPosition = null;
+       selectedMsg.textContent = '';
+       lockInBtn.disabled = true;
+       
+       // Unlock pointer for team selection
+       setTimeout(() => {
+         if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+           if (document.exitPointerLock) {
+             document.exitPointerLock();
+           } else if (document.mozExitPointerLock) {
+             document.mozExitPointerLock();
+           } else if (document.webkitExitPointerLock) {
+             document.webkitExitPointerLock();
+           }
+         }
+       }, 100);
+            }
+       if (data.type === 'shootout-waiting') {
+         // Hide position switch overlay during shootout waiting
+         const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+         if (positionSwitchOverlay) {
+           positionSwitchOverlay.style.display = 'none';
+         }
+         
+         // Show persistent waiting message for shootout
+         showPersistentShootoutNotification(data.message || 'Waiting for players...');
+       }
+       if (data.type === 'shootout-preparing') {
+         // Clear persistent waiting notification
+         clearPersistentShootoutNotification();
+         
+         // Hide position switch overlay during shootout preparing
+         const positionSwitchOverlay = document.getElementById('position-switch-overlay');
+         if (positionSwitchOverlay) {
+           positionSwitchOverlay.style.display = 'none';
+         }
+         
+         // Show preparing message for shootout using notification system
+         showNotification(data.message || 'Preparing shootout...', 'info', 3000);
+       }
+       if (data.type === 'shootout-transition-lock') {
+         // Lock pointer immediately during transition periods to prevent movement
+         // This happens after players are respawned but before countdown starts
+         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+           document.body.requestPointerLock?.();
+           console.log('🔒 Pointer locked during shootout transition');
+         }
+       }
+       if (data.type === 'shootout-countdown') {
+         // Clear persistent waiting notification
+         clearPersistentShootoutNotification();
+         
+         // Show countdown before shootout starts
+         const countdownOverlay = document.getElementById('countdown-overlay');
+         const waitingOverlay = document.getElementById('waiting-overlay');
+         
+         if (countdownOverlay) {
+           // Hide waiting overlay
+           if (waitingOverlay) waitingOverlay.style.display = 'none';
+           
+           // Show countdown
+           countdownOverlay.style.display = 'flex';
+           document.getElementById('countdown-text').textContent = data.countdown;
+           document.querySelector('.countdown-subtext').textContent = data.message || 'Starting Shootout';
+         }
+         
+         // Hide countdown after it finishes
+         if (data.countdown === 0) {
+           setTimeout(() => {
+             if (countdownOverlay) countdownOverlay.style.display = 'none';
+           }, 1000);
+         }
+       }
+       if (data.type === 'shootout-countdown-start') {
+         // Show shot countdown before each shot
+         console.log('🎯 UI: Received shootout-countdown-start event:', data);
+         const countdownOverlay = document.getElementById('countdown-overlay');
+         
+         if (countdownOverlay) {
+           countdownOverlay.style.display = 'flex';
+           document.getElementById('countdown-text').textContent = data.countdown;
+           document.querySelector('.countdown-subtext').textContent = `Round ${data.round}/${data.totalRounds} - ${data.shooterName} vs ${data.goalieName}`;
+           console.log('🎯 UI: Countdown overlay displayed with text:', data.countdown);
+         } else {
+           console.error('🎯 UI: Countdown overlay not found!');
+         }
+         
+         // Ensure pointer stays locked during countdown
+         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+           document.body.requestPointerLock?.();
+           console.log('🔒 Pointer locked during shootout countdown start');
+         }
+       }
+       if (data.type === 'shootout-countdown-update') {
+         // Update shot countdown
+         console.log('🎯 UI: Received shootout-countdown-update event:', data.countdown);
+         const countdownOverlay = document.getElementById('countdown-overlay');
+         
+         if (countdownOverlay && countdownOverlay.style.display === 'flex') {
+           document.getElementById('countdown-text').textContent = data.countdown;
+           console.log('🎯 UI: Updated countdown text to:', data.countdown);
+           
+           // Hide countdown after it finishes
+           if (data.countdown === 0) {
+             setTimeout(() => {
+               if (countdownOverlay) countdownOverlay.style.display = 'none';
+             }, 500);
+           }
+         } else {
+           console.log('🎯 UI: Countdown overlay not visible or not found for update');
+         }
+         
+         // Ensure pointer stays locked during countdown updates
+         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+           document.body.requestPointerLock?.();
+           console.log('🔒 Pointer locked during shootout countdown update');
+         }
+       }
+           if (data.type === 'shootout-shot-start') {
+      // Hide countdown and show shot start
+      const countdownOverlay = document.getElementById('countdown-overlay');
+      
+      if (countdownOverlay) {
+        countdownOverlay.style.display = 'none';
+      }
+      
+      // Unlock pointer so players can move during the shot
+      if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
+        if (document.exitPointerLock) {
+          document.exitPointerLock();
+        } else if (document.mozExitPointerLock) {
+          document.mozExitPointerLock();
+        } else if (document.webkitExitPointerLock) {
+          document.webkitExitPointerLock();
+        }
+        console.log('🔓 Pointer unlocked for shootout shot');
+      }
+      
+      // Start the 10-second shot timer
+      startShootoutTimer();
+      
+      // Optionally show a brief "SHOOT!" message
+      // You could add this if desired
+    }
+       if (data.type === 'team-positions-update') {
       // Disable taken positions (only positions with locked-in players)
       const teams = data.teams;
       // Received team-positions-update
@@ -1405,6 +1657,9 @@ and also configure additional buttons for mobile compatibility.
       teamSelectionOverlay.style.display = 'none';
       selectedMsg.textContent = '';
       
+      // Keep position switch overlay visible until game starts
+      // (it will be hidden when game starts)
+      
       // Clear the periodic pointer unlock interval since team selection is done
       if (window.teamSelectionPointerUnlockInterval) {
         clearInterval(window.teamSelectionPointerUnlockInterval);
@@ -1425,8 +1680,11 @@ and also configure additional buttons for mobile compatibility.
         // Exited pointer lock when player spawned into game world
       }
       
+      // Use data.position from the event instead of selectedPosition
+      const playerPosition = data.position || selectedPosition;
+      
       // Show Body Check button for Defenders
-      if (selectedPosition === 'DEFENDER1' || selectedPosition === 'DEFENDER2') {
+      if (playerPosition === 'DEFENDER1' || playerPosition === 'DEFENDER2') {
         const bodyCheckIndicator = document.getElementById('body-check-cooldown-indicator');
         if (bodyCheckIndicator) {
           bodyCheckIndicator.style.display = 'flex';
@@ -1435,7 +1693,7 @@ and also configure additional buttons for mobile compatibility.
       }
       
       // Show/Hide position-specific move buttons
-      if (selectedPosition === 'GOALIE') {
+      if (playerPosition === 'GOALIE') {
         // Show Goalie Slide button for Goalies
         const goalieSlideIndicator = document.getElementById('goalie-slide-indicator');
         if (goalieSlideIndicator) {
@@ -1676,6 +1934,12 @@ and also configure additional buttons for mobile compatibility.
         timeWhenGoalScored = timeRemaining; // Store current time for resumption
         // Timer stopped after goal scored
       }
+
+      // Also stop shootout timer if active (goal ends the shot)
+      if (shootoutTimerInterval) {
+        stopShootoutTimer();
+        console.log('Goal scored in shootout, timer stopped');
+      }
       
       // Log enhanced goal message if we have scorer info
       if (data.scorerName) {
@@ -1708,20 +1972,52 @@ and also configure additional buttons for mobile compatibility.
     }
     if (data.type === 'countdown-go') {
       // Show "GO!" text
+      console.log('🎯 UI: Received countdown-go event, showing GO!');
+      
+      // Debug: Check overlay state before showing GO!
+      const overlay = document.getElementById('countdown-overlay');
+      console.log('🎯 UI: Countdown overlay state before GO!:', {
+        exists: !!overlay,
+        visible: overlay ? overlay.style.display !== 'none' : false,
+        display: overlay ? overlay.style.display : 'N/A'
+      });
+      
       showCountdownGo();
       
-      // Resume the timer immediately when "GO!" appears
+      // Resume the timer immediately when "GO!" appears (only in regulation mode)
       // Check for periodStartTime instead of timeWhenGoalScored to ensure all players resume
       if (periodStartTime !== null || timeWhenGoalScored !== null) {
         resumeGameTimer();
                   // Timer resumed when GO! appeared
       } else {
-        console.warn('UI: Cannot resume timer - no period start time available');
+        console.log('🎯 UI: No game timer to resume (shootout mode or no period active)');
       }
     }
     if (data.type === 'countdown-end') {
       // Hide countdown overlay
       hideCountdownOverlay();
+    }
+    
+    // Shootout-specific countdown events
+    if (data.type === 'shootout-countdown-start') {
+      // Show shootout countdown overlay 
+      console.log('🎯 UI: Received shootout-countdown-start event');
+      showShootoutCountdownOverlay(data.countdown, data.subtitle);
+    }
+    if (data.type === 'shootout-countdown-update') {
+      // Update shootout countdown overlay
+      console.log('🎯 UI: Received shootout-countdown-update event:', data.countdown);
+      showShootoutCountdownOverlay(data.countdown, data.subtitle);
+    }
+    if (data.type === 'shootout-countdown-go') {
+      // Show "GO!" text for shootout (no timer management)
+      console.log('🎯 UI: Received shootout-countdown-go event, showing GO!');
+      showShootoutCountdownGo();
+    }
+    if (data.type === 'shootout-countdown-end') {
+      // Hide shootout countdown overlay
+      console.log('🎯 UI: Received shootout-countdown-end event, hiding overlay');
+      hideShootoutCountdownOverlay();
     }
     if (data.type === 'period-end') {
       // Show period break overlay
@@ -1855,6 +2151,144 @@ and also configure additional buttons for mobile compatibility.
         updateTimerDisplay();
         // Timer resumed at exact specified time
       }
+    }
+    
+    // Shootout Scoreboard Handler
+    if (data.type === 'shootout-scoreboard') {
+      // Hide regular scoreboard and show shootout scoreboard
+      const regularScoreboard = document.getElementById('scoreboard');
+      const shootoutScoreboard = document.getElementById('shootout-scoreboard');
+      
+      if (regularScoreboard) regularScoreboard.style.display = 'none';
+      if (shootoutScoreboard) shootoutScoreboard.style.display = 'flex';
+      
+      // Update player names
+      const player1Name = document.getElementById('shootout-player1-name');
+      const player2Name = document.getElementById('shootout-player2-name');
+      if (player1Name) player1Name.textContent = data.player1.name;
+      if (player2Name) player2Name.textContent = data.player2.name;
+      
+      // Update round number
+      const roundNumber = document.getElementById('shootout-round-number');
+      if (roundNumber) roundNumber.textContent = data.currentRound;
+      
+      // Update player scores
+      const player1Score = document.getElementById('shootout-player1-score');
+      const player2Score = document.getElementById('shootout-player2-score');
+      if (player1Score) player1Score.textContent = data.player1.totalScore;
+      if (player2Score) player2Score.textContent = data.player2.totalScore;
+      
+      // Update score circles for player 1
+      for (let i = 1; i <= 5; i++) {
+        const circle = document.getElementById(`p1-circle-${i}`);
+        if (circle) {
+          circle.classList.remove('scored', 'missed');
+          // Only apply styling if this shot attempt has actually happened
+          if (i <= data.player1.scores.length && data.player1.scores[i-1] !== null) {
+            circle.classList.add(data.player1.scores[i-1] ? 'scored' : 'missed');
+          }
+          // If shot hasn't happened yet, circle stays empty (just team border)
+        }
+      }
+      
+      // Update score circles for player 2
+      for (let i = 1; i <= 5; i++) {
+        const circle = document.getElementById(`p2-circle-${i}`);
+        if (circle) {
+          circle.classList.remove('scored', 'missed');
+          // Only apply styling if this shot attempt has actually happened
+          if (i <= data.player2.scores.length && data.player2.scores[i-1] !== null) {
+            circle.classList.add(data.player2.scores[i-1] ? 'scored' : 'missed');
+          }
+          // If shot hasn't happened yet, circle stays empty (just team border)
+        }
+      }
+      
+      console.log('Shootout scoreboard updated:', data);
+    }
+    
+    // Hide Shootout Scoreboard Handler
+    if (data.type === 'hide-shootout-scoreboard') {
+      const shootoutScoreboard = document.getElementById('shootout-scoreboard');
+      const regularScoreboard = document.getElementById('scoreboard');
+      
+      if (shootoutScoreboard) shootoutScoreboard.style.display = 'none';
+      if (regularScoreboard) regularScoreboard.style.display = 'flex';
+      
+      console.log('Shootout scoreboard hidden, regular scoreboard restored');
+    }
+
+    // Shootout Shot End Handler
+    if (data.type === 'shootout-shot-end') {
+      // Stop the shot timer when shot ends
+      stopShootoutTimer();
+      console.log('Shootout shot ended, timer stopped');
+    }
+
+    // Shootout Game End Handler
+    if (data.type === 'shootout-game-end') {
+      // Stop the shot timer when game ends
+      stopShootoutTimer();
+      
+      // Hide shootout scoreboard
+      const shootoutScoreboard = document.getElementById('shootout-scoreboard');
+      if (shootoutScoreboard) shootoutScoreboard.style.display = 'none';
+      
+      // Show game over overlay
+      showShootoutGameOverOverlay(data);
+      console.log('Shootout game ended, showing game over overlay');
+    }
+    
+    // Clear All UI Handler
+    if (data.type === 'clear-all-ui') {
+      // Hide all game-specific UI elements
+      hideGameOverOverlay();
+      hideShootoutGameOverOverlay();
+      const shootoutScoreboard = document.getElementById('shootout-scoreboard');
+      if (shootoutScoreboard) shootoutScoreboard.style.display = 'none';
+      const teamSelectionOverlay = document.getElementById('team-selection-overlay');
+      if (teamSelectionOverlay) teamSelectionOverlay.style.display = 'none';
+      console.log('Cleared all UI elements');
+    }
+    
+    // Hide Scoreboard Handler
+    if (data.type === 'hide-scoreboard') {
+      // Hide regulation scoreboard
+      const scoreboard = document.getElementById('scoreboard');
+      if (scoreboard) scoreboard.style.display = 'none';
+      console.log('Hid regulation scoreboard');
+    }
+
+    // Hide game mode selection handler
+    if (data.type === 'hide-game-mode-selection') {
+      const gameModeOverlay = document.getElementById('game-mode-selection-overlay');
+      if (gameModeOverlay) {
+        gameModeOverlay.style.display = 'none';
+        console.log('Game mode selection overlay hidden');
+      }
+    }
+
+    // Shootout waiting handler (removed duplicate - handled above with position switch overlay hiding)
+
+    // Shootout full handler
+    if (data.type === 'shootout-full') {
+      showNotification(data.message, 'warning', 3000);
+      console.log('Shootout full message shown');
+    }
+
+    // Hide waiting message handler
+    if (data.type === 'hide-waiting-message') {
+      // Clear persistent waiting notification
+      clearPersistentShootoutNotification();
+      
+      // Remove any existing notification messages
+      const notifications = document.querySelectorAll('.notification');
+      notifications.forEach(notification => {
+        if (notification.parentNode) {
+          notification.parentNode.removeChild(notification);
+        }
+      });
+      console.log('Waiting messages hidden');
     }
   });
 
@@ -2056,6 +2490,10 @@ and also configure additional buttons for mobile compatibility.
   let periodStartTime = null; // Backend period start time for synchronization
   let exactResumeTime = null; // Track exact resume time to prevent recalculation conflicts
 
+  // Shootout shot timer functionality
+  let shootoutTimerInterval = null;
+  let shootoutTimeRemaining = 10; // 10 seconds per shot
+
   function startGameTimer(backendStartTime = null) {
     // Clear any existing timer
     if (timerInterval) {
@@ -2141,6 +2579,236 @@ and also configure additional buttons for mobile compatibility.
     const seconds = timeRemaining % 60;
     const timerDisplay = `${minutes}:${seconds.toString().padStart(2, '0')}`;
     document.querySelector('.timer').textContent = timerDisplay;
+  }
+
+  // Shootout timer functions
+  function startShootoutTimer() {
+    // Clear any existing timer
+    stopShootoutTimer();
+    
+    // Reset timer to 10 seconds
+    shootoutTimeRemaining = 10;
+    
+    // Show timer display
+    const shootoutTimer = document.getElementById('shootout-timer');
+    if (shootoutTimer) {
+      shootoutTimer.style.display = 'flex';
+    }
+    
+    updateShootoutTimerDisplay();
+    
+    // Start countdown
+    shootoutTimerInterval = setInterval(() => {
+      shootoutTimeRemaining--;
+      updateShootoutTimerDisplay();
+      
+      if (shootoutTimeRemaining <= 0) {
+        // Time's up - notify server that shot timed out
+        stopShootoutTimer();
+        hytopia.sendData({ type: 'shootout-shot-timeout' });
+      }
+    }, 1000);
+  }
+
+  function stopShootoutTimer() {
+    if (shootoutTimerInterval) {
+      clearInterval(shootoutTimerInterval);
+      shootoutTimerInterval = null;
+    }
+    
+    // Hide timer display
+    const shootoutTimer = document.getElementById('shootout-timer');
+    if (shootoutTimer) {
+      shootoutTimer.style.display = 'none';
+    }
+  }
+
+  function updateShootoutTimerDisplay() {
+    const timerElement = document.getElementById('shootout-timer-countdown');
+    if (timerElement) {
+      timerElement.textContent = shootoutTimeRemaining;
+      
+      // Add warning styling when under 4 seconds
+      if (shootoutTimeRemaining <= 3) {
+        timerElement.classList.add('warning');
+      } else {
+        timerElement.classList.remove('warning');
+      }
+    }
+  }
+
+  // Shootout Game Over Overlay functionality
+  let shootoutReturnCountdown = 10;
+  let shootoutReturnInterval = null;
+
+  function showShootoutGameOverOverlay(data) {
+    const overlay = document.getElementById('shootout-game-over-overlay');
+    if (!overlay) return;
+    
+    // Update the result text
+    const resultElement = document.getElementById('shootout-game-result');
+    const winnerSection = document.getElementById('shootout-winner-section');
+    const winnerName = document.getElementById('shootout-winner-name');
+    const winnerScore = document.getElementById('shootout-winner-score');
+    
+    if (data.winner) {
+      if (resultElement) resultElement.textContent = `${data.winnerName} WINS!`;
+      if (winnerSection) winnerSection.style.display = 'block';
+      if (winnerName) winnerName.textContent = data.winnerName;
+      if (winnerScore) winnerScore.textContent = `${data.winner === data.player1.id ? data.player1.goals : data.player2.goals} Goals`;
+    } else {
+      if (resultElement) resultElement.textContent = 'TIE GAME!';
+      if (winnerSection) winnerSection.style.display = 'none';
+    }
+    
+    // Update final scores
+    const player1Name = document.getElementById('shootout-final-player1-name');
+    const player1Score = document.getElementById('shootout-final-player1-score');
+    const player2Name = document.getElementById('shootout-final-player2-name');
+    const player2Score = document.getElementById('shootout-final-player2-score');
+    
+    if (player1Name) player1Name.textContent = data.player1.name;
+    if (player1Score) player1Score.textContent = data.player1.goals;
+    if (player2Name) player2Name.textContent = data.player2.name;
+    if (player2Score) player2Score.textContent = data.player2.goals;
+    
+    // Show overlay
+    overlay.style.display = 'flex';
+    
+    // Start countdown timer
+    shootoutReturnCountdown = 10;
+    startShootoutReturnCountdown();
+  }
+
+  function startShootoutReturnCountdown() {
+    const countdownElement = document.getElementById('shootout-return-countdown');
+    
+    function updateCountdown() {
+      if (countdownElement) {
+        countdownElement.textContent = shootoutReturnCountdown;
+      }
+      
+      if (shootoutReturnCountdown <= 0) {
+        clearInterval(shootoutReturnInterval);
+        hideShootoutGameOverOverlay();
+      } else {
+        shootoutReturnCountdown--;
+      }
+    }
+    
+    // Update immediately
+    updateCountdown();
+    
+    // Then update every second
+    shootoutReturnInterval = setInterval(updateCountdown, 1000);
+  }
+
+  function hideShootoutGameOverOverlay() {
+    const overlay = document.getElementById('shootout-game-over-overlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+    }
+    
+    if (shootoutReturnInterval) {
+      clearInterval(shootoutReturnInterval);
+      shootoutReturnInterval = null;
+    }
+    
+    // Send message to backend to return to game mode selection
+    hytopia.sendData({
+      type: 'shootout-return-to-game-mode-selection'
+    });
+  }
+
+  // Simple notification system
+  function showNotification(message, type = 'info', duration = 3000) {
+    // Check for existing notifications to stack them
+    const existingNotifications = document.querySelectorAll('.notification');
+    const topOffset = 80 + (existingNotifications.length * 60); // Stack notifications
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `notification notification-${type}`;
+    notification.textContent = message;
+    
+    // Style the notification
+    notification.style.cssText = `
+      position: fixed;
+      top: ${topOffset}px;
+      right: 20px;
+      background: ${type === 'warning' ? '#ff9800' : '#2196f3'};
+      color: white;
+      padding: 12px 20px;
+      border-radius: 4px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+      z-index: 1001;
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      max-width: 300px;
+      word-wrap: break-word;
+      animation: slideIn 0.3s ease-out;
+    `;
+    
+    // Add animation styles if not already present
+    if (!document.querySelector('#notification-styles')) {
+      const style = document.createElement('style');
+      style.id = 'notification-styles';
+      style.textContent = `
+        @keyframes slideIn {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+          from { transform: translateX(0); opacity: 1; }
+          to { transform: translateX(100%); opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // Add to DOM
+    document.body.appendChild(notification);
+    
+    // Auto-remove after duration (unless duration is 0 for persistent notifications)
+    if (duration > 0) {
+      setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease-out';
+        setTimeout(() => {
+          if (notification.parentNode) {
+            notification.parentNode.removeChild(notification);
+          }
+        }, 300);
+      }, duration);
+    }
+    
+    return notification; // Return reference for manual removal
+  }
+
+  // Persistent notification for shootout waiting
+  let persistentShootoutNotification = null;
+
+  function showPersistentShootoutNotification(message) {
+    // Clear any existing persistent notification
+    if (persistentShootoutNotification) {
+      clearPersistentShootoutNotification();
+    }
+    
+    // Create persistent notification (duration = 0 means no auto-removal)
+    persistentShootoutNotification = showNotification(message, 'info', 0);
+    persistentShootoutNotification.classList.add('persistent-shootout-notification');
+  }
+
+  function clearPersistentShootoutNotification() {
+    if (persistentShootoutNotification && persistentShootoutNotification.parentNode) {
+      persistentShootoutNotification.style.animation = 'slideOut 0.3s ease-out';
+      setTimeout(() => {
+        if (persistentShootoutNotification && persistentShootoutNotification.parentNode) {
+          persistentShootoutNotification.parentNode.removeChild(persistentShootoutNotification);
+        }
+        persistentShootoutNotification = null;
+      }, 300);
+    }
   }
 
   // Spin move cooldown handling
@@ -2496,21 +3164,43 @@ and also configure additional buttons for mobile compatibility.
   }
 
   function showCountdownGo() {
+    console.log('🎯 UI: showCountdownGo() called');
     const overlay = document.getElementById('countdown-overlay');
     const countdownText = document.getElementById('countdown-text');
-    const subtextElement = overlay.querySelector('.countdown-subtext');
+    const subtextElement = overlay ? overlay.querySelector('.countdown-subtext') : null;
     
-    countdownText.textContent = 'GO!';
-    countdownText.classList.add('countdown-go');
-    subtextElement.style.display = 'none';
+    console.log('🎯 UI: showCountdownGo() - Element check:', {
+      overlay: !!overlay,
+      countdownText: !!countdownText,
+      subtextElement: !!subtextElement,
+      overlayDisplay: overlay ? overlay.style.display : 'N/A',
+      overlayVisible: overlay ? overlay.style.display !== 'none' : false
+    });
     
-    // Remove dark background for GO! so players can start moving
-    overlay.classList.add('countdown-go-transparent');
-    
-    // Add animation class for "GO!" effect
-    countdownText.classList.remove('countdown-animate');
-    void countdownText.offsetWidth; // Force reflow
-    countdownText.classList.add('countdown-animate');
+    if (overlay && countdownText && subtextElement) {
+      // Ensure overlay is visible
+      overlay.style.display = 'flex';
+      
+      countdownText.textContent = 'GO!';
+      countdownText.classList.add('countdown-go');
+      subtextElement.style.display = 'none';
+      
+      // Remove dark background for GO! so players can start moving
+      overlay.classList.add('countdown-go-transparent');
+      
+      // Add animation class for "GO!" effect
+      countdownText.classList.remove('countdown-animate');
+      void countdownText.offsetWidth; // Force reflow
+      countdownText.classList.add('countdown-animate');
+      
+      console.log('🎯 UI: GO! overlay displayed successfully - text should now show GO!');
+    } else {
+      console.error('🎯 UI: showCountdownGo() - Missing elements:', {
+        overlay: !!overlay,
+        countdownText: !!countdownText,
+        subtextElement: !!subtextElement
+      });
+    }
   }
 
   function hideCountdownOverlay() {
@@ -2522,6 +3212,80 @@ and also configure additional buttons for mobile compatibility.
     overlay.classList.remove('countdown-go-transparent');
     countdownText.classList.remove('countdown-go', 'countdown-animate');
     subtextElement.style.display = 'block';
+  }
+
+  // Shootout-specific countdown functions (separate from regulation mode)
+  function showShootoutCountdownOverlay(countdown, subtitle = 'Shootout') {
+    console.log('🎯 UI: showShootoutCountdownOverlay() called with:', countdown, subtitle);
+    const overlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+    const subtextElement = overlay.querySelector('.countdown-subtext');
+    
+    // Ensure overlay is visible
+    overlay.style.display = 'flex';
+    
+    // Reset any previous GO! styling
+    overlay.classList.remove('countdown-go-transparent');
+    countdownText.classList.remove('countdown-go');
+    subtextElement.style.display = 'block';
+    
+    // Set countdown number and subtitle
+    countdownText.textContent = countdown;
+    subtextElement.textContent = subtitle;
+    
+    // Add animation class for number change
+    countdownText.classList.remove('countdown-animate');
+    void countdownText.offsetWidth; // Force reflow
+    countdownText.classList.add('countdown-animate');
+    
+    console.log('🎯 UI: Shootout countdown overlay displayed:', countdown);
+  }
+
+  function showShootoutCountdownGo() {
+    console.log('🎯 UI: showShootoutCountdownGo() called');
+    const overlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+    const subtextElement = overlay.querySelector('.countdown-subtext');
+    
+    if (overlay && countdownText && subtextElement) {
+      // Ensure overlay is visible
+      overlay.style.display = 'flex';
+      
+      // Set GO! text and styling
+      countdownText.textContent = 'GO!';
+      countdownText.classList.add('countdown-go');
+      subtextElement.style.display = 'none';
+      
+      // Remove dark background for GO! so players can start moving
+      overlay.classList.add('countdown-go-transparent');
+      
+      // Add animation class for "GO!" effect
+      countdownText.classList.remove('countdown-animate');
+      void countdownText.offsetWidth; // Force reflow
+      countdownText.classList.add('countdown-animate');
+      
+      console.log('🎯 UI: Shootout GO! overlay displayed successfully - text should now show GO!');
+    } else {
+      console.error('🎯 UI: showShootoutCountdownGo() - Missing elements:', {
+        overlay: !!overlay,
+        countdownText: !!countdownText,
+        subtextElement: !!subtextElement
+      });
+    }
+  }
+
+  function hideShootoutCountdownOverlay() {
+    console.log('🎯 UI: hideShootoutCountdownOverlay() called');
+    const overlay = document.getElementById('countdown-overlay');
+    const countdownText = document.getElementById('countdown-text');
+    const subtextElement = overlay.querySelector('.countdown-subtext');
+    
+    overlay.style.display = 'none';
+    overlay.classList.remove('countdown-go-transparent');
+    countdownText.classList.remove('countdown-go', 'countdown-animate');
+    subtextElement.style.display = 'block';
+    
+    console.log('🎯 UI: Shootout countdown overlay hidden');
   }
 
   // Period break overlay functionality
@@ -2851,16 +3615,12 @@ and also configure additional buttons for mobile compatibility.
       selectedMsg.textContent = '';
     }
     
-    // Re-enable all position buttons (they'll be properly updated by team-positions-update)
+    // Don't clear position data - let team-positions-update handle it properly
+    // This ensures locked-in positions are displayed correctly when switching positions
     const positionButtons = document.querySelectorAll('.position-btn');
     positionButtons.forEach(btn => {
-      btn.disabled = false;
       btn.classList.remove('selected');
-      // Clear any player names
-      const playerNameEl = btn.querySelector('.player-name');
-      if (playerNameEl) {
-        playerNameEl.textContent = '';
-      }
+      // Don't clear player names or disabled state - let team-positions-update handle it
     });
     
           // Showing team selection overlay with reset state
@@ -3679,8 +4439,26 @@ and also configure additional buttons for mobile compatibility.
     </div>
   </div>
 
+  <!-- Game Mode Selection UI -->
+  <div id="game-mode-selection-overlay" class="game-mode-selection-overlay" style="display: none;">
+    <div class="game-mode-selection-title">Select Game Mode</div>
+    <div class="game-mode-selection-container">
+      <div class="game-mode-option" data-mode="REGULATION">
+        <div class="game-mode-icon">🏒</div>
+        <div class="game-mode-name">Regulation</div>
+        <div class="game-mode-description">Full 6v6 (2v2 min) hockey game<br>3 periods • Teams required</div>
+      </div>
+      <div class="game-mode-option" data-mode="SHOOTOUT">
+        <div class="game-mode-icon">🥅</div>
+        <div class="game-mode-name">Shootout</div>
+        <div class="game-mode-description">1v1 penalty shootout<br>5 rounds • 2 players only</div>
+      </div>
+    </div>
+    <div id="game-mode-selection-message" class="game-mode-selection-message">Choose a game mode to begin</div>
+  </div>
+
   <!-- Team Selection UI -->
-  <div id="team-selection-overlay" class="team-selection-overlay">
+  <div id="team-selection-overlay" class="team-selection-overlay" style="display: none;">
     <div class="team-selection-title">Select Your Team & Position</div>
     <div class="teams-container">
       <div class="team-column red-team">
@@ -3761,6 +4539,80 @@ and also configure additional buttons for mobile compatibility.
     <div class="team blue">
       <div class="team-name">BLUE</div>
       <div class="team-score">0</div>
+    </div>
+  </div>
+
+  <!-- Shootout Game Over Overlay -->
+  <div id="shootout-game-over-overlay" class="shootout-game-over-overlay" style="display: none;">
+    <div class="shootout-game-over-content">
+      <div class="shootout-game-over-header">
+        <div class="shootout-game-over-title">SHOOTOUT COMPLETE</div>
+        <div class="shootout-game-over-subtitle" id="shootout-game-result">TIE GAME</div>
+      </div>
+      
+      <div class="shootout-game-over-players">
+        <div class="shootout-game-over-player winner" id="shootout-winner-section" style="display: none;">
+          <div class="winner-crown">👑</div>
+          <div class="winner-name" id="shootout-winner-name">Winner</div>
+          <div class="winner-score" id="shootout-winner-score">5</div>
+        </div>
+        
+        <div class="shootout-game-over-final-score">
+          <div class="final-score-left">
+            <div class="final-score-name" id="shootout-final-player1-name">Player 1</div>
+            <div class="final-score-value" id="shootout-final-player1-score">0</div>
+          </div>
+          <div class="final-score-vs">VS</div>
+          <div class="final-score-right">
+            <div class="final-score-name" id="shootout-final-player2-name">Player 2</div>
+            <div class="final-score-value" id="shootout-final-player2-score">0</div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="shootout-game-over-message">
+        <div class="returning-message">Returning to Game Mode Selection...</div>
+        <div class="countdown-timer" id="shootout-return-countdown">10</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Shootout Scoreboard -->
+  <div id="shootout-scoreboard" class="shootout-scoreboard" style="display: none;">
+    <!-- Red Player (Left) -->
+    <div class="shootout-player player1">
+      <div class="player-name" id="shootout-player1-name">Player 1</div>
+      <div class="player-circles">
+        <div class="score-circle red-team" id="p1-circle-1"></div>
+        <div class="score-circle red-team" id="p1-circle-2"></div>
+        <div class="score-circle red-team" id="p1-circle-3"></div>
+        <div class="score-circle red-team" id="p1-circle-4"></div>
+        <div class="score-circle red-team" id="p1-circle-5"></div>
+      </div>
+      <div class="player-total" id="shootout-player1-score">0</div>
+    </div>
+    
+    <!-- Center (Title, Round, Timer) -->
+    <div class="shootout-center">
+      <div class="shootout-title">SHOOTOUT</div>
+      <div class="shootout-round">Round <span id="shootout-round-number">1</span> of 5</div>
+      <div class="shootout-timer" id="shootout-timer" style="display: none;">
+        <div class="timer-label">Shot Timer</div>
+        <div class="timer-countdown" id="shootout-timer-countdown">10</div>
+      </div>
+    </div>
+    
+    <!-- Blue Player (Right) -->
+    <div class="shootout-player player2">
+      <div class="player-name" id="shootout-player2-name">Player 2</div>
+      <div class="player-circles">
+        <div class="score-circle blue-team" id="p2-circle-1"></div>
+        <div class="score-circle blue-team" id="p2-circle-2"></div>
+        <div class="score-circle blue-team" id="p2-circle-3"></div>
+        <div class="score-circle blue-team" id="p2-circle-4"></div>
+        <div class="score-circle blue-team" id="p2-circle-5"></div>
+      </div>
+      <div class="player-total" id="shootout-player2-score">0</div>
     </div>
   </div>
 
@@ -4370,6 +5222,115 @@ and also configure additional buttons for mobile compatibility.
     border-color: rgba(219, 62, 62, 0.7);
   }  
 
+  .game-mode-selection-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 150;
+  }
+  .game-mode-selection-title {
+    color: #fff;
+    font-size: 2.5rem;
+    font-weight: bold;
+    margin-bottom: 48px;
+    text-shadow: 2px 4px 12px #000;
+    letter-spacing: 1px;
+  }
+  .game-mode-selection-container {
+    display: flex;
+    gap: 80px;
+    margin-bottom: 32px;
+  }
+  .game-mode-option {
+    background: rgba(30,30,30,0.95);
+    border-radius: 20px;
+    padding: 40px 50px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 6px 30px rgba(0,0,0,0.4);
+    border: 3px solid transparent;
+    min-width: 250px;
+  }
+  .game-mode-option:hover {
+    background: rgba(50,50,50,0.95);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .game-mode-option.selected {
+    background: rgba(68,170,255,0.15);
+    border-color: #44aaff;
+    box-shadow: 0 0 0 3px #44aaff55, 0 8px 40px rgba(0,0,0,0.5);
+  }
+  .game-mode-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.3));
+  }
+  .game-mode-name {
+    font-family: 'Draco', 'Inter', Arial, sans-serif;
+    font-size: 1.2rem;
+    font-weight: bold;
+    color: #fff;
+    margin-bottom: 12px;
+    letter-spacing: 0.5px;
+  }
+  .game-mode-description {
+    font-size: 1.1rem;
+    color: #ccc;
+    line-height: 1.5;
+    font-weight: 400;
+  }
+  .game-mode-selection-message {
+    color: #fff;
+    font-size: 1.2rem;
+    text-align: center;
+    margin-top: 20px;
+    min-height: 32px;
+    font-weight: 500;
+  }
+
+  /* Mobile responsiveness for game mode selection */
+  @media (max-width: 768px) {
+    .game-mode-selection-title {
+      font-size: 2rem;
+      margin-bottom: 32px;
+    }
+    .game-mode-selection-container {
+      flex-direction: column;
+      gap: 40px;
+      width: 90%;
+      max-width: 350px;
+    }
+    .game-mode-option {
+      min-width: auto;
+      width: 100%;
+      padding: 30px 40px;
+    }
+    .game-mode-icon {
+      font-size: 3rem;
+      margin-bottom: 16px;
+    }
+    .game-mode-name {
+      font-size: 1.6rem;
+      margin-bottom: 10px;
+    }
+    .game-mode-description {
+      font-size: 1rem;
+    }
+    .game-mode-selection-message {
+      font-size: 1.1rem;
+      padding: 0 20px;
+    }
+  }
+
   .team-selection-overlay {
     position: fixed;
     top: 0; left: 0; right: 0; bottom: 0;
@@ -4486,11 +5447,11 @@ and also configure additional buttons for mobile compatibility.
     opacity: 0.7;
   }
 
-  /* Update waiting overlay to be in top right */
+  /* Update waiting overlay to be positioned below Stats button */
   .waiting-overlay {
     position: fixed;
-    top: 24px;
-    right: 24px; /* Changed from left: 50%, transform: translateX(-50%) */
+    top: 80px; /* Moved below Stats button to avoid overlap */
+    right: 20px; /* Aligned with Stats button */
     background: rgba(30, 30, 30, 0.95);
     color: #fff;
     padding: 12px 24px;
@@ -4681,6 +5642,322 @@ and also configure additional buttons for mobile compatibility.
   .scoreboard .team.blue .team-name {
     color: #44aaff;
     text-shadow: 0 0 8px rgba(68,170,255,0.3);
+  }
+
+  /* Shootout Scoreboard - Horizontal Layout */
+  .shootout-scoreboard {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(30, 30, 30, 0.95);
+    color: #fff;
+    padding: 10px 18px;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    z-index: 199; /* Below waiting overlay */
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 20px;
+    pointer-events: none; /* Allow clicking through */
+    min-width: 500px; /* Wide enough for horizontal layout */
+  }
+
+  /* Center section with title, round, and timer */
+  .shootout-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    min-width: 100px;
+  }
+
+  .shootout-title {
+    font-size: 1.0rem;
+    font-weight: 700;
+    font-family: 'Draco', Arial, sans-serif;
+    color: #ffd700;
+    text-shadow: 0 0 8px rgba(255,215,0,0.3);
+    text-align: center;
+  }
+
+  .shootout-round {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #bbb;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+    text-align: center;
+  }
+
+  .shootout-timer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin-top: 4px;
+  }
+
+  .timer-label {
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #888;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+  }
+
+  .timer-countdown {
+    font-size: 1.4rem;
+    font-weight: 700;
+    font-family: monospace;
+    color: #ff6b35;
+    text-shadow: 0 0 8px rgba(255,107,53,0.4);
+    background: rgba(255,107,53,0.1);
+    padding: 4px 8px;
+    border-radius: 6px;
+    min-width: 32px;
+    text-align: center;
+  }
+
+  .timer-countdown.warning {
+    color: #ff4444;
+    text-shadow: 0 0 8px rgba(255,68,68,0.6);
+    background: rgba(255,68,68,0.15);
+    animation: pulse 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes pulse {
+    0% { transform: scale(1); }
+    100% { transform: scale(1.1); }
+  }
+
+  /* Player sections (left and right) */
+  .shootout-player {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 140px;
+  }
+
+  .shootout-player .player-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    font-family: 'Inter', Arial, sans-serif;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
+  }
+
+  .player-circles {
+    display: flex;
+    gap: 4px; /* Increased from 3px */
+    justify-content: center;
+  }
+
+  .score-circle {
+    width: 16px; /* Increased from 12px */
+    height: 16px; /* Increased from 12px */
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    background: transparent;
+    transition: all 0.3s ease;
+  }
+
+  /* Team color borders for empty circles */
+  .score-circle.red-team {
+    border-color: #ff4444;
+    box-shadow: 0 0 4px rgba(255,68,68,0.2);
+  }
+
+  .score-circle.blue-team {
+    border-color: #44aaff;
+    box-shadow: 0 0 4px rgba(68,170,255,0.2);
+  }
+
+  /* Scored circles fill green regardless of team */
+  .score-circle.scored {
+    background: #00ff44;
+    border-color: #00ff44;
+    box-shadow: 0 0 8px rgba(0,255,68,0.5);
+  }
+
+  .score-circle.missed {
+    background: #ff4444;
+    border-color: #ff4444;
+    box-shadow: 0 0 8px rgba(255,68,68,0.5);
+  }
+
+  .shootout-player .player-total {
+    font-size: 1.2rem; /* Increased from 1.1rem */
+    font-weight: 700;
+    font-family: monospace;
+    text-shadow: 0 0 10px rgba(255,255,255,0.2);
+  }
+
+  .shootout-vs {
+    font-size: 1rem; /* Increased from 0.9rem */
+    font-weight: 600;
+    color: #888;
+    text-shadow: 1px 1px 4px rgba(0,0,0,0.3);
+  }
+
+  .shootout-player.player1 .player-name {
+    color: #ff4444;
+    text-shadow: 0 0 8px rgba(255,68,68,0.3);
+  }
+
+  .shootout-player.player2 .player-name {
+    color: #44aaff;
+    text-shadow: 0 0 8px rgba(68,170,255,0.3);
+  }
+
+  /* Shootout Game Over Overlay */
+  .shootout-game-over-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+  }
+
+  .shootout-game-over-content {
+    background: linear-gradient(135deg, rgba(30, 30, 30, 0.95), rgba(20, 20, 20, 0.95));
+    border-radius: 20px;
+    padding: 40px;
+    max-width: 500px;
+    width: 90%;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    border: 2px solid rgba(255,255,255,0.1);
+  }
+
+  .shootout-game-over-header {
+    margin-bottom: 30px;
+  }
+
+  .shootout-game-over-title {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #ffd700;
+    text-shadow: 0 0 15px rgba(255,215,0,0.5);
+    margin-bottom: 10px;
+    letter-spacing: 2px;
+  }
+
+  .shootout-game-over-subtitle {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.3);
+  }
+
+  .shootout-game-over-players {
+    margin: 30px 0;
+  }
+
+  .shootout-game-over-player.winner {
+    background: linear-gradient(135deg, rgba(255,215,0,0.2), rgba(255,140,0,0.2));
+    border-radius: 15px;
+    padding: 20px;
+    margin-bottom: 20px;
+    border: 2px solid rgba(255,215,0,0.4);
+  }
+
+  .winner-crown {
+    font-size: 3rem;
+    margin-bottom: 10px;
+    filter: drop-shadow(0 0 10px rgba(255,215,0,0.8));
+  }
+
+  .winner-name {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #ffd700;
+    text-shadow: 0 0 10px rgba(255,215,0,0.5);
+    margin-bottom: 5px;
+  }
+
+  .winner-score {
+    font-family: monospace;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+  }
+
+  .shootout-game-over-final-score {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 30px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 15px;
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .final-score-left, .final-score-right {
+    text-align: center;
+  }
+
+  .final-score-name {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #ccc;
+    margin-bottom: 5px;
+  }
+
+  .final-score-value {
+    font-family: monospace;
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 8px rgba(255,255,255,0.3);
+  }
+
+  .final-score-vs {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #888;
+    text-shadow: 0 0 5px rgba(136,136,136,0.5);
+  }
+
+  .shootout-game-over-message {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+
+  .returning-message {
+    font-family: 'Inter', Arial, sans-serif;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #aaa;
+    margin-bottom: 10px;
+  }
+
+  .countdown-timer {
+    font-family: monospace;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
   }
 
   /* Skill Bar Row Overlay (bottom right) */
@@ -9172,9 +10449,9 @@ k
       gap: 4px;
     }
 
-    /* Waiting Overlay - More compact */
+    /* Waiting Overlay - More compact and positioned below buttons */
     .waiting-overlay {
-      top: 15px;
+      top: 65px; /* Below Stats/Controls buttons on mobile */
       right: 15px;
       padding: 8px 16px;
       min-width: 150px;
@@ -9211,6 +10488,65 @@ k
     
     .time {
       font-size: 0.9rem;
+    }
+
+    /* Shootout Scoreboard Mobile Adjustments - Horizontal Compact */
+    .shootout-scoreboard {
+      top: 12px;
+      padding: 6px 10px;
+      min-width: 300px;
+      gap: 8px;
+    }
+    
+    .shootout-center {
+      min-width: 70px;
+    }
+    
+    .shootout-title {
+      font-size: 0.7rem;
+    }
+    
+    .shootout-round {
+      font-size: 0.6rem;
+    }
+    
+    .shootout-timer {
+      margin-top: 2px;
+      gap: 1px;
+    }
+    
+    .timer-label {
+      font-size: 0.55rem;
+    }
+    
+    .timer-countdown {
+      font-size: 0.9rem;
+      padding: 2px 4px;
+      min-width: 20px;
+    }
+    
+    .shootout-player {
+      min-width: 80px;
+      gap: 3px;
+    }
+    
+    .shootout-player .player-name {
+      font-size: 0.65rem;
+      max-width: 70px;
+    }
+    
+    .shootout-player .player-total {
+      font-size: 0.9rem;
+    }
+    
+    .score-circle {
+      width: 10px;
+      height: 10px;
+      border-width: 1px;
+    }
+    
+    .player-circles {
+      gap: 2px;
     }
 
     /* Skill indicators - more compact positioning */
@@ -9350,7 +10686,7 @@ k
     
     /* Prevent waiting text from wrapping and fix alignment */
     .waiting-overlay {
-      top: 15px;
+      top: 65px; /* Below Stats/Controls buttons on very small screens */
       right: 15px;
       padding: 6px 12px;
       min-width: 160px;

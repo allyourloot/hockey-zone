@@ -559,7 +559,16 @@ export class PlayerStatsManager {
   public startGameTime(): void {
     this._gameStartTime = Date.now();
     this._periodStartTime = Date.now();
-    CONSTANTS.debugLog('Started tracking game time', 'PlayerStatsManager');
+    
+    // CRITICAL: Reset all player join times to NOW when the game actually starts
+    // This ensures only IN_PERIOD time counts toward GP qualification, not waiting/lobby time
+    const currentTime = Date.now();
+    for (const playerId of this._playerStats.keys()) {
+      this._playerJoinTimes.set(playerId, currentTime);
+      CONSTANTS.debugLog(`Reset join time for player ${playerId} to game start time`, 'PlayerStatsManager');
+    }
+    
+    CONSTANTS.debugLog('Started tracking game time and reset all player join times to game start', 'PlayerStatsManager');
   }
 
   /**

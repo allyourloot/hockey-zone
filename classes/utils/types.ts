@@ -88,6 +88,7 @@ export enum HockeyPosition {
 
 export enum HockeyGameState {
   LOBBY = 'LOBBY',
+  GAME_MODE_SELECTION = 'GAME_MODE_SELECTION',
   TEAM_SELECTION = 'TEAM_SELECTION',
   WAITING_FOR_PLAYERS = 'WAITING_FOR_PLAYERS',
   COUNTDOWN_TO_START = 'COUNTDOWN_TO_START',
@@ -96,6 +97,15 @@ export enum HockeyGameState {
   GOAL_SCORED = 'GOAL_SCORED',
   PERIOD_END = 'PERIOD_END',
   GAME_OVER = 'GAME_OVER',
+  SHOOTOUT_READY = 'SHOOTOUT_READY',
+  SHOOTOUT_IN_PROGRESS = 'SHOOTOUT_IN_PROGRESS',
+  SHOOTOUT_ROUND_END = 'SHOOTOUT_ROUND_END',
+  SHOOTOUT_GAME_OVER = 'SHOOTOUT_GAME_OVER',
+}
+
+export enum GameMode {
+  REGULATION = 'REGULATION',
+  SHOOTOUT = 'SHOOTOUT',
 }
 
 export interface TeamAssignment {
@@ -324,4 +334,31 @@ export interface OffsideViolation {
 export interface ZoneBoundary {
   redDefensiveMax: number;  // Z coordinate (anything less is Red defensive)
   blueDefensiveMin: number; // Z coordinate (anything greater is Blue defensive)
+}
+
+export interface ShootoutRound {
+  roundNumber: number;
+  shotNumber: number; // 1 or 2 (each round has 2 shots)
+  shooterTeam: HockeyTeam;
+  shooterPlayerId: string;
+  goalieTeam: HockeyTeam;
+  goaliePlayerId: string;
+  scored: boolean;
+  completed: boolean;
+}
+
+export interface ShootoutGameState {
+  currentRound: number;
+  totalRounds: number;
+  scores: Record<HockeyTeam, number>;
+  rounds: ShootoutRound[];
+  currentShooter?: string;
+  currentGoalie?: string;
+  isCountdownActive: boolean;
+  countdownSeconds: number;
+}
+
+export interface GameModeSelectData extends UIEventData {
+  type: 'game-mode-select';
+  gameMode: GameMode;
 } 
