@@ -21,9 +21,11 @@ export class ShootoutManager {
   private _world: World | undefined;
   private _gameState: ShootoutGameState;
   private _playerIdToPlayer: Map<string, Player> = new Map();
+  private _spectators: Map<string, Player> = new Map(); // Track spectators
   private _countdownTimer: NodeJS.Timeout | undefined;
   private _roundEndTimer: NodeJS.Timeout | undefined;
   private _gameEndTimer: NodeJS.Timeout | undefined;
+  private _shotEnded: boolean = false; // Flag to prevent goals after shot officially ends
   
   private constructor() {
     this._gameState = {
@@ -63,6 +65,12 @@ export class ShootoutManager {
       isCountdownActive: false,
       countdownSeconds: 3,
     };
+    
+    // Clear spectators when resetting
+    this._spectators.clear();
+    
+    // Reset shot ended flag
+    this._shotEnded = false;
     
     // Clear any existing timers
     if (this._countdownTimer) {
@@ -345,6 +353,19 @@ export class ShootoutManager {
 
     CONSTANTS.debugLog('🥅 Shot started - players can now move', 'ShootoutManager');
 
+    // Reset shot ended flag - allow goals for this new shot
+    this._shotEnded = false;
+
+    // Lock pointer for all players (both active players and spectators) after countdown ends
+    this._playerIdToPlayer.forEach((player) => {
+      try {
+        player.ui.lockPointer(true);
+        CONSTANTS.debugLog(`🔒 Locked pointer for player ${player.id} after shootout countdown`, 'ShootoutManager');
+      } catch (error) {
+        CONSTANTS.debugError('Error locking pointer for player after shootout countdown:', error, 'ShootoutManager');
+      }
+    });
+
     // Broadcast shot start
     this.broadcastToAllPlayers({
       type: 'shootout-shot-start',
@@ -353,15 +374,21 @@ export class ShootoutManager {
       goalieName: this._playerIdToPlayer.get(this._gameState.currentGoalie!)?.username || 'Unknown',
     });
 
-    // Start shot timer (10 seconds max per shot to match frontend timer)
+    // Start shot timer (9.8 seconds - slightly before frontend timer to ensure backend processes timeout first)
     this._roundEndTimer = setTimeout(() => {
       // Shot timed out without goal
-      CONSTANTS.debugLog('🕐 Backend shot timer expired (10s) - ending shot', 'ShootoutManager');
+      CONSTANTS.debugLog('🕐 Backend shot timer expired (9.8s) - ending shot', 'ShootoutManager');
       this.endCurrentShot(false);
-    }, 10000);
+    }, 9800);
   }
 
   public shotAttempted(scored: boolean, scorerId?: string) {
+    // Prevent goals after shot has officially ended (either by timeout or previous goal)
+    if (this._shotEnded) {
+      CONSTANTS.debugLog(`🚫 Shot attempt ignored - shot already ended. Scored: ${scored}`, 'ShootoutManager');
+      return;
+    }
+
     if (!this._gameState.isCountdownActive) {
       this.endCurrentShot(scored, scorerId);
     }
@@ -378,6 +405,9 @@ export class ShootoutManager {
     }
 
     CONSTANTS.debugLog(`🎯 Ending shot: Round ${currentShot.roundNumber} Shot ${currentShot.shotNumber} - Scored: ${scored}`, 'ShootoutManager');
+
+    // IMMEDIATELY mark shot as ended to prevent any more goals
+    this._shotEnded = true;
 
     // Clear round timer
     if (this._roundEndTimer) {
@@ -494,6 +524,9 @@ export class ShootoutManager {
     // Reset puck to center
     this.spawnPuckAtCenter();
 
+    // Reset shot ended flag for the new shot (defensive measure)
+    this._shotEnded = false;
+
     // Start countdown immediately after goal celebration ends or miss timeout
     this.startShotCountdown();
   }
@@ -571,10 +604,11 @@ export class ShootoutManager {
       type: 'hide-shootout-scoreboard',
     });
 
-    // Get all players before clearing
+    // Get all players and spectators before clearing
     const playersToReset = Array.from(this._playerIdToPlayer.values());
+    const spectatorsToReset = Array.from(this._spectators.values());
     
-    // Show game mode selection overlay to all players BEFORE despawning them
+    // Show game mode selection overlay to all players and spectators BEFORE despawning them
     this.broadcastToAllPlayers({
       type: 'game-mode-selection-start'
     });
@@ -669,11 +703,21 @@ export class ShootoutManager {
   private broadcastToAllPlayers(data: any) {
     if (!this._world) return;
 
+    // Send to active shootout players
     this._playerIdToPlayer.forEach((player) => {
       try {
         player.ui.sendData(data);
       } catch (error) {
         CONSTANTS.debugError('Error broadcasting to player in shootout:', error, 'ShootoutManager');
+      }
+    });
+
+    // Send to spectators
+    this._spectators.forEach((player) => {
+      try {
+        player.ui.sendData(data);
+      } catch (error) {
+        CONSTANTS.debugError('Error broadcasting to spectator in shootout:', error, 'ShootoutManager');
       }
     });
   }
@@ -696,5 +740,114 @@ export class ShootoutManager {
 
   public isCountdownActive(): boolean {
     return this._gameState.isCountdownActive;
+  }
+
+  /**
+   * Check if a shot is still valid (not ended by timeout)
+   * Used to prevent goals after shot timer expires
+   */
+  public isShotStillValid(): boolean {
+    return !this._shotEnded && this.isShootoutActive();
+  }
+
+  /**
+   * Add a spectator to the shootout match
+   * They will receive scoreboard updates and other match data
+   */
+  public addSpectator(player: Player) {
+    this._spectators.set(player.id, player);
+    CONSTANTS.debugLog(`👀 Added spectator ${player.id} to shootout`, 'ShootoutManager');
+    
+    // Send them the current scoreboard immediately
+    this.broadcastShootoutScoreboard();
+  }
+
+  /**
+   * Remove a spectator from the shootout match
+   */
+  public removeSpectator(playerId: string) {
+    if (this._spectators.has(playerId)) {
+      this._spectators.delete(playerId);
+      CONSTANTS.debugLog(`👋 Removed spectator ${playerId} from shootout`, 'ShootoutManager');
+    }
+  }
+
+  /**
+   * Handle player leaving during an active shootout
+   * Immediately end the shootout and declare the remaining player as winner
+   */
+  public handlePlayerLeave(leavingPlayerId: string) {
+    if (!this._world || !this.isShootoutActive()) {
+      return; // Not in an active shootout
+    }
+
+    // If the leaving player is just a spectator, just remove them
+    if (this._spectators.has(leavingPlayerId)) {
+      this.removeSpectator(leavingPlayerId);
+      return;
+    }
+
+    CONSTANTS.debugLog(`🚫 Player ${leavingPlayerId} left during active shootout - ending match immediately`, 'ShootoutManager');
+
+    // Get remaining player
+    const remainingPlayers = Array.from(this._playerIdToPlayer.values()).filter(p => p.id !== leavingPlayerId);
+    
+    if (remainingPlayers.length === 0) {
+      // No players left - just reset to game mode selection
+      CONSTANTS.debugLog('🔄 No players remaining in shootout - returning to game mode selection', 'ShootoutManager');
+      this.returnToGameModeSelection();
+      return;
+    }
+
+    const winner = remainingPlayers[0];
+    const leavingPlayer = this._playerIdToPlayer.get(leavingPlayerId);
+
+    // Clear any existing timers
+    if (this._countdownTimer) {
+      clearTimeout(this._countdownTimer);
+      this._countdownTimer = undefined;
+    }
+    if (this._roundEndTimer) {
+      clearTimeout(this._roundEndTimer);
+      this._roundEndTimer = undefined;
+    }
+    if (this._gameEndTimer) {
+      clearTimeout(this._gameEndTimer);
+      this._gameEndTimer = undefined;
+    }
+
+    // Remove the leaving player from our tracking
+    this._playerIdToPlayer.delete(leavingPlayerId);
+
+    // Send immediate game over overlay to remaining players
+    const gameOverData = {
+      type: 'shootout-game-end',
+      winner: winner.id,
+      winnerName: winner.username || 'Winner',
+      player1: {
+        id: winner.id,
+        name: winner.username || 'Winner',
+        goals: 0 // Doesn't matter since they won by forfeit
+      },
+      player2: {
+        id: leavingPlayerId,
+        name: leavingPlayer?.username || 'Player Left',
+        goals: 0 // Doesn't matter since they forfeit
+      },
+      finalScore: 'FORFEIT',
+      forfeit: true,
+      leavingPlayerName: leavingPlayer?.username || 'Opponent',
+      rounds: this._gameState.rounds,
+    };
+
+    // Send to remaining players
+    this.broadcastToAllPlayers(gameOverData);
+
+    CONSTANTS.debugLog(`🏆 Shootout ended by forfeit - Winner: ${winner.username || winner.id}`, 'ShootoutManager');
+
+    // Auto-return to game mode selection after 5 seconds
+    this._gameEndTimer = setTimeout(() => {
+      this.returnToGameModeSelection();
+    }, 5000);
   }
 } 

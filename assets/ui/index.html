@@ -1590,16 +1590,10 @@ and also configure additional buttons for mobile compatibility.
         countdownOverlay.style.display = 'none';
       }
       
-      // Unlock pointer so players can move during the shot
-      if (document.pointerLockElement || document.mozPointerLockElement || document.webkitPointerLockElement) {
-        if (document.exitPointerLock) {
-          document.exitPointerLock();
-        } else if (document.mozExitPointerLock) {
-          document.mozExitPointerLock();
-        } else if (document.webkitExitPointerLock) {
-          document.webkitExitPointerLock();
-        }
-        console.log('🔓 Pointer unlocked for shootout shot');
+      // Ensure pointer stays locked so players can move and aim during the shot
+      if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+        document.body.requestPointerLock?.();
+        console.log('🔒 Pointer locked for shootout shot');
       }
       
       // Start the 10-second shot timer
@@ -1992,10 +1986,26 @@ and also configure additional buttons for mobile compatibility.
       } else {
         console.log('🎯 UI: No game timer to resume (shootout mode or no period active)');
       }
+      
+      // Lock pointer after countdown ends so players can immediately start playing
+      setTimeout(() => {
+        if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+          document.body.requestPointerLock?.();
+          console.log('🔒 UI: Pointer locked after countdown-go event');
+        }
+      }, 1000); // Wait 1 second for "GO!" to display, then lock pointer
     }
     if (data.type === 'countdown-end') {
       // Hide countdown overlay
       hideCountdownOverlay();
+      
+      // Lock pointer when countdown overlay is hidden to ensure players can immediately play
+      setTimeout(() => {
+        if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+          document.body.requestPointerLock?.();
+          console.log('🔒 UI: Pointer locked after countdown-end event');
+        }
+      }, 100); // Small delay to ensure overlay is hidden first
     }
     
     // Shootout-specific countdown events
@@ -2013,11 +2023,27 @@ and also configure additional buttons for mobile compatibility.
       // Show "GO!" text for shootout (no timer management)
       console.log('🎯 UI: Received shootout-countdown-go event, showing GO!');
       showShootoutCountdownGo();
+      
+      // Lock pointer after shootout countdown ends so players can immediately start playing
+      setTimeout(() => {
+        if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+          document.body.requestPointerLock?.();
+          console.log('🔒 UI: Pointer locked after shootout-countdown-go event');
+        }
+      }, 1000); // Wait 1 second for "GO!" to display, then lock pointer
     }
     if (data.type === 'shootout-countdown-end') {
       // Hide shootout countdown overlay
       console.log('🎯 UI: Received shootout-countdown-end event, hiding overlay');
       hideShootoutCountdownOverlay();
+      
+      // Lock pointer when shootout countdown overlay is hidden to ensure players can immediately play
+      setTimeout(() => {
+        if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
+          document.body.requestPointerLock?.();
+          console.log('🔒 UI: Pointer locked after shootout-countdown-end event');
+        }
+      }, 100); // Small delay to ensure overlay is hidden first
     }
     if (data.type === 'period-end') {
       // Show period break overlay
@@ -2603,9 +2629,12 @@ and also configure additional buttons for mobile compatibility.
       updateShootoutTimerDisplay();
       
       if (shootoutTimeRemaining <= 0) {
-        // Time's up - notify server that shot timed out
+        // Time's up - immediately notify server that shot timed out
         stopShootoutTimer();
+        
+        // Send timeout message immediately with no delay
         hytopia.sendData({ type: 'shootout-shot-timeout' });
+        console.log('🕐 Frontend timer expired - sent timeout to backend immediately');
       }
     }, 1000);
   }
@@ -2651,7 +2680,13 @@ and also configure additional buttons for mobile compatibility.
     const winnerName = document.getElementById('shootout-winner-name');
     const winnerScore = document.getElementById('shootout-winner-score');
     
-    if (data.winner) {
+    // Handle forfeit scenarios
+    if (data.forfeit) {
+      if (resultElement) resultElement.textContent = `${data.winnerName} WINS BY FORFEIT!`;
+      if (winnerSection) winnerSection.style.display = 'block';
+      if (winnerName) winnerName.textContent = data.winnerName;
+      if (winnerScore) winnerScore.textContent = `${data.leavingPlayerName} Left`;
+    } else if (data.winner) {
       if (resultElement) resultElement.textContent = `${data.winnerName} WINS!`;
       if (winnerSection) winnerSection.style.display = 'block';
       if (winnerName) winnerName.textContent = data.winnerName;
@@ -2668,15 +2703,22 @@ and also configure additional buttons for mobile compatibility.
     const player2Score = document.getElementById('shootout-final-player2-score');
     
     if (player1Name) player1Name.textContent = data.player1.name;
-    if (player1Score) player1Score.textContent = data.player1.goals;
     if (player2Name) player2Name.textContent = data.player2.name;
-    if (player2Score) player2Score.textContent = data.player2.goals;
+    
+    // Handle forfeit score display
+    if (data.forfeit) {
+      if (player1Score) player1Score.textContent = 'WIN';
+      if (player2Score) player2Score.textContent = 'FORFEIT';
+    } else {
+      if (player1Score) player1Score.textContent = data.player1.goals;
+      if (player2Score) player2Score.textContent = data.player2.goals;
+    }
     
     // Show overlay
     overlay.style.display = 'flex';
     
-    // Start countdown timer
-    shootoutReturnCountdown = 10;
+    // Start countdown timer (shorter for forfeit)
+    shootoutReturnCountdown = data.forfeit ? 5 : 10;
     startShootoutReturnCountdown();
   }
 

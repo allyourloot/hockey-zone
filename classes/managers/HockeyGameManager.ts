@@ -169,8 +169,11 @@ export class HockeyGameManager {
       // Send message to player that shootout is full
       player.ui.sendData({
         type: 'shootout-full',
-        message: 'Shootout is full! Please wait for the next game.'
+        message: 'Shootout is full! You are now spectating the match.'
       });
+      
+      // Add them as a spectator to the shootout so they can see the scoreboard
+      ShootoutManager.instance.addSpectator(player);
       return;
     }
     
@@ -460,6 +463,11 @@ export class HockeyGameManager {
   public goalScored(team: HockeyTeam, puckEntity?: any, isOwnGoal: boolean = false, scorerId?: string, primaryAssistId?: string) {
     // Handle shootout goals differently
     if (this._state === HockeyGameState.SHOOTOUT_IN_PROGRESS) {
+      // Check if shot is still valid before processing goal
+      if (!ShootoutManager.instance.isShotStillValid()) {
+        debugLog(`🚫 Goal ignored in shootout - shot timer already expired`, 'HockeyGameManager');
+        return;
+      }
       this.shootoutGoalScored(true, scorerId);
       return;
     }
@@ -2793,20 +2801,26 @@ export class HockeyGameManager {
       }
     }
 
-    // Phase 3: Ensure balanced team sizes (minimum 2 players per team)
+    // Phase 3: Ensure balanced team sizes - proper balancing for all scenarios
     const redCountAfterMoves = this.countTeamPlayersAfterMoves(HockeyTeam.RED, moves, lockedInPlayers);
     const blueCountAfterMoves = this.countTeamPlayersAfterMoves(HockeyTeam.BLUE, moves, lockedInPlayers);
+    const totalPlayersAfterMoves = redCountAfterMoves + blueCountAfterMoves;
     
-    debugLog(`Team counts after moves: RED=${redCountAfterMoves}, BLUE=${blueCountAfterMoves}`, 'HockeyGameManager');
+    debugLog(`Team counts after mandatory moves: RED=${redCountAfterMoves}, BLUE=${blueCountAfterMoves}, Total=${totalPlayersAfterMoves}`, 'HockeyGameManager');
     
-    // If teams are severely imbalanced, move players to balance them
+    // Calculate ideal team sizes for maximum balance
+    const idealRedCount = Math.floor(totalPlayersAfterMoves / 2);
+    const idealBlueCount = totalPlayersAfterMoves - idealRedCount;
+    
+    debugLog(`Ideal team balance: RED=${idealRedCount}, BLUE=${idealBlueCount}`, 'HockeyGameManager');
+    
+    // Step 1: Ensure minimum players per team first
     if (redCountAfterMoves < CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM && blueCountAfterMoves > CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM) {
-      // RED needs more players
+      // RED needs more players to meet minimum
       const needed = CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM - redCountAfterMoves;
       for (let i = 0; i < needed; i++) {
         const player = this.findBestPlayerToMove([HockeyTeam.BLUE], movePriority, lockedInPlayers, moves);
         if (player) {
-          // Find best available position on RED team
           const availablePos = this.findAvailablePosition(HockeyTeam.RED, player.position, moves);
           if (availablePos) {
             moves.push({
@@ -2815,18 +2829,17 @@ export class HockeyGameManager {
               to: HockeyTeam.RED,
               toPos: availablePos,
               playerId: player.playerId,
-              reason: 'Moved to RED team for balanced 2v2 minimum'
+              reason: 'Moved to RED team for minimum team size requirement'
             });
           }
         }
       }
     } else if (blueCountAfterMoves < CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM && redCountAfterMoves > CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM) {
-      // BLUE needs more players
+      // BLUE needs more players to meet minimum
       const needed = CONSTANTS.LOBBY_CONFIG.MINIMUM_PLAYERS_PER_TEAM - blueCountAfterMoves;
       for (let i = 0; i < needed; i++) {
         const player = this.findBestPlayerToMove([HockeyTeam.RED], movePriority, lockedInPlayers, moves);
         if (player) {
-          // Find best available position on BLUE team
           const availablePos = this.findAvailablePosition(HockeyTeam.BLUE, player.position, moves);
           if (availablePos) {
             moves.push({
@@ -2835,7 +2848,55 @@ export class HockeyGameManager {
               to: HockeyTeam.BLUE,
               toPos: availablePos,
               playerId: player.playerId,
-              reason: 'Moved to BLUE team for balanced 2v2 minimum'
+              reason: 'Moved to BLUE team for minimum team size requirement'
+            });
+          }
+        }
+      }
+    }
+
+    // Step 2: Balance teams optimally (after ensuring minimums)
+    // Recalculate counts after minimum adjustments
+    const redCountAfterMinimum = this.countTeamPlayersAfterMoves(HockeyTeam.RED, moves, lockedInPlayers);
+    const blueCountAfterMinimum = this.countTeamPlayersAfterMoves(HockeyTeam.BLUE, moves, lockedInPlayers);
+    
+    debugLog(`Team counts after minimum adjustments: RED=${redCountAfterMinimum}, BLUE=${blueCountAfterMinimum}`, 'HockeyGameManager');
+    
+    // Balance teams to get as close to ideal as possible
+    if (redCountAfterMinimum > idealRedCount + 1) {
+      // RED has too many players - move some to BLUE
+      const excess = redCountAfterMinimum - idealRedCount;
+      for (let i = 0; i < excess; i++) {
+        const player = this.findBestPlayerToMove([HockeyTeam.RED], movePriority, lockedInPlayers, moves);
+        if (player) {
+          const availablePos = this.findAvailablePosition(HockeyTeam.BLUE, player.position, moves);
+          if (availablePos) {
+            moves.push({
+              from: player.team,
+              fromPos: player.position,
+              to: HockeyTeam.BLUE,
+              toPos: availablePos,
+              playerId: player.playerId,
+              reason: `Moved to BLUE team for optimal balance (${idealRedCount}v${idealBlueCount})`
+            });
+          }
+        }
+      }
+    } else if (blueCountAfterMinimum > idealBlueCount + 1) {
+      // BLUE has too many players - move some to RED
+      const excess = blueCountAfterMinimum - idealBlueCount;
+      for (let i = 0; i < excess; i++) {
+        const player = this.findBestPlayerToMove([HockeyTeam.BLUE], movePriority, lockedInPlayers, moves);
+        if (player) {
+          const availablePos = this.findAvailablePosition(HockeyTeam.RED, player.position, moves);
+          if (availablePos) {
+            moves.push({
+              from: player.team,
+              fromPos: player.position,
+              to: HockeyTeam.RED,
+              toPos: availablePos,
+              playerId: player.playerId,
+              reason: `Moved to RED team for optimal balance (${idealRedCount}v${idealBlueCount})`
             });
           }
         }
