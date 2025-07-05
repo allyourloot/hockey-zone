@@ -504,16 +504,15 @@ export class AudioManager {
   public playPooledSoundEffect(uri: string, config: any = {}): boolean {
     if (!this.world) return false;
     
-    // Validate entity attachment before proceeding
+    // CRITICAL: Enhanced entity validation before proceeding
     if (config.attachedToEntity) {
       const entity = config.attachedToEntity;
       
       // Check if entity exists and is spawned
       if (!entity || !entity.isSpawned) {
-        CONSTANTS.debugLog(`Entity not spawned for ${uri.split('/').pop()}, playing as global sound instead`, 'AudioManager');
-        // Remove entity attachment and play as global sound
-        config = { ...config };
-        delete config.attachedToEntity;
+        CONSTANTS.debugLog(`Entity not spawned for ${uri.split('/').pop()}, skipping audio (entity cleanup)`, 'AudioManager');
+        // Don't play as global sound - just skip to prevent audio spam from despawned entities
+        return false;
       }
     }
     
@@ -524,7 +523,7 @@ export class AudioManager {
     }
     
     try {
-      // Triple-check entity validity with more robust validation
+      // CRITICAL: Final entity validity check with more robust validation
       const hasValidEntity = pooledAudio.attachedEntity && 
                             typeof pooledAudio.attachedEntity === 'object' && 
                             pooledAudio.attachedEntity.isSpawned === true;
@@ -534,15 +533,25 @@ export class AudioManager {
         try {
           pooledAudio.audio.play(this.world, true);
         } catch (entityError) {
-          // Entity became invalid during play call, fall back to global sound
+          // Entity became invalid during play call - check if it's a despawned entity error
+          const errorMessage = entityError instanceof Error ? entityError.message : String(entityError);
+          if (errorMessage.includes('not spawned') || errorMessage.includes('undefined')) {
+            CONSTANTS.debugLog(`Entity despawned during play for ${uri.split('/').pop()}, skipping audio`, 'AudioManager');
+            pooledAudio.isPlaying = false;
+            return false;
+          }
+          // For other errors, fall back to global sound
           CONSTANTS.debugLog(`Entity became invalid during play for ${uri.split('/').pop()}, playing as global sound`, 'AudioManager');
           pooledAudio.audio.play(this.world, true);
         }
       } else {
-        // Entity is undefined, null, or not spawned - play as global sound
+        // Entity is undefined, null, or not spawned
         if (pooledAudio.attachedEntity) {
-          CONSTANTS.debugLog(`Pooled audio entity not spawned for ${uri.split('/').pop()}, playing as global sound`, 'AudioManager');
+          CONSTANTS.debugLog(`Pooled audio entity not spawned for ${uri.split('/').pop()}, skipping audio (entity cleanup)`, 'AudioManager');
+          pooledAudio.isPlaying = false;
+          return false;
         }
+        // If no entity was attached, play as global sound
         pooledAudio.audio.play(this.world, true);
       }
       
@@ -1656,6 +1665,101 @@ export class AudioManager {
       
       // Stop the global ice skating sound if it's playing
       this.stopGlobalContinuousSound('audio/sfx/hockey/ice-skating.mp3');
+    }
+  }
+
+  /**
+   * Clean up all audio references for a specific entity (called when player disconnects)
+   */
+  public cleanupEntityAudio(entity: Entity): void {
+    if (!entity || !this.world) return;
+
+    CONSTANTS.debugCleanup(`Starting audio cleanup for entity ${(entity as any).id || 'unknown'}`, 'AudioManager');
+    let cleanedCount = 0;
+
+    try {
+      // Clean up pooled audio with this entity
+      for (const [uri, pool] of this.audioPool.entries()) {
+        const originalLength = pool.length;
+        const cleanedPool = pool.filter(pooled => {
+          if (pooled.attachedEntity === entity) {
+            try {
+              pooled.audio.pause();
+              pooled.isPlaying = false;
+            } catch (error) {
+              // Continue with cleanup
+            }
+            cleanedCount++;
+            return false;
+          }
+          return true;
+        });
+        
+        if (cleanedPool.length !== originalLength) {
+          if (cleanedPool.length === 0) {
+            this.audioPool.delete(uri);
+          } else {
+            this.audioPool.set(uri, cleanedPool);
+          }
+        }
+      }
+
+      // Clean up world audio instances attached to this entity
+      const allAudios = this.world.audioManager?.getAllAudios() || [];
+      const entityAudios = allAudios.filter((audio: any) => 
+        audio.attachedToEntity === entity
+      );
+
+      for (const audio of entityAudios) {
+        try {
+          audio.pause();
+          this.world.audioManager?.unregisterAudio(audio);
+          cleanedCount++;
+        } catch (error) {
+          // Continue with cleanup
+        }
+      }
+
+      // Clean up managed audio instances
+      const managedToRemove: any[] = [];
+      this.activeAudioInstances.forEach(managed => {
+        if ((managed.audio as any).attachedToEntity === entity) {
+          managedToRemove.push(managed);
+        }
+      });
+
+      managedToRemove.forEach(managed => {
+        this.cleanupManagedAudio(managed);
+        cleanedCount++;
+      });
+
+      CONSTANTS.debugCleanup(`Cleaned up ${cleanedCount} audio instances for entity`, 'AudioManager');
+
+    } catch (error) {
+      CONSTANTS.debugError('Error during entity audio cleanup', error, 'AudioManager');
+    }
+  }
+
+  /**
+   * Clean up all audio references for a specific player (called when player disconnects)
+   */
+  public cleanupPlayerAudio(playerId: string): void {
+    if (!playerId || !this.world) return;
+
+    CONSTANTS.debugCleanup(`Starting audio cleanup for player ${playerId}`, 'AudioManager');
+    
+    try {
+      // Remove from skating players
+      this.skatingPlayers.delete(playerId);
+
+      // Get all entities for this player and clean up their audio
+      // Note: We can't easily get entities by player ID in Hytopia, 
+      // so we'll rely on the PlayerManager to call cleanupEntityAudio for each entity
+
+      CONSTANTS.debugCleanup(`Completed audio cleanup for player ${playerId}`, 'AudioManager');
+
+    } catch (error) {
+      CONSTANTS.debugError(`Error during player audio cleanup for ${playerId}`, error, 'AudioManager');
     }
   }
 } 
