@@ -14,7 +14,7 @@ import { PuckBoundaryService } from '../services/PuckBoundaryService';
 import { HockeyGameManager } from './HockeyGameManager';
 import { PlayerSpawnManager } from './PlayerSpawnManager';
 import { WorldInitializer } from '../systems/WorldInitializer';
-import { HockeyTeam, HockeyPosition, HockeyZone, FaceoffLocation } from '../utils/types';
+import { HockeyTeam, HockeyPosition, HockeyZone, FaceoffLocation, GameMode, HockeyGameState } from '../utils/types';
 import type { OffsideViolation } from '../utils/types';
 import { AudioManager } from './AudioManager';
 import { PlayerStatsManager } from './PlayerStatsManager';
@@ -151,11 +151,43 @@ export class ChatCommandManager {
   
   /**
    * Register the /spawnpuck command - creates a new puck at center ice
+   * Only works in Regulation mode during lobby/waiting states
    */
   private registerSpawnPuckCommand(): void {
     if (!this.world) return;
     
     this.world.chatManager.registerCommand('/spawnpuck', (player) => {
+      // Check if command is allowed in current game mode and state
+      const gameManager = HockeyGameManager.instance;
+      const currentGameMode = gameManager.gameMode;
+      const currentGameState = gameManager.state;
+      
+      // Only allow in Regulation mode
+      if (currentGameMode !== GameMode.REGULATION) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          'The /spawnpuck command is only available in Regulation mode!', 
+          'FF0000'
+        );
+        return;
+      }
+      
+      // Only allow in lobby/waiting states
+      const allowedStates = [
+        HockeyGameState.GAME_MODE_SELECTION,
+        HockeyGameState.TEAM_SELECTION,
+        HockeyGameState.WAITING_FOR_PLAYERS
+      ];
+      
+      if (!allowedStates.includes(currentGameState)) {
+        this.world!.chatManager.sendPlayerMessage(
+          player, 
+          'The /spawnpuck command is only available during team selection or while waiting for players!', 
+          'FF0000'
+        );
+        return;
+      }
+      
       // First despawn existing puck if any
       if (this.puck && this.puck.isSpawned) {
         this.puck.despawn();
