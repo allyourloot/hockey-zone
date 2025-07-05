@@ -157,7 +157,7 @@ export const STICK_CHECK = {
 // BODY CHECK CONSTANTS
 // =========================
 export const BODY_CHECK = {
-  COOLDOWN: 7000, // 7 seconds
+  COOLDOWN: 10000, // 10 seconds
   DASH_FORCE: 60, // Forward impulse
   DURATION: 180, // ms
   UI_RANGE: 3.5, // meters (increased range for UI overlay and magnetization)
