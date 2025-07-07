@@ -169,6 +169,17 @@ export const BODY_CHECK = {
 } as const;
 
 // =========================
+// PERSISTENCE CONSTANTS
+// =========================
+export const PERSISTENCE = {
+  // Global leaderboard data (shared across all players)
+  GLOBAL_LEADERBOARD_KEY: 'face-off-leaderboard', // Changed from 'hockey-zone-leaderboard' to wipe data
+  
+  // Individual player data structure key (stored per player automatically by HYTOPIA)
+  PLAYER_STATS_KEY: 'playerStatsV2', // Changed from 'playerStats' to wipe data
+} as const;
+
+// =========================
 // AUDIO MANAGEMENT CONSTANTS
 // =========================
 export const AUDIO = {

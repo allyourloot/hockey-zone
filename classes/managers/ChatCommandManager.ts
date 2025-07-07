@@ -30,6 +30,9 @@ export class ChatCommandManager {
   private puck: Entity | null = null;
   private createPuckEntity: (() => Entity) | null = null;
   
+  // Admin username constant
+  private static readonly ADMIN_USERNAME = 'AllYourLoot';
+  
   // Private constructor for singleton pattern
   private constructor() {}
   
@@ -38,6 +41,46 @@ export class ChatCommandManager {
       ChatCommandManager._instance = new ChatCommandManager();
     }
     return ChatCommandManager._instance;
+  }
+  
+  /**
+   * Check if a player is an admin
+   * @param player - The player to check
+   * @returns true if the player is an admin, false otherwise
+   */
+  private isAdmin(player: any): boolean {
+    return player.username === ChatCommandManager.ADMIN_USERNAME;
+  }
+  
+  /**
+   * Send an admin-only error message to a player
+   * @param player - The player to send the message to
+   */
+  private sendAdminOnlyMessage(player: any): void {
+    if (!this.world) return;
+    this.world.chatManager.sendPlayerMessage(
+      player,
+      'This command is admin-only!',
+      'FF0000'
+    );
+  }
+  
+  /**
+   * Register an admin-only command with automatic admin check
+   * @param commandName - The command name (e.g., '/rocket')
+   * @param handler - The command handler function
+   */
+  private registerAdminCommand(commandName: string, handler: (player: any, args: string[]) => void): void {
+    if (!this.world) return;
+    
+    this.world.chatManager.registerCommand(commandName, (player, args) => {
+      if (!this.isAdmin(player)) {
+        this.sendAdminOnlyMessage(player);
+        return;
+      }
+      
+      handler(player, args);
+    });
   }
   
   /**
@@ -70,7 +113,6 @@ export class ChatCommandManager {
   private registerAllCommands(): void {
     if (!this.world) return;
     
-    this.registerRocketCommand();
     this.registerPuckCommand();
     this.registerSpawnPuckCommand();
     this.registerRemoveTrailCommand();
@@ -101,25 +143,17 @@ export class ChatCommandManager {
   }
   
   /**
-   * Register the /rocket command - applies upward impulse to player
-   */
-  private registerRocketCommand(): void {
-    if (!this.world) return;
-    
-    this.world.chatManager.registerCommand('/rocket', (player) => {
-      this.world!.entityManager.getPlayerEntitiesByPlayer(player).forEach(entity => {
-        entity.applyImpulse({ x: 0, y: 20, z: 0 });
-      });
-    });
-  }
-  
-  /**
-   * Register the /puck command - shows puck debug information
+   * Register the /puck command - shows puck debug information (ADMIN ONLY)
    */
   private registerPuckCommand(): void {
     if (!this.world) return;
     
     this.world.chatManager.registerCommand('/puck', (player) => {
+      if (!this.isAdmin(player)) {
+        this.sendAdminOnlyMessage(player);
+        return;
+      }
+      
       if (this.puck) {
         this.world!.chatManager.sendPlayerMessage(
           player, 
@@ -150,7 +184,7 @@ export class ChatCommandManager {
   }
   
   /**
-   * Register the /spawnpuck command - creates a new puck at center ice
+   * Register the /spawnpuck command - creates a new puck at center ice (PUBLIC)
    * Only works in Regulation mode during lobby/waiting states
    */
   private registerSpawnPuckCommand(): void {
@@ -234,12 +268,17 @@ export class ChatCommandManager {
   }
   
   /**
-   * Register the /removetrail command - removes the puck trail effect
+   * Register the /removetrail command - removes the puck trail effect (ADMIN ONLY)
    */
   private registerRemoveTrailCommand(): void {
     if (!this.world) return;
     
     this.world.chatManager.registerCommand('/removetrail', (player) => {
+      if (!this.isAdmin(player)) {
+        this.sendAdminOnlyMessage(player);
+        return;
+      }
+      
       PuckTrailManager.instance.removeTrail();
       this.world!.chatManager.sendPlayerMessage(player, 'Puck trail effect removed!', '00FF00');
       debugLog('Puck trail effect removed', 'ChatCommandManager');
@@ -247,12 +286,17 @@ export class ChatCommandManager {
   }
 
   /**
-   * Register the /trailcolor command - switches between different trail particle colors
+   * Register the /trailcolor command - switches between different trail particle colors (ADMIN ONLY)
    */
   private registerTrailColorCommand(): void {
     if (!this.world) return;
     
     this.world.chatManager.registerCommand('/trailcolor', (player, args) => {
+      if (!this.isAdmin(player)) {
+        this.sendAdminOnlyMessage(player);
+        return;
+      }
+      
       const color = args[0]?.toLowerCase();
       if (color === 'gray' || color === 'grey' || color === 'red' || color === 'gold') {
         // This will require updating the PuckTrailEffect to support color changes
@@ -275,12 +319,17 @@ export class ChatCommandManager {
   }
 
   /**
-   * Register the /testsleep command - triggers sleep animation for all players
+   * Register the /testsleep command - triggers sleep animation for all players (ADMIN ONLY)
    */
   private registerTestSleepCommand(): void {
     if (!this.world) return;
     
     this.world.chatManager.registerCommand('/testsleep', (player) => {
+      if (!this.isAdmin(player)) {
+        this.sendAdminOnlyMessage(player);
+        return;
+      }
+      
       this.world!.entityManager.getAllPlayerEntities().forEach(entity => {
         // Note: This references IceSkatingController which we haven't extracted yet
         // We'll need to update this when we extract the controller in a later phase
@@ -323,16 +372,16 @@ export class ChatCommandManager {
   private registerGoalDetectionCommands(): void {
     if (!this.world) return;
 
-    // /startmatch - Force start a match for testing with proper game start sequence
-    this.world.chatManager.registerCommand('/startmatch', (player) => {
+    // /startmatch - Force start a match for testing with proper game start sequence (ADMIN ONLY)
+    this.registerAdminCommand('/startmatch', (player) => {
       const gameManager = HockeyGameManager.instance;
       gameManager.startMatchSequence();
       this.world!.chatManager.sendPlayerMessage(player, 'Match sequence started', '00FF00');
       debugLog('Match sequence started with proper countdown and reset', 'ChatCommand');
     });
 
-    // /goalinfo - Show goal detection debug information
-    this.world.chatManager.registerCommand('/goalinfo', (player) => {
+    // /goalinfo - Show goal detection debug information (ADMIN ONLY)
+    this.registerAdminCommand('/goalinfo', (player) => {
       const goalService = GoalDetectionService.instance;
       const debugInfo = goalService.getDebugInfo();
       
@@ -368,8 +417,8 @@ export class ChatCommandManager {
       debugLog('Goal detection debug info', 'ChatCommand');
     });
 
-    // /testgoal - Simulate a goal for testing stats
-    this.world.chatManager.registerCommand('/testgoal', (player, args) => {
+    // /testgoal - Simulate a goal for testing stats (ADMIN ONLY)
+    this.registerAdminCommand('/testgoal', (player, args) => {
       const team = args[0]?.toUpperCase();
       
       if (team !== 'RED' && team !== 'BLUE') {
@@ -388,8 +437,8 @@ export class ChatCommandManager {
       HockeyGameManager.instance.goalScored(team as any, this.puck, false, scorerId, assistId);
     });
 
-    // /puckhistory - Show current puck touch history for debugging
-    this.world.chatManager.registerCommand('/puckhistory', (player) => {
+    // /puckhistory - Show current puck touch history for debugging (ADMIN ONLY)
+    this.registerAdminCommand('/puckhistory', (player) => {
       if (!this.puck) {
         this.world!.chatManager.sendPlayerMessage(player, 'No puck found!', 'FF0000');
         return;
@@ -482,8 +531,8 @@ export class ChatCommandManager {
       }
     });
 
-    // /assisttest - Test assist detection logic manually
-    this.world.chatManager.registerCommand('/assisttest', (player, args) => {
+    // /assisttest - Test assist detection logic manually (ADMIN ONLY)
+    this.registerAdminCommand('/assisttest', (player, args) => {
       if (!this.puck) {
         this.world!.chatManager.sendPlayerMessage(player, 'No puck found!', 'FF0000');
         return;
@@ -623,8 +672,8 @@ export class ChatCommandManager {
       }
     });
 
-    // /testsave - Simulate a save for testing stats
-    this.world.chatManager.registerCommand('/testsave', (player, args) => {
+    // /testsave - Simulate a save for testing stats (ADMIN ONLY)
+    this.registerAdminCommand('/testsave', (player, args) => {
       // Player who runs the command is the goalie making the save
       const goalieId = player.id;
       const shooterId = args[0]; // Required shooter ID
@@ -665,15 +714,15 @@ export class ChatCommandManager {
       HockeyGameManager.instance.saveRecorded(goalieId, shooterId);
     });
 
-    // /resetgoals - Reset goal detection service
-    this.world.chatManager.registerCommand('/resetgoals', (player) => {
+    // /resetgoals - Reset goal detection service (ADMIN ONLY)
+    this.registerAdminCommand('/resetgoals', (player) => {
       GoalDetectionService.instance.reset();
       this.world!.chatManager.sendPlayerMessage(player, 'Goal detection service reset!', '00FF00');
       debugLog('Goal detection service reset', 'ChatCommand');
     });
 
-    // /resetplayers - Reset all players to spawn positions
-    this.world.chatManager.registerCommand('/resetplayers', (player) => {
+    // /resetplayers - Reset all players to spawn positions (ADMIN ONLY)
+    this.registerAdminCommand('/resetplayers', (player) => {
       const gameManager = HockeyGameManager.instance;
       PlayerSpawnManager.instance.performCompleteReset(
         gameManager.teams as any, // Type assertion to handle Teams vs Record type mismatch
@@ -684,8 +733,8 @@ export class ChatCommandManager {
       debugLog('Players reset to spawn positions', 'ChatCommand');
     });
 
-    // /gamestate - Check current game state  
-    this.world.chatManager.registerCommand('/gamestate', (player) => {
+    // /gamestate - Check current game state (ADMIN ONLY)
+    this.registerAdminCommand('/gamestate', (player) => {
       const gameManager = HockeyGameManager.instance;
       const gameState = gameManager.state;
       this.world!.chatManager.sendPlayerMessage(
@@ -696,24 +745,24 @@ export class ChatCommandManager {
       debugLog('Player ${player.id} requested game state: ${gameState}', 'ChatCommand');
     });
 
-    // /testmusic - Test background music
-    this.world.chatManager.registerCommand('/testmusic', (player) => {
+    // /testmusic - Test background music (ADMIN ONLY)
+    this.registerAdminCommand('/testmusic', (player) => {
       if (!this.world) return;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Background music is now handled globally with simple Hytopia approach', '00FF00');
       debugLog('Background music handled globally', 'ChatCommand');
     });
 
-    // /stopmusic - Stop background music (no longer available)
-    this.world.chatManager.registerCommand('/stopmusic', (player) => {
+    // /stopmusic - Stop background music (no longer available) (ADMIN ONLY)
+    this.registerAdminCommand('/stopmusic', (player) => {
       if (!this.world) return;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Background music cannot be stopped individually - handled globally', 'FFAA00');
       debugLog('Background music stop not available with global approach', 'ChatCommand');
     });
 
-    // /restartmusic - Background music info (no longer restartable)
-    this.world.chatManager.registerCommand('/restartmusic', (player) => {
+    // /restartmusic - Background music info (no longer restartable) (ADMIN ONLY)
+    this.registerAdminCommand('/restartmusic', (player) => {
       if (!this.world) return;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Background music is handled globally and cannot be restarted individually', 'FFAA00');
@@ -812,8 +861,8 @@ export class ChatCommandManager {
         });
     });
 
-    // /resetgame - Reset game to lobby with team selection
-    this.world.chatManager.registerCommand('/resetgame', (player) => {
+    // /resetgame - Reset game to lobby with team selection (ADMIN ONLY)
+    this.registerAdminCommand('/resetgame', (player) => {
       const gameManager = HockeyGameManager.instance;
       
       this.world!.chatManager.sendPlayerMessage(player, 'Resetting game to lobby...', '00FF00');

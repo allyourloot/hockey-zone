@@ -80,7 +80,7 @@ export class PersistentPlayerStatsManager {
       const persistedData = player.getPersistedData();
       
       // Look for stats in the persistent data
-      const statsData = persistedData?.playerStats;
+              const statsData = persistedData?.[CONSTANTS.PERSISTENCE.PLAYER_STATS_KEY];
       
       if (statsData && this._isValidStatsData(statsData)) {
         const stats = statsData as PersistentPlayerStats;
@@ -145,7 +145,7 @@ export class PersistentPlayerStatsManager {
       this._recalculateStats(statsToSave);
       
       // Use the new synchronous API - no await needed
-      player.setPersistedData({ playerStats: statsToSave });
+              player.setPersistedData({ [CONSTANTS.PERSISTENCE.PLAYER_STATS_KEY]: statsToSave });
       
       // Update cache and mark as clean
       this._playerStatsCache.set(playerId, statsToSave);
@@ -401,7 +401,7 @@ export class PersistentPlayerStatsManager {
   private async _updateGlobalLeaderboard(playerStats: PersistentPlayerStats): Promise<void> {
     try {
       // Get current global leaderboard data
-      const rawGlobalData = await PersistenceManager.instance.getGlobalData('hockey-zone-leaderboard');
+      const rawGlobalData = await PersistenceManager.instance.getGlobalData(CONSTANTS.PERSISTENCE.GLOBAL_LEADERBOARD_KEY);
       
       let globalLeaderboardData: GlobalLeaderboardData;
       
@@ -444,7 +444,7 @@ export class PersistentPlayerStatsManager {
       globalLeaderboardData.lastUpdated = Date.now();
       
       // Save updated leaderboard
-      await PersistenceManager.instance.setGlobalData('hockey-zone-leaderboard', globalLeaderboardData as Record<string, unknown>);
+      await PersistenceManager.instance.setGlobalData(CONSTANTS.PERSISTENCE.GLOBAL_LEADERBOARD_KEY, globalLeaderboardData as Record<string, unknown>);
       
       this._globalLeaderboardDirty = false;
       
@@ -477,7 +477,7 @@ export class PersistentPlayerStatsManager {
    */
   public async initializeGlobalLeaderboard(): Promise<void> {
     try {
-      const rawGlobalData = await PersistenceManager.instance.getGlobalData('hockey-zone-leaderboard');
+      const rawGlobalData = await PersistenceManager.instance.getGlobalData(CONSTANTS.PERSISTENCE.GLOBAL_LEADERBOARD_KEY);
       
       if (!rawGlobalData || typeof rawGlobalData !== 'object' || !('players' in rawGlobalData)) {
         // Create initial empty leaderboard
@@ -486,7 +486,7 @@ export class PersistentPlayerStatsManager {
           lastUpdated: Date.now()
         };
         
-        await PersistenceManager.instance.setGlobalData('hockey-zone-leaderboard', initialLeaderboard as Record<string, unknown>);
+        await PersistenceManager.instance.setGlobalData(CONSTANTS.PERSISTENCE.GLOBAL_LEADERBOARD_KEY, initialLeaderboard as Record<string, unknown>);
         debugLog('Initialized empty global leaderboard', 'PersistentPlayerStatsManager');
       }
     } catch (error) {
@@ -502,7 +502,7 @@ export class PersistentPlayerStatsManager {
       const playerStats = await this.getPlayerStats(player);
       
       // Check if player is already in global leaderboard
-      const rawGlobalData = await PersistenceManager.instance.getGlobalData('hockey-zone-leaderboard');
+      const rawGlobalData = await PersistenceManager.instance.getGlobalData(CONSTANTS.PERSISTENCE.GLOBAL_LEADERBOARD_KEY);
       
       if (rawGlobalData && typeof rawGlobalData === 'object' && 'players' in rawGlobalData && Array.isArray(rawGlobalData.players)) {
         const globalLeaderboardData = rawGlobalData as unknown as GlobalLeaderboardData;
