@@ -2095,13 +2095,19 @@ export class HockeyGameManager {
   }
 
   public removePlayer(player: Player) {
+    debugLog(`Removing player ${player.id} from HockeyGameManager`, 'HockeyGameManager');
+    
+    // Remove from teams
     for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
       for (const pos of Object.values(HockeyPosition)) {
         if (this._teams[team][pos] === player.id) {
           delete this._teams[team][pos];
+          debugLog(`Removed player ${player.id} from ${team}-${pos}`, 'HockeyGameManager');
         }
       }
     }
+    
+    // Remove from various tracking systems
     this._tentativeSelections.delete(player.id);
     this._lockedInPlayers.delete(player.id);
     this._playerIdToPlayer.delete(player.id);
@@ -2111,6 +2117,65 @@ export class HockeyGameManager {
       .catch(error => {
         debugError('Error removing player stats:', error, 'HockeyGameManager');
       });
+    
+    // Check if this was the last player and clean up game state
+    const remainingPlayers = this.getPlayersInGame();
+    debugLog(`Players remaining after removal: ${remainingPlayers.length}`, 'HockeyGameManager');
+    
+    if (remainingPlayers.length === 0) {
+      debugLog('No players remaining, resetting game state', 'HockeyGameManager');
+      this.resetGameStateForEmptyServer();
+    }
+    
+    // Always broadcast updated game state
+    this.broadcastGameModeAvailability();
+    this.broadcastStatsUpdate();
+  }
+
+  /**
+   * Reset game state when no players remain on the server
+   * This mimics the normal game end sequence to ensure proper state transition
+   */
+  private resetGameStateForEmptyServer(): void {
+    debugLog('Resetting game state for empty server', 'HockeyGameManager');
+    
+    // Use the same reset sequence as normal game end
+    this.resetGameState();
+    this.setGameModeLock(null);
+    
+    // Reset ShootoutManager state
+    if (this._world) {
+      ShootoutManager.instance.resetShootoutState();
+      debugLog('ShootoutManager state reset', 'HockeyGameManager');
+    }
+    
+    // Set state to GAME_MODE_SELECTION (same as normal game end)
+    this._state = HockeyGameState.GAME_MODE_SELECTION;
+    
+    // Clear any remaining celebration/offside states
+    this._goalCelebrationState = { isActive: false };
+    this._offsideState = { isActive: false };
+    this._countdownState = { isActive: false };
+    
+    debugLog('Game state reset complete for empty server', 'HockeyGameManager');
+  }
+
+  /**
+   * Clear all active timers
+   */
+  private clearAllTimers(): void {
+    if (this._periodTimer) {
+      clearInterval(this._periodTimer);
+      this._periodTimer = undefined;
+    }
+    
+    if (this._countdownTimer) {
+      clearTimeout(this._countdownTimer);
+      this._countdownTimer = undefined;
+    }
+    
+    // Clear any other active timers
+    this.clearCountdownTimer();
   }
 
   public getTeamAndPosition(player: Player | string): { team: HockeyTeam, position: HockeyPosition } | undefined {
@@ -3212,5 +3277,19 @@ export class HockeyGameManager {
       
       debugLog(`📡 Broadcasted game mode availability to ${allConnectedPlayers.length} connected players`, 'HockeyGameManager');
     }
+  }
+
+  /**
+   * Get all players currently in the game (either in regulation teams or shootout)
+   */
+  public getPlayersInGame(): Player[] {
+    const players: Player[] = [];
+    
+    // Add all players from _playerIdToPlayer map (this includes regulation and shootout players)
+    this._playerIdToPlayer.forEach((player) => {
+      players.push(player);
+    });
+    
+    return players;
   }
 } 

@@ -54,6 +54,33 @@ and also configure additional buttons for mobile compatibility.
     }, 150);
   });
 
+  // UI Debug function - conditional logging for UI events
+  // This mirrors the server-side debugUI function from constants.ts
+  function debugUI(message, type) {
+    // Check if UI debugging is enabled (can be toggled via server commands)
+    // Default to false to reduce console spam
+    const uiDebugEnabled = window.UI_DEBUG_ENABLED || false;
+    if (uiDebugEnabled) {
+      const logMessage = type ? `🎯 UI[${type}]: ${message}` : `🎯 UI: ${message}`;
+      console.log(logMessage);
+    }
+  }
+
+  // Pointer lock debug function - conditional logging for pointer events
+  function debugPointer(message) {
+    const uiDebugEnabled = window.UI_DEBUG_ENABLED || false;
+    if (uiDebugEnabled) {
+      console.log(`🔒 UI[Pointer]: ${message}`);
+    }
+  }
+
+  // Global function to toggle UI debugging from console or server
+  window.toggleUIDebug = function(enabled) {
+    window.UI_DEBUG_ENABLED = enabled;
+    // Always show debug toggle messages since they're used for control
+    console.log(`🎯 UI Debug ${enabled ? 'ENABLED' : 'DISABLED'}`);
+  };
+
   // Debug function for position switching overlay
   window.debugPositionOverlay = function() {
     const overlay = document.getElementById('position-switch-overlay');
@@ -850,7 +877,7 @@ and also configure additional buttons for mobile compatibility.
   }
 
   function updateSortIndicators() {
-    console.log('Updating sort indicators for column:', currentSortColumn, 'direction:', currentSortDirection);
+            debugUI('Updating sort indicators for column: ' + currentSortColumn + ' direction: ' + currentSortDirection, 'leaderboard');
     
     // Remove all existing sort indicators
     document.querySelectorAll('.leaderboard-col[data-sort]').forEach(col => {
@@ -859,12 +886,12 @@ and also configure additional buttons for mobile compatibility.
     
     // Add indicator to current sorted column
     const currentSortCol = document.querySelector(`[data-sort="${currentSortColumn}"]`);
-    console.log('Found sort column element:', currentSortCol);
+            debugUI('Found sort column element: ' + currentSortCol, 'leaderboard');
     
     if (currentSortCol) {
       const className = currentSortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc';
       currentSortCol.classList.add(className);
-      console.log('Added class:', className, 'to column');
+              debugUI('Added class: ' + className + ' to column', 'leaderboard');
     }
   }
 
@@ -917,7 +944,7 @@ and also configure additional buttons for mobile compatibility.
     if (top100Data && top100Data.length > 0) {
       // Sort players using current sort settings
       const sortedPlayers = sortLeaderboardData(top100Data, currentTop100SortColumn, currentTop100SortDirection);
-      console.log('Sorted', sortedPlayers.length, 'top 100 players by', currentTop100SortColumn, currentTop100SortDirection);
+      debugUI('Sorted ' + sortedPlayers.length + ' top 100 players by ' + currentTop100SortColumn + ' ' + currentTop100SortDirection, 'top100');
 
       // Find the actual leader for the current category (not just first in sorted list)
       let categoryLeader = null;
@@ -988,11 +1015,11 @@ and also configure additional buttons for mobile compatibility.
   }
 
   function updateTop100SortIndicators() {
-    console.log('Updating top 100 sort indicators for column:', currentTop100SortColumn, 'direction:', currentTop100SortDirection);
+          debugUI('Updating top 100 sort indicators for column: ' + currentTop100SortColumn + ' direction: ' + currentTop100SortDirection, 'top100');
     
     // Find the current sorted column first
     const currentSortCol = document.querySelector(`.top100-table-header .leaderboard-col[data-sort="${currentTop100SortColumn}"]`);
-    console.log('Found top 100 sort column element:', currentSortCol);
+          debugUI('Found top 100 sort column element: ' + currentSortCol, 'top100');
     
     // Remove all existing sort indicators EXCEPT from the current column
     document.querySelectorAll('.top100-table-header .leaderboard-col[data-sort]').forEach(col => {
@@ -1009,12 +1036,12 @@ and also configure additional buttons for mobile compatibility.
       // Add new class
       const className = currentTop100SortDirection === 'asc' ? 'sorted-asc' : 'sorted-desc';
       currentSortCol.classList.add(className);
-      console.log('Added class:', className, 'to top 100 column');
+              debugUI('Added class: ' + className + ' to top 100 column', 'top100');
       
       // Verify the class was added
       setTimeout(() => {
-        console.log('Element after adding class (delayed check):', currentSortCol);
-        console.log('Classes on element:', currentSortCol.className);
+        debugUI('Element after adding class (delayed check): ' + currentSortCol, 'top100');
+        debugUI('Classes on element: ' + currentSortCol.className, 'top100');
       }, 20);
     }
   }
@@ -1026,22 +1053,22 @@ and also configure additional buttons for mobile compatibility.
     }
     
     top100SortTimeout = setTimeout(() => {
-      console.log('Sorting top 100 by column:', column, 'Current column:', currentTop100SortColumn, 'Current direction:', currentTop100SortDirection);
+      debugUI('Sorting top 100 by column: ' + column + ' Current column: ' + currentTop100SortColumn + ' Current direction: ' + currentTop100SortDirection, 'top100');
       
       // If clicking the same column, toggle direction
       if (currentTop100SortColumn === column) {
         currentTop100SortDirection = currentTop100SortDirection === 'asc' ? 'desc' : 'asc';
-        console.log('Toggling top 100 direction to:', currentTop100SortDirection);
+        debugUI('Toggling top 100 direction to: ' + currentTop100SortDirection, 'top100');
       } else {
         // New column, default to descending for stats, ascending for names
         currentTop100SortColumn = column;
         currentTop100SortDirection = column === 'player' ? 'asc' : 'desc';
-        console.log('New top 100 column, direction set to:', currentTop100SortDirection);
+        debugUI('New top 100 column, direction set to: ' + currentTop100SortDirection, 'top100');
       }
       
       // If we have cached data, sort it locally; otherwise request new data
       if (cachedTop100Data) {
-        console.log('Using cached top 100 data for sorting');
+        debugUI('Using cached top 100 data for sorting', 'top100');
         updateTop100(cachedTop100Data);
       } else {
         console.log('No cached top 100 data, requesting from server');
@@ -1616,7 +1643,7 @@ and also configure additional buttons for mobile compatibility.
          // This happens after players are respawned but before countdown starts
          if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
            document.body.requestPointerLock?.();
-           console.log('🔒 Pointer locked during shootout transition');
+           debugPointer('locked during shootout transition');
          }
        }
        if (data.type === 'shootout-countdown') {
@@ -1646,14 +1673,14 @@ and also configure additional buttons for mobile compatibility.
        }
        if (data.type === 'shootout-countdown-start') {
          // Show shot countdown before each shot
-         console.log('🎯 UI: Received shootout-countdown-start event:', data);
+         debugUI(`Received shootout-countdown-start event: ${JSON.stringify(data)}`, 'shootout');
          const countdownOverlay = document.getElementById('countdown-overlay');
          
          if (countdownOverlay) {
            countdownOverlay.style.display = 'flex';
            document.getElementById('countdown-text').textContent = data.countdown;
            document.querySelector('.countdown-subtext').textContent = `Round ${data.round}/${data.totalRounds} - ${data.shooterName} vs ${data.goalieName}`;
-           console.log('🎯 UI: Countdown overlay displayed with text:', data.countdown);
+           debugUI(`Countdown overlay displayed with text: ${data.countdown}`, 'shootout');
          } else {
            console.error('🎯 UI: Countdown overlay not found!');
          }
@@ -1661,17 +1688,17 @@ and also configure additional buttons for mobile compatibility.
          // Ensure pointer stays locked during countdown
          if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
            document.body.requestPointerLock?.();
-           console.log('🔒 Pointer locked during shootout countdown start');
+           debugPointer('locked during shootout countdown start');
          }
        }
        if (data.type === 'shootout-countdown-update') {
          // Update shot countdown
-         console.log('🎯 UI: Received shootout-countdown-update event:', data.countdown);
+         debugUI(`Received shootout-countdown-update event: ${data.countdown}`, 'shootout');
          const countdownOverlay = document.getElementById('countdown-overlay');
          
          if (countdownOverlay && countdownOverlay.style.display === 'flex') {
            document.getElementById('countdown-text').textContent = data.countdown;
-           console.log('🎯 UI: Updated countdown text to:', data.countdown);
+           debugUI(`Updated countdown text to: ${data.countdown}`, 'shootout');
            
            // Hide countdown after it finishes
            if (data.countdown === 0) {
@@ -1680,13 +1707,13 @@ and also configure additional buttons for mobile compatibility.
              }, 500);
            }
          } else {
-           console.log('🎯 UI: Countdown overlay not visible or not found for update');
+           debugUI('Countdown overlay not visible or not found for update', 'shootout');
          }
          
          // Ensure pointer stays locked during countdown updates
          if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
            document.body.requestPointerLock?.();
-           console.log('🔒 Pointer locked during shootout countdown update');
+           debugPointer('locked during shootout countdown update');
          }
        }
            if (data.type === 'shootout-shot-start') {
@@ -1700,7 +1727,7 @@ and also configure additional buttons for mobile compatibility.
       // Ensure pointer stays locked so players can move and aim during the shot
       if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
         document.body.requestPointerLock?.();
-        console.log('🔒 Pointer locked for shootout shot');
+        debugPointer('locked for shootout shot');
       }
       
       // Start the 10-second shot timer
@@ -2083,15 +2110,15 @@ and also configure additional buttons for mobile compatibility.
     }
     if (data.type === 'countdown-go') {
       // Show "GO!" text
-      console.log('🎯 UI: Received countdown-go event, showing GO!');
+      debugUI('Received countdown-go event, showing GO!', 'countdown');
       
       // Debug: Check overlay state before showing GO!
       const overlay = document.getElementById('countdown-overlay');
-      console.log('🎯 UI: Countdown overlay state before GO!:', {
+      debugUI(`Countdown overlay state before GO!: ${JSON.stringify({
         exists: !!overlay,
         visible: overlay ? overlay.style.display !== 'none' : false,
         display: overlay ? overlay.style.display : 'N/A'
-      });
+      })}`, 'countdown');
       
       showCountdownGo();
       
@@ -2101,14 +2128,14 @@ and also configure additional buttons for mobile compatibility.
         resumeGameTimer();
                   // Timer resumed when GO! appeared
       } else {
-        console.log('🎯 UI: No game timer to resume (shootout mode or no period active)');
+        debugUI('No game timer to resume (shootout mode or no period active)', 'countdown');
       }
       
       // Lock pointer after countdown ends so players can immediately start playing
       setTimeout(() => {
         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
           document.body.requestPointerLock?.();
-          console.log('🔒 UI: Pointer locked after countdown-go event');
+          debugPointer('locked after countdown-go event');
         }
       }, 1000); // Wait 1 second for "GO!" to display, then lock pointer
     }
@@ -2120,7 +2147,7 @@ and also configure additional buttons for mobile compatibility.
       setTimeout(() => {
         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
           document.body.requestPointerLock?.();
-          console.log('🔒 UI: Pointer locked after countdown-end event');
+          debugPointer('locked after countdown-end event');
         }
       }, 100); // Small delay to ensure overlay is hidden first
     }
@@ -2128,37 +2155,37 @@ and also configure additional buttons for mobile compatibility.
     // Shootout-specific countdown events
     if (data.type === 'shootout-countdown-start') {
       // Show shootout countdown overlay 
-      console.log('🎯 UI: Received shootout-countdown-start event');
+      debugUI('Received shootout-countdown-start event', 'shootout');
       showShootoutCountdownOverlay(data.countdown, data.subtitle);
     }
     if (data.type === 'shootout-countdown-update') {
       // Update shootout countdown overlay
-      console.log('🎯 UI: Received shootout-countdown-update event:', data.countdown);
+      debugUI(`Received shootout-countdown-update event: ${data.countdown}`, 'shootout');
       showShootoutCountdownOverlay(data.countdown, data.subtitle);
     }
     if (data.type === 'shootout-countdown-go') {
       // Show "GO!" text for shootout (no timer management)
-      console.log('🎯 UI: Received shootout-countdown-go event, showing GO!');
+      debugUI('Received shootout-countdown-go event, showing GO!', 'shootout');
       showShootoutCountdownGo();
       
       // Lock pointer after shootout countdown ends so players can immediately start playing
       setTimeout(() => {
         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
           document.body.requestPointerLock?.();
-          console.log('🔒 UI: Pointer locked after shootout-countdown-go event');
+          debugPointer('locked after shootout-countdown-go event');
         }
       }, 1000); // Wait 1 second for "GO!" to display, then lock pointer
     }
     if (data.type === 'shootout-countdown-end') {
       // Hide shootout countdown overlay
-      console.log('🎯 UI: Received shootout-countdown-end event, hiding overlay');
+      debugUI('Received shootout-countdown-end event, hiding overlay', 'shootout');
       hideShootoutCountdownOverlay();
       
       // Lock pointer when shootout countdown overlay is hidden to ensure players can immediately play
       setTimeout(() => {
         if (!document.pointerLockElement && !document.mozPointerLockElement && !document.webkitPointerLockElement) {
           document.body.requestPointerLock?.();
-          console.log('🔒 UI: Pointer locked after shootout-countdown-end event');
+          debugPointer('locked after shootout-countdown-end event');
         }
       }, 100); // Small delay to ensure overlay is hidden first
     }
@@ -2432,6 +2459,39 @@ and also configure additional buttons for mobile compatibility.
         }
       });
       console.log('Waiting messages hidden');
+    }
+    
+    // AFK Warning Handler
+    if (data.type === 'afk-warning') {
+      showAFKWarning(data.message);
+      console.log('AFK warning shown');
+    }
+    
+    // AFK Countdown Handler
+    if (data.type === 'afk-countdown') {
+      hideAFKWarning(); // Hide warning when countdown starts
+      showAFKCountdown(data.countdown, data.message);
+      console.log('AFK countdown started');
+    }
+    
+    // AFK Countdown Update Handler
+    if (data.type === 'afk-countdown-update') {
+      updateAFKCountdown(data.countdown);
+    }
+    
+    // AFK Timeout Handler
+    if (data.type === 'afk-timeout') {
+      showNotification(data.message, 'error', 3000);
+      hideAFKCountdown();
+      hideAFKWarning();
+      console.log('AFK timeout message shown');
+    }
+    
+    // AFK Activity Resumed Handler
+    if (data.type === 'afk-activity-resumed') {
+      hideAFKCountdown();
+      hideAFKWarning();
+      console.log('AFK activity resumed, hiding all AFK notifications');
     }
   });
 
@@ -2959,16 +3019,234 @@ and also configure additional buttons for mobile compatibility.
   }
 
   function clearPersistentShootoutNotification() {
-    if (persistentShootoutNotification && persistentShootoutNotification.parentNode) {
-      persistentShootoutNotification.style.animation = 'slideOut 0.3s ease-out';
-      setTimeout(() => {
-        if (persistentShootoutNotification && persistentShootoutNotification.parentNode) {
-          persistentShootoutNotification.parentNode.removeChild(persistentShootoutNotification);
+  if (persistentShootoutNotification && persistentShootoutNotification.parentNode) {
+    persistentShootoutNotification.style.animation = 'slideOut 0.3s ease-out';
+    setTimeout(() => {
+      if (persistentShootoutNotification && persistentShootoutNotification.parentNode) {
+        persistentShootoutNotification.parentNode.removeChild(persistentShootoutNotification);
+      }
+      persistentShootoutNotification = null;
+    }, 300);
+  }
+}
+
+// AFK Warning and Countdown System
+let afkCountdownElement = null;
+let afkWarningElement = null;
+
+function showAFKCountdown(countdown, message) {
+  // Remove any existing countdown
+  hideAFKCountdown();
+  
+  // Create countdown element
+  afkCountdownElement = document.createElement('div');
+  afkCountdownElement.className = 'afk-countdown-overlay';
+  afkCountdownElement.innerHTML = `
+    <div class="afk-countdown-content">
+      <div class="afk-countdown-title">⚠️ AFK WARNING</div>
+      <div class="afk-countdown-message">${message}</div>
+      <div class="afk-countdown-timer" id="afk-countdown-timer">${countdown}</div>
+      <div class="afk-countdown-subtitle">Move to stay in the game!</div>
+    </div>
+  `;
+  
+  // Add styles
+  afkCountdownElement.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 10000;
+    animation: fadeIn 0.3s ease-in;
+  `;
+  
+  // Add CSS if not already added
+  if (!document.querySelector('#afk-countdown-styles')) {
+    const style = document.createElement('style');
+    style.id = 'afk-countdown-styles';
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+             .afk-countdown-content {
+         background: linear-gradient(135deg, #2a2a2a, #1a1a1a);
+         color: white;
+         padding: 30px;
+         border-radius: 15px;
+         text-align: center;
+         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+         border: 3px solid #444;
+         min-width: 300px;
+       }
+      .afk-countdown-title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 10px;
+        color: #ffff00;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+      }
+      .afk-countdown-message {
+        font-size: 16px;
+        margin-bottom: 15px;
+        color: #ffffff;
+      }
+             .afk-countdown-timer {
+         font-size: 48px;
+         font-weight: bold;
+         color: #ffcc00;
+         text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.8);
+         margin: 15px 0;
+       }
+      .afk-countdown-subtitle {
+        font-size: 14px;
+        color: #ffcccc;
+        font-style: italic;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  document.body.appendChild(afkCountdownElement);
+}
+
+function updateAFKCountdown(countdown) {
+  if (afkCountdownElement) {
+    const timer = afkCountdownElement.querySelector('#afk-countdown-timer');
+    if (timer) {
+      timer.textContent = countdown;
+      
+      // Add urgent animation when countdown is low
+      if (countdown <= 5) {
+        timer.style.animation = 'pulse 0.5s infinite alternate';
+        if (!document.querySelector('#afk-urgent-styles')) {
+          const style = document.createElement('style');
+          style.id = 'afk-urgent-styles';
+                     style.textContent = `
+             @keyframes pulse {
+               from { transform: scale(1); color: #ffcc00; }
+               to { transform: scale(1.1); color: #ff4444; }
+             }
+           `;
+          document.head.appendChild(style);
         }
-        persistentShootoutNotification = null;
-      }, 300);
+      }
     }
   }
+}
+
+function hideAFKCountdown() {
+  if (afkCountdownElement && afkCountdownElement.parentNode) {
+    afkCountdownElement.style.animation = 'fadeOut 0.3s ease-out';
+    setTimeout(() => {
+      if (afkCountdownElement && afkCountdownElement.parentNode) {
+        afkCountdownElement.parentNode.removeChild(afkCountdownElement);
+      }
+      afkCountdownElement = null;
+    }, 300);
+    
+    // Add fadeOut animation style if needed
+    if (!document.querySelector('#afk-fadeout-styles')) {
+      const style = document.createElement('style');
+      style.id = 'afk-fadeout-styles';
+      style.textContent = `
+        @keyframes fadeOut {
+          from { opacity: 1; }
+          to { opacity: 0; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+  }
+}
+
+function showAFKWarning(message) {
+  // Remove any existing warning
+  hideAFKWarning();
+  
+  // Create warning element
+  afkWarningElement = document.createElement('div');
+  afkWarningElement.className = 'afk-warning-notification';
+  afkWarningElement.innerHTML = `
+    <div class="afk-warning-content">
+      <div class="afk-warning-icon">⚠️</div>
+      <div class="afk-warning-text">${message}</div>
+    </div>
+  `;
+  
+  // Position under the position switch overlay
+  afkWarningElement.style.cssText = `
+    position: fixed;
+    top: 130px;
+    right: 20px;
+    background: rgba(30, 30, 30, 0.95);
+    border: 2px solid #ffaa00;
+    border-radius: 8px;
+    padding: 12px 16px;
+    z-index: 1001;
+    max-width: 300px;
+    animation: slideInFromRight 0.4s ease-out;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+  `;
+  
+  // Add CSS if not already added
+  if (!document.querySelector('#afk-warning-styles')) {
+    const style = document.createElement('style');
+    style.id = 'afk-warning-styles';
+    style.textContent = `
+      @keyframes slideInFromRight {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      .afk-warning-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .afk-warning-icon {
+        font-size: 18px;
+        color: #ffaa00;
+      }
+      .afk-warning-text {
+        color: #ffffff;
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.3;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  document.body.appendChild(afkWarningElement);
+  
+  // Auto-hide after 5 seconds
+  setTimeout(() => {
+    hideAFKWarning();
+  }, 5000);
+}
+
+function hideAFKWarning() {
+  if (afkWarningElement && afkWarningElement.parentNode) {
+    afkWarningElement.style.animation = 'fadeOut 0.3s ease-out';
+    setTimeout(() => {
+      if (afkWarningElement && afkWarningElement.parentNode) {
+        afkWarningElement.parentNode.removeChild(afkWarningElement);
+      }
+      afkWarningElement = null;
+    }, 300);
+  }
+}
 
   // Spin move cooldown handling
   let spinCooldownEndTime = 0;
@@ -3191,7 +3469,7 @@ and also configure additional buttons for mobile compatibility.
 
   // Set initial UI state - players spawn without puck control
   function setInitialUIState() {
-    console.log('Setting initial UI state - hasPuck:', hasPuck);
+    debugUI('Setting initial UI state - hasPuck: ' + hasPuck, 'state');
     const passIconGroup = document.getElementById('pass-icon-group');
     const shotIconGroup = document.getElementById('shot-icon-group');
     const spinMoveIndicator = document.getElementById('spin-move-indicator');
@@ -3202,33 +3480,33 @@ and also configure additional buttons for mobile compatibility.
     // Initially disable puck-dependent actions (pass, shot, spin move)
     if (passIconGroup) {
       passIconGroup.classList.add('disabled');
-      console.log('Pass icon disabled');
+      debugUI('Pass icon disabled', 'icons');
     }
     if (shotIconGroup) {
       shotIconGroup.classList.add('disabled');
-      console.log('Shot icon disabled');
+      debugUI('Shot icon disabled', 'icons');
     }
     if (spinMoveIndicator) {
       spinMoveIndicator.classList.add('disabled');
-      console.log('Spin move disabled');
+      debugUI('Spin move disabled', 'icons');
     }
     
     // Initially disable and hide position-specific speed actions
     if (hockeyStopIndicator) {
       hockeyStopIndicator.classList.add('disabled');
       hockeyStopIndicator.style.display = 'none'; // Hidden by default until position confirmed
-      console.log('Hockey stop disabled and hidden');
+              debugUI('Hockey stop disabled and hidden', 'icons');
     }
     if (goalieSlideIndicator) {
       goalieSlideIndicator.classList.add('disabled');
       goalieSlideIndicator.style.display = 'none'; // Hidden by default until position confirmed
-      console.log('Goalie slide disabled and hidden');
+              debugUI('Goalie slide disabled and hidden', 'icons');
     }
     
     // Initially enable stick check (since no puck)
     if (stickCheckIconGroup) {
       stickCheckIconGroup.classList.remove('disabled');
-      console.log('Stick check enabled');
+      debugUI('Stick check enabled', 'icons');
     }
   }
 
@@ -3334,18 +3612,18 @@ and also configure additional buttons for mobile compatibility.
   }
 
   function showCountdownGo() {
-    console.log('🎯 UI: showCountdownGo() called');
+    debugUI('showCountdownGo() called', 'countdown');
     const overlay = document.getElementById('countdown-overlay');
     const countdownText = document.getElementById('countdown-text');
     const subtextElement = overlay ? overlay.querySelector('.countdown-subtext') : null;
     
-    console.log('🎯 UI: showCountdownGo() - Element check:', {
+    debugUI(`showCountdownGo() - Element check: ${JSON.stringify({
       overlay: !!overlay,
       countdownText: !!countdownText,
       subtextElement: !!subtextElement,
       overlayDisplay: overlay ? overlay.style.display : 'N/A',
       overlayVisible: overlay ? overlay.style.display !== 'none' : false
-    });
+    })}`, 'countdown');
     
     if (overlay && countdownText && subtextElement) {
       // Ensure overlay is visible
@@ -3363,7 +3641,7 @@ and also configure additional buttons for mobile compatibility.
       void countdownText.offsetWidth; // Force reflow
       countdownText.classList.add('countdown-animate');
       
-      console.log('🎯 UI: GO! overlay displayed successfully - text should now show GO!');
+      debugUI('GO! overlay displayed successfully - text should now show GO!', 'countdown');
     } else {
       console.error('🎯 UI: showCountdownGo() - Missing elements:', {
         overlay: !!overlay,
@@ -3386,7 +3664,7 @@ and also configure additional buttons for mobile compatibility.
 
   // Shootout-specific countdown functions (separate from regulation mode)
   function showShootoutCountdownOverlay(countdown, subtitle = 'Shootout') {
-    console.log('🎯 UI: showShootoutCountdownOverlay() called with:', countdown, subtitle);
+    debugUI(`showShootoutCountdownOverlay() called with: ${countdown} ${subtitle}`, 'shootout');
     const overlay = document.getElementById('countdown-overlay');
     const countdownText = document.getElementById('countdown-text');
     const subtextElement = overlay.querySelector('.countdown-subtext');
@@ -3408,11 +3686,11 @@ and also configure additional buttons for mobile compatibility.
     void countdownText.offsetWidth; // Force reflow
     countdownText.classList.add('countdown-animate');
     
-    console.log('🎯 UI: Shootout countdown overlay displayed:', countdown);
+    debugUI(`Shootout countdown overlay displayed: ${countdown}`, 'shootout');
   }
 
   function showShootoutCountdownGo() {
-    console.log('🎯 UI: showShootoutCountdownGo() called');
+    debugUI('showShootoutCountdownGo() called', 'shootout');
     const overlay = document.getElementById('countdown-overlay');
     const countdownText = document.getElementById('countdown-text');
     const subtextElement = overlay.querySelector('.countdown-subtext');
@@ -3434,7 +3712,7 @@ and also configure additional buttons for mobile compatibility.
       void countdownText.offsetWidth; // Force reflow
       countdownText.classList.add('countdown-animate');
       
-      console.log('🎯 UI: Shootout GO! overlay displayed successfully - text should now show GO!');
+      debugUI('Shootout GO! overlay displayed successfully - text should now show GO!', 'shootout');
     } else {
       console.error('🎯 UI: showShootoutCountdownGo() - Missing elements:', {
         overlay: !!overlay,
@@ -3445,7 +3723,7 @@ and also configure additional buttons for mobile compatibility.
   }
 
   function hideShootoutCountdownOverlay() {
-    console.log('🎯 UI: hideShootoutCountdownOverlay() called');
+    debugUI('hideShootoutCountdownOverlay() called', 'shootout');
     const overlay = document.getElementById('countdown-overlay');
     const countdownText = document.getElementById('countdown-text');
     const subtextElement = overlay.querySelector('.countdown-subtext');
@@ -3455,7 +3733,7 @@ and also configure additional buttons for mobile compatibility.
     countdownText.classList.remove('countdown-go', 'countdown-animate');
     subtextElement.style.display = 'block';
     
-    console.log('🎯 UI: Shootout countdown overlay hidden');
+    debugUI('Shootout countdown overlay hidden', 'shootout');
   }
 
   // Period break overlay functionality

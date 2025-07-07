@@ -1699,6 +1699,58 @@ export class ChatCommandManager {
       this.world!.chatManager.sendPlayerMessage(player, '/audioplayercount <1-12> - Set player count for testing', 'CCCCCC');
     });
     
+    // /uidebugon - Enable UI debug filter (shows UI debug messages)
+    this.world.chatManager.registerCommand('/uidebugon', (player) => {
+      const { setUIDebugFilter } = require('../utils/constants');
+      setUIDebugFilter(true);
+      
+      // Also enable UI debugging on the client side
+      this.world!.chatManager.sendBroadcastMessage('UI debugging enabled. Browser consoles will show UI debug messages.', 'FFFF00');
+      
+      // Send UI debug toggle command to all clients
+      const allPlayerEntities = this.world!.entityManager.getAllPlayerEntities();
+      allPlayerEntities.forEach((playerEntity) => {
+        try {
+          playerEntity.player.ui.sendData({
+            type: 'toggle-ui-debug',
+            enabled: true
+          });
+        } catch (error) {
+          debugError('Error enabling UI debug for player:', error, 'ChatCommandManager');
+        }
+      });
+      
+      this.world!.chatManager.sendPlayerMessage(player, '🎯 UI DEBUG FILTER ENABLED', '00FF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'UI debug messages will show in browser consoles', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, 'Use /uidebugoff to disable', 'CCCCCC');
+    });
+
+    // /uidebugoff - Disable UI debug filter (hides UI debug messages)
+    this.world.chatManager.registerCommand('/uidebugoff', (player) => {
+      const { setUIDebugFilter } = require('../utils/constants');
+      setUIDebugFilter(false);
+      
+      // Also disable UI debugging on the client side
+      this.world!.chatManager.sendBroadcastMessage('UI debugging disabled. Browser consoles will hide UI debug messages.', 'FFFF00');
+      
+      // Send UI debug toggle command to all clients
+      const allPlayerEntities = this.world!.entityManager.getAllPlayerEntities();
+      allPlayerEntities.forEach((playerEntity) => {
+        try {
+          playerEntity.player.ui.sendData({
+            type: 'toggle-ui-debug',
+            enabled: false
+          });
+        } catch (error) {
+          debugError('Error disabling UI debug for player:', error, 'ChatCommandManager');
+        }
+      });
+      
+      this.world!.chatManager.sendPlayerMessage(player, '🎯 UI DEBUG FILTER DISABLED', 'FFFF00');
+      this.world!.chatManager.sendPlayerMessage(player, 'UI debug messages will be hidden in browser consoles', 'FFFFFF');
+      this.world!.chatManager.sendPlayerMessage(player, 'Use /uidebugon to enable', 'CCCCCC');
+    });
+
     debugLog('Audio debugging commands registered', 'ChatCommandManager');
   }
 

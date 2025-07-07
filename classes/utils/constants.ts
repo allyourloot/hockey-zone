@@ -29,6 +29,9 @@ export const CLEANUP_DEBUG_FILTER = false; // Set to true to show cleanup debugg
 // NEW: Audio error filtering - hide/show audio-related errors
 export const AUDIO_ERROR_FILTER = false; // Set to false to hide audio errors
 
+// NEW: UI debug filter for isolating UI-related logs and events
+export const UI_DEBUG_FILTER = false; // Set to true to show UI debug messages (disabled by default to reduce spam)
+
 // NOTE: Toggle this to false for multiplayer performance.
 // Set to true only when debugging specific issues locally.
 
@@ -474,6 +477,22 @@ export const LOBBY_CONFIG = {
 } as const;
 
 // =========================
+// AFK DETECTION CONSTANTS
+// =========================
+export const AFK_DETECTION = {
+  TIMEOUT_DURATION: 2 * 60 * 1000, // 2 minutes in milliseconds
+  WARNING_DURATION: 30 * 1000,     // Show warning 30 seconds before timeout
+  CHECK_INTERVAL: 5 * 1000,        // Check for AFK every 5 seconds
+  ACTIVITY_THRESHOLD: 0.1,         // Minimum movement/input to be considered active
+  COUNTDOWN_DISPLAY_TIME: 10 * 1000, // Show countdown for last 10 seconds
+  
+  // UI message constants
+  WARNING_MESSAGE: 'You seem to be inactive. You will be returned to game mode selection if you don\'t move.',
+  TIMEOUT_MESSAGE: 'You have been removed from the game due to inactivity.',
+  COUNTDOWN_MESSAGE: 'Returning to game mode selection due to inactivity in:',
+} as const;
+
+// =========================
 // UTILITY FUNCTIONS
 // =========================
 
@@ -777,4 +796,57 @@ export function setAudioErrorFilter(enabled: boolean): void {
 // Audio error filtering shortcuts
 (globalThis as any).setAudioErrorFilter = setAudioErrorFilter;
 (globalThis as any).audioerrorson = () => setAudioErrorFilter(true);
-(globalThis as any).audioerrorsoff = () => setAudioErrorFilter(false); 
+(globalThis as any).audioerrorsoff = () => setAudioErrorFilter(false);
+
+/**
+ * UI debug logging function - for UI-related debug messages
+ * @param message - The message to log
+ * @param type - Optional type of UI log (e.g., 'countdown', 'pointer', 'overlay')
+ */
+export function debugUI(message: string, type?: string): void {
+  const uiFilterEnabled = (globalThis as any).UI_DEBUG_FILTER ?? UI_DEBUG_FILTER;
+  if (uiFilterEnabled) {
+    const logMessage = type ? `🎯 UI[${type}]: ${message}` : `🎯 UI: ${message}`;
+    console.log(logMessage);
+  }
+}
+
+/**
+ * Toggle the UI debug filter at runtime
+ * When enabled, UI debug messages will be shown
+ * @param enabled - Whether to enable UI debugging
+ */
+
+export function setUIDebugFilter(enabled: boolean): void {
+  (globalThis as any).UI_DEBUG_FILTER = enabled;
+  
+  // Always show debug toggle messages since they're used for control/feedback
+  if (enabled) {
+    console.log('🎯 UI DEBUG FILTER ENABLED - UI debug messages will be shown');
+    console.log('💡 To disable: setUIDebugFilter(false) or type "uidebugoff" in console');
+  } else {
+    console.log('🎯 UI DEBUG FILTER DISABLED - UI debug messages will be hidden');
+    console.log('💡 To enable: setUIDebugFilter(true) or type "uidebugon" in console');
+  }
+}
+
+// UI debugging shortcuts
+(globalThis as any).setUIDebugFilter = setUIDebugFilter;
+(globalThis as any).uidebugon = () => setUIDebugFilter(true);
+(globalThis as any).uidebugoff = () => setUIDebugFilter(false);
+
+/**
+ * Global console helper - shows all available debug shortcuts
+ */
+(globalThis as any).debughelp = () => {
+  console.log('\n🐛 CONSOLE DEBUG SHORTCUTS:');
+  console.log('🎯 UI debugging: uidebugon / uidebugoff');
+  console.log('🎵 Audio only: audioon / audiooff');  
+  console.log('🥅 Save detection: saveon / saveoff');
+  console.log('⚪ Offside detection: offsideon / offsideoff');
+  console.log('🚧 Boundary detection: boundaryon / boundaryoff');
+  console.log('🔍 Entity states: entitydebugon / entitydebugoff');
+  console.log('🧹 Cleanup operations: cleanupdebugon / cleanupdebugoff');
+  console.log('🔊 Audio errors: audioerrorson / audioerrorsoff');
+  console.log('\n💡 Type "debughelp" to see this list again\n');
+}; 
