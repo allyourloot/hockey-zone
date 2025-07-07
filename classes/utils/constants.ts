@@ -180,7 +180,7 @@ export const AUDIO = {
   PERCUSSION_MAX: 360000, // 6 minutes
   
   // Background music
-  BACKGROUND_MUSIC_VOLUME: 0.1,
+  BACKGROUND_MUSIC_VOLUME: 0.06,
   
   // Stomp beat timing
   STOMP_BEAT_MIN: 35000, // 35s
@@ -300,7 +300,7 @@ export const AUDIO_PATHS = {
   GOAL_HORN: 'audio/sfx/hockey/goal-horn.mp3',
   
   // Background music
-  READY_FOR_THIS: 'audio/music/ready-for-this.mp3',
+  READY_FOR_THIS: 'audio/music/faceoff-theme.mp3',
 } as const;
 
 // =========================

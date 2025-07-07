@@ -81,7 +81,7 @@ startServer(world => {
   
   // Simple background music setup - works for all players
   const gameMusic = new Audio({
-    uri: 'audio/music/ready-for-this.mp3',
+    uri: 'audio/music/faceoff-theme.mp3',
     loop: true,
     volume: CONSTANTS.AUDIO.BACKGROUND_MUSIC_VOLUME,
   });
