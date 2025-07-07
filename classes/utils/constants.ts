@@ -180,7 +180,7 @@ export const AUDIO = {
   PERCUSSION_MAX: 360000, // 6 minutes
   
   // Background music
-  BACKGROUND_MUSIC_VOLUME: 0.06,
+  BACKGROUND_MUSIC_VOLUME: 0.04,
   
   // Stomp beat timing
   STOMP_BEAT_MIN: 35000, // 35s

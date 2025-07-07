@@ -931,11 +931,19 @@ and also configure additional buttons for mobile compatibility.
   // Make sortLeaderboard function globally accessible
   window.sortLeaderboard = sortLeaderboard;
 
-  function updateTop100(top100Data) {
+  function updateTop100(top100Data, isFromServer = false) {
     // Cache the data for local sorting (only cache new data from server, not sorted data)
     if (top100Data && top100Data !== cachedTop100Data) {
+      // If we already have server data, don't overwrite it with fallback data
+      if (cachedTop100Data && cachedTop100Data._isFromServer && !isFromServer) {
+        return;
+      }
+      
       cachedTop100Data = top100Data;
-      console.log('Cached new top 100 data:', cachedTop100Data.length, 'players');
+      // Mark server data so we don't overwrite it with fallback
+      if (isFromServer) {
+        cachedTop100Data._isFromServer = true;
+      }
     }
     
     const tableBody = document.getElementById('top100-table-body');
@@ -1071,16 +1079,13 @@ and also configure additional buttons for mobile compatibility.
         debugUI('Using cached top 100 data for sorting', 'top100');
         updateTop100(cachedTop100Data);
       } else {
-        console.log('No cached top 100 data, requesting from server');
         hytopia.sendData({ type: 'request-top100' });
-        console.log('Sent request-top100 message to server');
         
         // As a fallback, if we have leaderboard data, show it in Top 100 until server implements Top 100
         if (cachedLeaderboardData && cachedLeaderboardData.length > 0) {
-          console.log('Using leaderboard data as fallback for Top 100');
           setTimeout(() => {
-            if (!cachedTop100Data) { // Only use fallback if we still don't have Top 100 data
-              updateTop100(cachedLeaderboardData);
+            if (!cachedTop100Data || !cachedTop100Data._isFromServer) { // Only use fallback if we don't have server data
+              updateTop100(cachedLeaderboardData, false); // Mark as fallback data
             }
           }, 1000); // Wait 1 second for server response
         }
@@ -1094,8 +1099,6 @@ and also configure additional buttons for mobile compatibility.
   window.sortTop100 = sortTop100;
 
   function switchTop100Filter(filter) {
-    console.log('Switching Top 100 filter to:', filter);
-    
     // Update current filter
     currentTop100Filter = filter;
     
@@ -2280,16 +2283,14 @@ and also configure additional buttons for mobile compatibility.
       // Handle leaderboard response from server
       updateLeaderboard(data.leaderboardData);
       
-      // If we're on Top 100 tab and have no Top 100 data, use leaderboard data as fallback
-      if (currentStatsTab === 'top100' && !cachedTop100Data && data.leaderboardData) {
-        console.log('Using leaderboard response as Top 100 fallback data');
-        updateTop100(data.leaderboardData);
+      // If we're on Top 100 tab and have no server Top 100 data, use leaderboard data as fallback
+      if (currentStatsTab === 'top100' && (!cachedTop100Data || !cachedTop100Data._isFromServer) && data.leaderboardData) {
+        updateTop100(data.leaderboardData, false); // Mark as fallback data
       }
     }
     if (data.type === 'top100-response') {
       // Handle top 100 response from server
-      console.log('Received top100-response from server:', data);
-      updateTop100(data.top100Data);
+      updateTop100(data.top100Data, true); // Mark as server data
     }
     if (data.type === 'period-time-adjusted') {
       // Adjust period start time to account for goal celebration pause
@@ -4398,40 +4399,27 @@ function hideAFKWarning() {
         setupLeaderboardSorting();
         updateSortIndicators();
       }, 100);
-    } else if (tabName === 'top100') {
-      console.log('Requesting Top 100 data from server...');
+        } else if (tabName === 'top100') {
       hytopia.sendData({ type: 'request-top100' });
       
-      // Immediate fallback if leaderboard data is already available
-      if (cachedLeaderboardData && cachedLeaderboardData.length > 0) {
-        console.log('Immediately showing leaderboard data in Top 100 as placeholder');
-        updateTop100(cachedLeaderboardData);
-        // Clear cache so server response can override this placeholder
-        setTimeout(() => {
-          if (cachedTop100Data === cachedLeaderboardData) {
-            console.log('Server did not provide Top 100 data, keeping leaderboard as fallback');
-          }
-        }, 2000);
+      // Show loading indicator while waiting for server response
+      const tableBody = document.getElementById('top100-table-body');
+      if (tableBody) {
+        tableBody.innerHTML = '<div class="top100-player-row"><div class="leaderboard-col player-col" style="grid-column: 1 / -1; text-align: center; color: #999;">Loading Top 100 data...</div></div>';
       }
       
-      // Add fallback logic here as well
+      // Only use fallback after sufficient time and ONLY if no real top100 data was received
       setTimeout(() => {
-        console.log('Checking for Top 100 server response...');
-        if (!cachedTop100Data) {
-          console.log('No Top 100 response received from server');
-          // If we have leaderboard data, use it as fallback
+        // Only use fallback if we still don't have legitimate top100 data AND the table is still showing loading
+        const currentTableContent = tableBody?.innerHTML || '';
+        if (!cachedTop100Data && currentTableContent.includes('Loading Top 100 data')) {
           if (cachedLeaderboardData && cachedLeaderboardData.length > 0) {
-            console.log('Using cached leaderboard data as Top 100 fallback');
-            updateTop100(cachedLeaderboardData);
+            updateTop100(cachedLeaderboardData, false); // Mark as fallback data
           } else {
-            console.log('No leaderboard data available, requesting leaderboard as fallback');
-            // Request leaderboard data as fallback
             hytopia.sendData({ type: 'request-leaderboard' });
           }
-        } else {
-          console.log('Top 100 data already cached');
         }
-      }, 1500); // Wait 1.5 seconds for server response
+      }, 3000); // Increased timeout to 3 seconds to give server more time
       
       // Initialize sort indicators and setup sorting when switching to top 100 tab
       setTimeout(() => {
@@ -4467,7 +4455,6 @@ function hideAFKWarning() {
       } else if (currentStatsTab === 'leaderboard') {
         hytopia.sendData({ type: 'request-leaderboard' });
       } else if (currentStatsTab === 'top100') {
-        console.log('Requesting Top 100 data from server (overlay toggle)...');
         hytopia.sendData({ type: 'request-top100' });
       }
     }
