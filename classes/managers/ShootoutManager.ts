@@ -439,7 +439,7 @@ export class ShootoutManager {
     });
 
     // Determine wait time based on whether goal was scored
-    const waitTime = scored ? 6000 : 3000; // 6s for goal celebration, 3s for miss
+    const waitTime = scored ? 6000 : 750; // 6s for goal celebration, brief delay for miss
     
     CONSTANTS.debugLog(`Shot completed - waiting ${waitTime}ms before ${scored ? 'goal celebration ends' : 'continuing'}`, 'ShootoutManager');
 
@@ -599,15 +599,16 @@ export class ShootoutManager {
   public returnToGameModeSelection() {
     if (!this._world) return;
 
+    // --- FIX: Clear lock and broadcast before showing overlay ---
+    const { HockeyGameManager } = require('./HockeyGameManager');
+    HockeyGameManager.instance.setGameModeLock(null);
+    HockeyGameManager.instance.broadcastGameModeAvailability();
+
     // Hide shootout scoreboard
     this.broadcastToAllPlayers({
       type: 'hide-shootout-scoreboard',
     });
 
-    // Get all players and spectators before clearing
-    const playersToReset = Array.from(this._playerIdToPlayer.values());
-    const spectatorsToReset = Array.from(this._spectators.values());
-    
     // Show game mode selection overlay to all players and spectators BEFORE despawning them
     this.broadcastToAllPlayers({
       type: 'game-mode-selection-start'
@@ -616,6 +617,8 @@ export class ShootoutManager {
     // Small delay to ensure UI message is received before despawning
     setTimeout(() => {
       // Despawn all player entities
+      const playersToReset = Array.from(this._playerIdToPlayer.values());
+      const spectatorsToReset = Array.from(this._spectators.values());
       playersToReset.forEach(player => {
         try {
           if (this._world) {

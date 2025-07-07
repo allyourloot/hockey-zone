@@ -74,6 +74,9 @@ export class HockeyGameManager {
   
   // Removed movement lock system - was interfering with puck controls
 
+  // Add at the top of the class
+  private _gameModeLock: GameMode | null = null;
+
   private constructor() {}
 
   public static get instance(): HockeyGameManager {
@@ -117,9 +120,12 @@ export class HockeyGameManager {
     debugLog('🎮 GAME MODE SELECTION STARTED - State set to GAME_MODE_SELECTION', 'HockeyGameManager');
     debugLog(`📊 Current players in map: ${this._playerIdToPlayer.size}`, 'HockeyGameManager');
     
-    // Unlock pointer for game mode selection UI interaction
+    // Unlock pointer for game mode selection UI interaction for all connected players
     if (this._world) {
-      this._playerIdToPlayer.forEach((player) => {
+      const { PlayerManager } = require('./PlayerManager');
+      const allConnectedPlayers = PlayerManager.instance.getConnectedPlayers();
+      
+      allConnectedPlayers.forEach((player: any) => {
         try {
           player.ui.lockPointer(false); // Unlock pointer for game mode selection
           debugLog(`Unlocked pointer for player ${player.id} during game mode selection`, 'HockeyGameManager');
@@ -129,12 +135,23 @@ export class HockeyGameManager {
       });
     }
     
-    // Broadcast game mode selection start (Note: may not reach anyone if no players are in teams yet)
-    this.broadcastToAllPlayers({
-      type: 'game-mode-selection-start'
-    });
-    
-    debugLog('📡 Broadcasted game-mode-selection-start event (PlayerManager will handle new players)', 'HockeyGameManager');
+    // Broadcast game mode selection start to all connected players (not just those in _playerIdToPlayer)
+    if (this._world) {
+      const { PlayerManager } = require('./PlayerManager');
+      const allConnectedPlayers = PlayerManager.instance.getConnectedPlayers();
+      
+      allConnectedPlayers.forEach((player: any) => {
+        try {
+          player.ui.sendData({
+            type: 'game-mode-selection-start'
+          });
+        } catch (error) {
+          debugError('Error sending game mode selection start to player:', error, 'HockeyGameManager');
+        }
+      });
+      
+      debugLog(`📡 Broadcasted game-mode-selection-start to ${allConnectedPlayers.length} connected players`, 'HockeyGameManager');
+    }
   }
 
   public selectGameMode(gameMode: GameMode) {
@@ -144,6 +161,11 @@ export class HockeyGameManager {
     }
     
     this._gameMode = gameMode;
+    this.setGameModeLock(gameMode);
+
+    // --- FIX: Immediately broadcast new availability to all players ---
+    this.broadcastGameModeAvailability();
+    
     debugLog(`🎯 Game mode selected: ${gameMode}`, 'HockeyGameManager');
     
     if (gameMode === GameMode.SHOOTOUT) {
@@ -152,28 +174,36 @@ export class HockeyGameManager {
     } else {
       debugLog('🏒 Starting Regulation mode (Team Selection)', 'HockeyGameManager');
       this.startTeamSelection();
-      
-      // Also notify PlayerManager to show team selection to all connected players
-      if (this._playerManagerCallback) {
-        this._playerManagerCallback('showTeamSelectionToAll', {});
-      }
     }
   }
 
   public registerPlayerForShootout(player: any): void {
     if (this._gameMode !== GameMode.SHOOTOUT) return;
     
-    // Only accept the first 2 players for shootout
-    if (this._playerIdToPlayer.size >= 2) {
-      debugLog(`🚫 Rejecting player ${player.id} - shootout already has 2 players`, 'HockeyGameManager');
+    // Only accept the first 2 players for shootout, or if shootout is already in progress
+    if (this._playerIdToPlayer.size >= 2 || this._state === HockeyGameState.SHOOTOUT_IN_PROGRESS) {
+      const reason = this._state === HockeyGameState.SHOOTOUT_IN_PROGRESS ? 'shootout already in progress' : 'shootout already has 2 players';
+      debugLog(`🚫 Rejecting player ${player.id} - ${reason}`, 'HockeyGameManager');
+      
+      // Hide game mode selection overlay for spectator
+      player.ui.sendData({
+        type: 'hide-game-mode-selection'
+      });
+      
       // Send message to player that shootout is full
       player.ui.sendData({
         type: 'shootout-full',
         message: 'Shootout is full! You are now spectating the match.'
       });
       
+      // Hide any existing scoreboards
+      player.ui.sendData({
+        type: 'hide-scoreboard'
+      });
+      
       // Add them as a spectator to the shootout so they can see the scoreboard
       ShootoutManager.instance.addSpectator(player);
+      debugLog(`👀 Added spectator ${player.id} to shootout`, 'HockeyGameManager');
       return;
     }
     
@@ -1168,18 +1198,9 @@ export class HockeyGameManager {
    */
   private broadcastToAllPlayers(data: any): void {
     if (!this._world) return;
-    
-    // Get all player IDs from teams and convert to Player objects
-    const allPlayerIds = [
-      ...Object.values(this._teams[HockeyTeam.RED]), 
-      ...Object.values(this._teams[HockeyTeam.BLUE])
-    ].filter(Boolean) as string[];
-    
-    const allPlayers = allPlayerIds
-      .map(playerId => this._playerIdToPlayer.get(playerId))
-      .filter(Boolean) as Player[];
-    
-    allPlayers.forEach((player) => {
+    // Revert: Only send to players in _playerIdToPlayer (not all connected players)
+    const allPlayers = Array.from(this._playerIdToPlayer.values());
+    allPlayers.forEach((player: any) => {
       try {
         player.ui.sendData(data);
       } catch (error) {
@@ -1784,6 +1805,10 @@ export class HockeyGameManager {
     this._lockedInPlayers.clear();
     this._playerIdToPlayer.clear();
     
+    // NOTE: Do NOT re-populate _playerIdToPlayer here during game mode selection reset
+    // Players should only be added to this map when they register for specific game modes
+    // This ensures shootout registration works correctly after transitioning from other games
+    
     // Reset scores and period
     this._scores = {
       [HockeyTeam.RED]: 0,
@@ -1808,14 +1833,36 @@ export class HockeyGameManager {
     PlayerStatsManager.instance.resetStats();
     
     // Clear all player UI states - ensure clean slate for game mode selection
-    this.broadcastToAllPlayers({
-      type: 'clear-all-ui'
-    });
+    // Send to all connected players (not just those in _playerIdToPlayer)
+    if (this._world) {
+      const { PlayerManager } = require('./PlayerManager');
+      const allConnectedPlayers = PlayerManager.instance.getConnectedPlayers();
+      
+      allConnectedPlayers.forEach((player: any) => {
+        try {
+          player.ui.sendData({
+            type: 'clear-all-ui'
+          });
+        } catch (error) {
+          debugError('Error clearing UI for player:', error, 'HockeyGameManager');
+        }
+      });
+      
+      // Hide any existing scoreboards
+      allConnectedPlayers.forEach((player: any) => {
+        try {
+          player.ui.sendData({
+            type: 'hide-scoreboard'
+          });
+        } catch (error) {
+          debugError('Error hiding scoreboard for player:', error, 'HockeyGameManager');
+        }
+      });
+    }
     
-    // Hide any existing scoreboards
-    this.broadcastToAllPlayers({
-      type: 'hide-scoreboard'
-    });
+    // In resetGameState and after game end, clear the lock and broadcast
+    this._gameModeLock = null;
+    this.broadcastGameModeAvailability();
     
     debugLog('Game state reset complete for game mode selection', 'HockeyGameManager');
   }
@@ -1965,7 +2012,7 @@ export class HockeyGameManager {
       // Generate box score for enhanced game over display
       const boxScore = PlayerStatsManager.instance.generateBoxScore();
 
-      // Show game over UI overlay
+      // Show game over UI overlay to all players currently in the game
       this.broadcastToAllPlayers({
         type: 'game-over',
         winner: winner,
@@ -1988,48 +2035,46 @@ export class HockeyGameManager {
     setTimeout(() => {
       debugLog('Returning to game mode selection after game over', 'HockeyGameManager');
       
-      // Hide game over overlay
+      // --- FIX: Capture players to despawn BEFORE resetting state ---
+      const playersToReset = Array.from(this._playerIdToPlayer.values());
+
+      // Hide game over overlay and stop timer for all players that were in the game
       this.broadcastToAllPlayers({
         type: 'game-over-hide'
       });
       
-      // Ensure timer is stopped before reset
       this.broadcastToAllPlayers({
         type: 'timer-stop'
       });
-      
-      // Show game mode selection BEFORE despawning players
-      this.broadcastToAllPlayers({
-        type: 'game-mode-selection-start'
-      });
 
-      // Small delay to ensure UI message is received before despawning
+      // Reset state and clear lock BEFORE showing selection overlay
+      this.resetGameState();
+      this.setGameModeLock(null);
+
+      // Despawn all player entities
+      if (this._world) {
+        playersToReset.forEach(player => {
+          try {
+            this._world!.entityManager.getPlayerEntitiesByPlayer(player).forEach(entity => {
+              entity.despawn();
+              debugLog(`Despawned entity for player ${player.id} from regulation game`, 'HockeyGameManager');
+            });
+          } catch (error) {
+            debugError(`Error despawning player ${player.id}:`, error, 'HockeyGameManager');
+          }
+        });
+      }
+
+      // Small delay to ensure despawns are processed before showing UI
       setTimeout(() => {
-        // Get all players before clearing
-        const playersToReset = Array.from(this._playerIdToPlayer.values());
-        
-        // Despawn all player entities
-        if (this._world) {
-          playersToReset.forEach(player => {
-            try {
-              this._world!.entityManager.getPlayerEntitiesByPlayer(player).forEach(entity => {
-                entity.despawn();
-                debugLog(`Despawned entity for player ${player.id} from regulation game`, 'HockeyGameManager');
-              });
-            } catch (error) {
-              debugError(`Error despawning player ${player.id}:`, error, 'HockeyGameManager');
-            }
-          });
-        }
+        // --- FIX: Set state to GAME_MODE_SELECTION before showing overlay ---
+        this._state = HockeyGameState.GAME_MODE_SELECTION;
 
-        // Reset all game state
-        this.resetGameState();
-        
-        // Start game mode selection
-        this.startGameModeSelection();
-        
+        // Now show game mode selection (UI will get correct availability)
+        const { PlayerManager } = require('./PlayerManager');
+        PlayerManager.instance.showGameModeSelectionToAllPlayers();
         debugLog('🎮 Returned to game mode selection from regulation game', 'HockeyGameManager');
-      }, 500); // 500ms delay to ensure UI message is processed
+      }, 500); // 500ms delay to ensure despawns are processed
     }, 10000);
   }
 
@@ -3129,4 +3174,43 @@ export class HockeyGameManager {
     return null; // No available positions
   }
 
+  // Add method to get current lock
+  public get gameModeLock(): GameMode | null {
+    return this._gameModeLock;
+  }
+
+  // Add method to set lock and broadcast
+  public setGameModeLock(mode: GameMode | null) {
+    this._gameModeLock = mode;
+    this.broadcastGameModeAvailability();
+  }
+
+  // Add method to broadcast availability
+  public broadcastGameModeAvailability() {
+    const available = {
+      REGULATION: this._gameModeLock === null || this._gameModeLock === GameMode.REGULATION,
+      SHOOTOUT: this._gameModeLock === null || this._gameModeLock === GameMode.SHOOTOUT,
+    };
+    
+    // Send to all connected players (not just those in _playerIdToPlayer)
+    // This ensures players in game mode selection also get updates
+    if (this._world) {
+      const { PlayerManager } = require('./PlayerManager');
+      const allConnectedPlayers = PlayerManager.instance.getConnectedPlayers();
+      
+      allConnectedPlayers.forEach((player: any) => {
+        try {
+          player.ui.sendData({
+            type: 'game-mode-availability',
+            available,
+            locked: this._gameModeLock,
+          });
+        } catch (error) {
+          debugError('Error sending game mode availability to player:', error, 'HockeyGameManager');
+        }
+      });
+      
+      debugLog(`📡 Broadcasted game mode availability to ${allConnectedPlayers.length} connected players`, 'HockeyGameManager');
+    }
+  }
 } 

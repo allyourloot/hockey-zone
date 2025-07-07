@@ -292,9 +292,57 @@ and also configure additional buttons for mobile compatibility.
   const gameModeSelectionOverlay = document.getElementById('game-mode-selection-overlay');
   const gameModeMessage = document.getElementById('game-mode-selection-message');
   let selectedGameMode = null;
+  let gameModeAvailability = { REGULATION: true, SHOOTOUT: true };
+  let lockedGameMode = null;
+  let waitingForAvailability = false;
+
+  function updateGameModeAvailabilityUI() {
+    if (waitingForAvailability) {
+      gameModeOptions.forEach(option => {
+        option.classList.add('disabled');
+        option.setAttribute('title', 'Please wait...');
+      });
+      gameModeMessage.innerHTML = '<span style="color:#ffbb00;font-weight:bold;">Please wait...</span>';
+      return;
+    }
+    gameModeOptions.forEach(option => {
+      const mode = option.getAttribute('data-mode');
+      if (!gameModeAvailability[mode]) {
+        option.classList.add('disabled');
+        option.setAttribute('title', `Unavailable while ${lockedGameMode} is in progress.`);
+      } else {
+        option.classList.remove('disabled');
+        option.removeAttribute('title');
+      }
+    });
+    if (lockedGameMode) {
+      gameModeMessage.innerHTML = `<span style="color:#ff4444;font-weight:bold;">${lockedGameMode.charAt(0) + lockedGameMode.slice(1).toLowerCase()} mode is in progress. Other modes are unavailable.</span>`;
+    } else {
+      gameModeMessage.textContent = 'Choose a game mode to begin';
+    }
+  }
 
   gameModeOptions.forEach(option => {
-    option.addEventListener('click', () => {
+    option.addEventListener('click', (e) => {
+      if (waitingForAvailability) {
+        gameModeMessage.innerHTML = '<span style="color:#ffbb00;font-weight:bold;">Please wait for game mode availability...</span>';
+        e.stopPropagation();
+        return;
+      }
+      
+      // Prevent click if disabled
+      if (option.classList.contains('disabled')) {
+        // Show a prominent message in the gameModeMessage area
+        const mode = option.getAttribute('data-mode');
+        if (lockedGameMode && mode !== lockedGameMode) {
+          gameModeMessage.innerHTML = `<span style="color:#ff4444;font-weight:bold;">${mode.charAt(0) + mode.slice(1).toLowerCase()} mode is unavailable while ${lockedGameMode.charAt(0) + lockedGameMode.slice(1).toLowerCase()} mode is active.</span>`;
+        } else {
+          gameModeMessage.innerHTML = `<span style="color:#ff4444;font-weight:bold;">This mode is currently unavailable.</span>`;
+        }
+        e.stopPropagation();
+        return;
+      }
+      
       // Try to activate audio on first user interaction
       tryActivateAudio();
       
@@ -428,7 +476,10 @@ and also configure additional buttons for mobile compatibility.
       // Clear any previous game mode selection
       gameModeOptions.forEach(option => option.classList.remove('selected'));
       selectedGameMode = null;
-      gameModeMessage.textContent = 'Choose a game mode to begin';
+      // Always update availability UI when showing overlay
+      waitingForAvailability = true;
+      updateGameModeAvailabilityUI();
+      hytopia.sendData({ type: 'request-game-mode-availability' });
       
       // Unlock pointer for game mode selection
       setTimeout(() => {
@@ -1489,6 +1540,11 @@ and also configure additional buttons for mobile compatibility.
            }
          }
        }, 100);
+       
+       // Always update availability UI when showing overlay
+       waitingForAvailability = true;
+       updateGameModeAvailabilityUI();
+       hytopia.sendData({ type: 'request-game-mode-availability' });
      }
            if (data.type === 'show-team-selection') {
         // Clear persistent waiting notification
@@ -1910,6 +1966,16 @@ and also configure additional buttons for mobile compatibility.
       if (positionSwitchOverlay) {
         positionSwitchOverlay.style.display = 'block';
         console.log('Position switch overlay shown (hide-team-selection event)');
+      }
+      // Request pointer lock for gameplay
+      if (document.pointerLockElement === null) {
+        document.body.requestPointerLock?.();
+        // Fallback: try again after a short delay in case of race condition
+        setTimeout(() => {
+          if (document.pointerLockElement === null) {
+            document.body.requestPointerLock?.();
+          }
+        }, 200);
       }
     }
     if (data.type === 'team-auto-balanced') {
@@ -3099,6 +3165,17 @@ and also configure additional buttons for mobile compatibility.
         bodyCheckIndicator.style.display = data.visible ? 'flex' : 'none';
       }
     }
+    if (data.type === 'game-mode-availability') {
+      waitingForAvailability = false;
+      gameModeAvailability = data.available;
+      lockedGameMode = data.locked;
+      updateGameModeAvailabilityUI();
+    }
+    if (data.type === 'game-mode-locked') {
+      lockedGameMode = data.locked;
+      gameModeMessage.textContent = data.message || 'This mode is currently unavailable.';
+      updateGameModeAvailabilityUI();
+    }
   });
 
   // Add at the top of the script, after other variable declarations
@@ -3685,7 +3762,6 @@ and also configure additional buttons for mobile compatibility.
     if (window.teamSelectionPointerUnlockInterval) {
       clearInterval(window.teamSelectionPointerUnlockInterval);
       window.teamSelectionPointerUnlockInterval = null;
-              // Cleared team selection pointer unlock interval during showTeamSelection reset
     }
     
     // Reset team selection state
@@ -5346,6 +5422,14 @@ and also configure additional buttons for mobile compatibility.
     border: 3px solid transparent;
     min-width: 250px;
   }
+  .game-mode-option.disabled {
+    opacity: 0.5;
+    filter: grayscale(0.7);
+    cursor: not-allowed;
+    pointer-events: none;
+    box-shadow: none;
+    border-color: #888;
+  }
   .game-mode-option:hover {
     background: rgba(50,50,50,0.95);
     transform: translateY(-4px);
@@ -5507,7 +5591,7 @@ and also configure additional buttons for mobile compatibility.
       margin-bottom: 6px;
     }
     .game-mode-name {
-      font-size: 1rem;
+      font-size: 1.2rem;
       margin-bottom: 4px;
     }
     .game-mode-description {
@@ -10065,7 +10149,7 @@ and also configure additional buttons for mobile compatibility.
   }
 
   /* Mobile Landscape Optimized Tables */
-  @media (max-height: 600px) and (orientation: landscape) {
+  @media (max-width: 768px) and (orientation: landscape) {
     /* Create scrollable container wrapper */
     .leaderboard-table,
     .top100-table {
@@ -10281,6 +10365,7 @@ k
     .top100-table::-webkit-scrollbar {
       -webkit-appearance: none !important;
       height: 10px !important;
+      width: 10px !important;
       background: rgba(255, 255, 255, 0.1) !important;
       border-radius: 5px !important;
     }

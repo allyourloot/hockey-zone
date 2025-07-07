@@ -1173,7 +1173,7 @@ export class AudioManager {
   public playRefereeWhistle(): void {
     this.playGlobalSoundEffect(
       CONSTANTS.AUDIO_PATHS.REFEREE_WHISTLE,
-      0.6
+      CONSTANTS.AUDIO.REFEREE_WHISTLE_VOLUME
     );
     CONSTANTS.debugLog('Referee whistle played', 'AudioManager');
   }
