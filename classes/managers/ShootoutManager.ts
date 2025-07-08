@@ -632,22 +632,65 @@ export class ShootoutManager {
         }
       });
 
-      // Reset shootout state
+      // Reset shootout state BEFORE removing players to prevent conflicts
       this.resetShootoutState();
 
-      // Import and use HockeyGameManager to return to game mode selection
-      const { HockeyGameManager } = require('./HockeyGameManager');
+      // FIX: Remove all players at once to prevent multiple resetGameStateForEmptyServer calls
+      // Only call removePlayer if the player is actually still in the HockeyGameManager
+      const playersStillInGame = playersToReset.filter(player => 
+        HockeyGameManager.instance.getPlayerById(player.id) !== undefined
+      );
       
-      // Clear players from HockeyGameManager shootout registration
-      playersToReset.forEach(player => {
-        HockeyGameManager.instance.removePlayer(player);
-      });
+      if (playersStillInGame.length > 0) {
+        // Remove all players except the last one without triggering reset
+        for (let i = 0; i < playersStillInGame.length - 1; i++) {
+          const player = playersStillInGame[i];
+          // Directly remove from HockeyGameManager internal state without triggering resetGameStateForEmptyServer
+          this.removePlayerWithoutReset(player);
+        }
+        
+        // Remove the last player normally, which will trigger the proper reset sequence
+        const lastPlayer = playersStillInGame[playersStillInGame.length - 1];
+        HockeyGameManager.instance.removePlayer(lastPlayer);
+      }
       
-      // Start game mode selection
-      HockeyGameManager.instance.startGameModeSelection();
+      // Only call startGameModeSelection if we're not already in GAME_MODE_SELECTION state
+      // This prevents duplicate calls that could cause UI issues
+      if (HockeyGameManager.instance.state !== HockeyGameState.GAME_MODE_SELECTION) {
+        HockeyGameManager.instance.startGameModeSelection();
+      }
 
       CONSTANTS.debugLog('🎮 Returned to game mode selection from shootout', 'ShootoutManager');
     }, 500); // 500ms delay to ensure UI message is processed
+  }
+
+  // Helper method to remove player from HockeyGameManager without triggering resetGameStateForEmptyServer
+  private removePlayerWithoutReset(player: Player) {
+    const hgm = HockeyGameManager.instance as any;
+    
+    CONSTANTS.debugLog(`Removing player ${player.id} from HockeyGameManager (without reset)`, 'ShootoutManager');
+    
+    // Remove from teams
+    for (const team of [HockeyTeam.RED, HockeyTeam.BLUE]) {
+      for (const pos of Object.values(HockeyPosition)) {
+        if (hgm._teams[team][pos] === player.id) {
+          delete hgm._teams[team][pos];
+          CONSTANTS.debugLog(`Removed player ${player.id} from ${team}-${pos}`, 'ShootoutManager');
+        }
+      }
+    }
+    
+    // Remove from various tracking systems
+    hgm._tentativeSelections.delete(player.id);
+    hgm._lockedInPlayers.delete(player.id);
+    hgm._playerIdToPlayer.delete(player.id);
+    
+    // Remove player stats (async operation)
+    const { PlayerStatsManager } = require('./PlayerStatsManager');
+    PlayerStatsManager.instance.removePlayer(player.id)
+      .catch((error: any) => {
+        CONSTANTS.debugError('Error removing player stats:', error, 'ShootoutManager');
+      });
   }
 
   private broadcastShootoutScoreboard() {

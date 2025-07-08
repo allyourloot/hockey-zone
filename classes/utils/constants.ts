@@ -6,7 +6,7 @@
 // =========================
 // DEVELOPMENT & PERFORMANCE CONSTANTS
 // =========================
-export const DEBUG_MODE = false; // Set to true during development, false for production
+export const DEBUG_MODE = true; // Set to true during development, false for production
 
 // NEW: Audio-only debug filter for isolating AudioManager logs
 export const AUDIO_DEBUG_FILTER = false; // Set to true to show ONLY AudioManager logs
@@ -191,7 +191,7 @@ export const AUDIO = {
   PERCUSSION_MAX: 360000, // 6 minutes
   
   // Background music
-  BACKGROUND_MUSIC_VOLUME: 0.04,
+  BACKGROUND_MUSIC_VOLUME: 0.1,
   
   // Stomp beat timing
   STOMP_BEAT_MIN: 35000, // 35s

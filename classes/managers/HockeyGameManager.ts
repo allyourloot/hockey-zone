@@ -76,6 +76,7 @@ export class HockeyGameManager {
 
   // Add at the top of the class
   private _gameModeLock: GameMode | null = null;
+  private _isResettingGameState: boolean = false; // Add this flag to prevent multiple resets
 
   private constructor() {}
 
@@ -1782,6 +1783,14 @@ export class HockeyGameManager {
   }
 
   private resetGameState() {
+    // Add guard to prevent multiple simultaneous calls
+    if (this._isResettingGameState) {
+      debugLog('resetGameState already in progress, skipping duplicate call', 'HockeyGameManager');
+      return;
+    }
+    
+    this._isResettingGameState = true;
+    
     debugLog('Resetting game state for game mode selection', 'HockeyGameManager');
     
     // Reset the puck to center ice
@@ -1865,6 +1874,9 @@ export class HockeyGameManager {
     this.broadcastGameModeAvailability();
     
     debugLog('Game state reset complete for game mode selection', 'HockeyGameManager');
+    
+    // Reset the flag after the reset is complete
+    this._isResettingGameState = false;
   }
 
   public resetToLobby() {
@@ -2137,6 +2149,12 @@ export class HockeyGameManager {
    * This mimics the normal game end sequence to ensure proper state transition
    */
   private resetGameStateForEmptyServer(): void {
+    // Add guard to prevent multiple simultaneous calls
+    if (this._isResettingGameState) {
+      debugLog('resetGameState already in progress, skipping resetGameStateForEmptyServer', 'HockeyGameManager');
+      return;
+    }
+    
     debugLog('Resetting game state for empty server', 'HockeyGameManager');
     
     // Use the same reset sequence as normal game end
