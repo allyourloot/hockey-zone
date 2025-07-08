@@ -90,7 +90,7 @@ export const SPIN_MOVE = {
   MIN_SPEED: 8, // Minimum speed required to spin (must be running, not walking)
   MOMENTUM_PRESERVATION: 0.85,
   BOOST_MULTIPLIER: 1.1, // 10% speed boost after spin
-  BOOST_DURATION: 1000, // 2 seconds boost duration
+  BOOST_DURATION: 700, // 2 seconds boost duration
 } as const;
 
 // =========================
@@ -250,28 +250,28 @@ export const GOALIE_BALANCE = {
 // =========================
 export const POSITION_STATS = {
   DEFENDER: {
-    runVelocity: 9,
+    runVelocity: 9.5,
     walkVelocity: 5,
     minShotForce: 18,
     maxShotForce: 28,
     passingPower: 1.1,
   },
   WINGER: {
-    runVelocity: 11,
+    runVelocity: 11.5,
     walkVelocity: 6,
     minShotForce: 20,
     maxShotForce: 32,
     passingPower: 1.0,
   },
   CENTER: {
-    runVelocity: 10,
+    runVelocity: 10.5,
     walkVelocity: 6,
     minShotForce: 25,
     maxShotForce: 35,
     passingPower: 1.0,
   },
   GOALIE: {
-    runVelocity: 6,
+    runVelocity: 7,
     walkVelocity: 4,
     minShotForce: 10,
     maxShotForce: 20,
@@ -377,7 +377,7 @@ export const PUCK_PHYSICS = {
   GRAVITY_SCALE: 1.0,
   
   // Collider properties - optimized for ice floor interaction WITH CCD
-  RADIUS: 0.45,
+  RADIUS: 0.35,
   HALF_HEIGHT: 0.03, // Very thin to make puck sit directly on ice surface
   BORDER_RADIUS: 0.1,
   FRICTION: 0.08,    // Even lower friction to prevent sticky wall behavior (was 0.05)
