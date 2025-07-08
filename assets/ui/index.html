@@ -1262,7 +1262,7 @@ and also configure additional buttons for mobile compatibility.
 
   // Position switching overlay click handler with toggle functionality
   function togglePositionSwitchOverlay() {
-    console.log('Position switch overlay clicked');
+            debugUI('Position switch overlay clicked', 'overlay');
     
     // Check if team selection overlay is already open
     const teamSelectionOverlay = document.getElementById('team-selection-overlay');
@@ -1274,7 +1274,7 @@ and also configure additional buttons for mobile compatibility.
       // Team selection is open - close it
       if (typeof hideTeamSelection === 'function') {
         hideTeamSelection();
-        console.log('Team selection overlay closed successfully');
+                  debugUI('Team selection overlay closed successfully', 'overlay');
       } else {
         console.error('hideTeamSelection function not found');
       }
@@ -1291,12 +1291,12 @@ and also configure additional buttons for mobile compatibility.
       // Call showTeamSelection() to open the overlay
       if (typeof showTeamSelection === 'function') {
         showTeamSelection();
-        console.log('Team selection overlay opened successfully');
+        debugUI('Team selection overlay opened successfully', 'overlay');
       } else {
         console.error('showTeamSelection function not found');
       }
     } else {
-      console.log('Cannot open team selection during active game - timer shows:', timerElement?.textContent);
+              debugUI('Cannot open team selection during active game - timer shows: ' + timerElement?.textContent, 'overlay');
     }
   }
 
@@ -1877,7 +1877,7 @@ and also configure additional buttons for mobile compatibility.
       const positionSwitchOverlay = document.getElementById('position-switch-overlay');
       if (positionSwitchOverlay) {
         positionSwitchOverlay.style.display = 'block';
-        console.log('Position switch overlay shown (show-waiting-overlay event)');
+        debugUI('Position switch overlay shown (show-waiting-overlay event)', 'overlay');
       }
     }
     if (data.type === 'team-position-error') {
@@ -1957,9 +1957,9 @@ and also configure additional buttons for mobile compatibility.
       timerEl.textContent = '--:--';
       
       // Stop any running timers
-      if (gameTimer) {
-        clearInterval(gameTimer);
-        gameTimer = null;
+      if (timerInterval) {
+        clearInterval(timerInterval);
+        timerInterval = null;
       }
       
       if (timerInterval) {
@@ -1971,9 +1971,9 @@ and also configure additional buttons for mobile compatibility.
       const positionSwitchOverlay = document.getElementById('position-switch-overlay');
       if (positionSwitchOverlay) {
         positionSwitchOverlay.style.display = 'block';
-        console.log('Position switch overlay shown (game-waiting event)');
+        debugUI('Position switch overlay shown (game-waiting event)', 'overlay');
       } else {
-        console.warn('Position switch overlay element not found!');
+        debugUI('Position switch overlay element not found!', 'overlay');
       }
     }
     if (data.type === 'show-team-selection') {
@@ -1995,7 +1995,7 @@ and also configure additional buttons for mobile compatibility.
       const positionSwitchOverlay = document.getElementById('position-switch-overlay');
       if (positionSwitchOverlay) {
         positionSwitchOverlay.style.display = 'block';
-        console.log('Position switch overlay shown (hide-team-selection event)');
+        debugUI('Position switch overlay shown (hide-team-selection event)', 'overlay');
       }
       // Request pointer lock for gameplay
       if (document.pointerLockElement === null) {
@@ -2079,7 +2079,7 @@ and also configure additional buttons for mobile compatibility.
       // Also stop shootout timer if active (goal ends the shot)
       if (shootoutTimerInterval) {
         stopShootoutTimer();
-        console.log('Goal scored in shootout, timer stopped');
+        debugUI('Goal scored in shootout, timer stopped', 'shootout');
       }
       
       // Log enhanced goal message if we have scorer info
@@ -2092,7 +2092,7 @@ and also configure additional buttons for mobile compatibility.
           goalMessage += ` (Assist: ${data.assistName})`;
         }
         
-        console.log('Enhanced goal info:', goalMessage);
+        debugUI('Enhanced goal info: ' + goalMessage, 'goal');
       }
     }
     if (data.type === 'offside-called') {
@@ -2393,7 +2393,7 @@ and also configure additional buttons for mobile compatibility.
     if (data.type === 'shootout-shot-end') {
       // Stop the shot timer when shot ends
       stopShootoutTimer();
-      console.log('Shootout shot ended, timer stopped');
+              debugUI('Shootout shot ended, timer stopped', 'shootout');
     }
 
     // Shootout Game End Handler
@@ -2407,7 +2407,7 @@ and also configure additional buttons for mobile compatibility.
       
       // Show game over overlay
       showShootoutGameOverOverlay(data);
-      console.log('Shootout game ended, showing game over overlay');
+              debugUI('Shootout game ended, showing game over overlay', 'shootout');
     }
     
     // Clear All UI Handler
@@ -2812,7 +2812,7 @@ and also configure additional buttons for mobile compatibility.
         
         // Send timeout message immediately with no delay
         hytopia.sendData({ type: 'shootout-shot-timeout' });
-        console.log('🕐 Frontend timer expired - sent timeout to backend immediately');
+        debugUI('Frontend timer expired - sent timeout to backend immediately', 'timer');
       }
     }, 1000);
   }
@@ -4027,11 +4027,6 @@ function hideAFKWarning() {
     }
     
     // Stop any running timers
-    if (gameTimer) {
-      clearInterval(gameTimer);
-      gameTimer = null;
-    }
-    
     if (timerInterval) {
       clearInterval(timerInterval);
       timerInterval = null;

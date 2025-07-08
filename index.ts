@@ -60,7 +60,7 @@ import * as CONSTANTS from './classes/utils/constants';
 
 startServer(world => {
   // Enable debug rendering for all physics objects (including goal colliders)
-  world.simulation.enableDebugRendering(true);
+  world.simulation.enableDebugRendering(false);
   
   // Create shared references for managers
   const puckRef: { current: Entity | null } = { current: null };
@@ -194,15 +194,15 @@ startServer(world => {
   setTimeout(checkPuckBoundaryMonitoring, 1000);
 
   // Print debugging helper information
-  console.log('\n🐛 DEBUGGING HELPERS (type these commands in console):');
-  console.log('🔊 Audio error filtering: audioerrorsoff / audioerrorson');
-  console.log('🔍 Entity state debugging: entitydebugon / entitydebugoff');
-  console.log('🧹 Cleanup debugging: cleanupdebugon / cleanupdebugoff');
-  console.log('🎵 Show ONLY AudioManager logs: audioon / audiooff');
-  console.log('📊 Other specialized filters: saveon/saveoff, offsideon/offsideoff, boundaryon/boundaryoff');
-  console.log('');
-  console.log('✨ Commands should work immediately after typing them in the console.');
-  console.log('If they don\'t work, try: setEntityDebugFilter(true) or setCleanupDebugFilter(true)\n');
+  CONSTANTS.debugLog('\n🐛 DEBUGGING HELPERS (type these commands in console):');
+  CONSTANTS.debugLog('🔊 Audio error filtering: audioerrorsoff / audioerrorson');
+  CONSTANTS.debugLog('🔍 Entity state debugging: entitydebugon / entitydebugoff');
+  CONSTANTS.debugLog('🧹 Cleanup debugging: cleanupdebugon / cleanupdebugoff');
+  CONSTANTS.debugLog('🎵 Show ONLY AudioManager logs: audioon / audiooff');
+  CONSTANTS.debugLog('📊 Other specialized filters: saveon/saveoff, offsideon/offsideoff, boundaryon/boundaryoff');
+  CONSTANTS.debugLog('');
+  CONSTANTS.debugLog('✨ Commands should work immediately after typing them in the console.');
+  CONSTANTS.debugLog('If they don\'t work, try: setEntityDebugFilter(true) or setCleanupDebugFilter(true)\n');
 
   // Clean up on server shutdown
   process.on('SIGINT', () => {

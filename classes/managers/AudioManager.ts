@@ -139,10 +139,10 @@ export class AudioManager {
     
     // Show helpful console instructions for audio debugging
     setTimeout(() => {
-      console.log('🎵 AUDIO DEBUG HELPER:');
-      console.log('💡 To show ONLY AudioManager logs, type: audioon');
-      console.log('💡 To show all logs again, type: audiooff');
-      console.log('💡 Alternative: setAudioDebugFilter(true/false)');
+          debugLog('🎵 AUDIO DEBUG HELPER:');
+    debugLog('💡 To show ONLY AudioManager logs, type: audioon');
+    debugLog('💡 To show all logs again, type: audiooff');
+    debugLog('💡 Alternative: setAudioDebugFilter(true/false)');
     }, 1000); // Delay so it shows after initial startup logs
   }
   
