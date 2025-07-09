@@ -377,7 +377,7 @@ export const PUCK_PHYSICS = {
   GRAVITY_SCALE: 1.0,
   
   // Collider properties - optimized for ice floor interaction WITH CCD
-  RADIUS: 0.35,
+  RADIUS: 0.4,
   HALF_HEIGHT: 0.03, // Very thin to make puck sit directly on ice surface
   BORDER_RADIUS: 0.1,
   FRICTION: 0.08,    // Even lower friction to prevent sticky wall behavior (was 0.05)
