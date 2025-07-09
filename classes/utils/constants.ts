@@ -191,7 +191,7 @@ export const AUDIO = {
   PERCUSSION_MAX: 360000, // 6 minutes
   
   // Background music
-  BACKGROUND_MUSIC_VOLUME: 0.1,
+  BACKGROUND_MUSIC_VOLUME: 0.06,
   
   // Stomp beat timing
   STOMP_BEAT_MIN: 35000, // 35s
@@ -201,8 +201,8 @@ export const AUDIO = {
   CROWD_CHANT_VOLUME: 0.3,
   PERCUSSION_VOLUME: 0.2,
   STOMP_BEAT_VOLUME: 0.2,
-  GOAL_HORN_VOLUME: 0.6,
-  REFEREE_WHISTLE_VOLUME: 0.3, // Reduced from 0.6 to make it less loud
+  GOAL_HORN_VOLUME: 0.5,
+  REFEREE_WHISTLE_VOLUME: 0.2, // Reduced from 0.6 to make it less loud
 } as const;
 
 // =========================
