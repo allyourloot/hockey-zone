@@ -10,12 +10,14 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@hytopia.com/assets": "^0.3.10",
-    "hockey-zone": ".",
-    "hytopia": "^0.6.27"
+    "hytopia": "^0.14.20"
   },
   "trustedDependencies": [
+    "@fails-components/webtransport-transport-http3-quiche",
     "mediasoup",
     "sharp"
-  ]
+  ],
+  "optionalDependencies": {
+    "@hytopia.com/assets": "^0.4.5"
+  }
 }
